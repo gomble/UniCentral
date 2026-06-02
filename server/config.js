@@ -36,6 +36,7 @@ function load() {
     config.port = parseInt(process.env.PORT || config.port, 10);
     config.baseUrl = process.env.BASE_URL || config.baseUrl;
     config.sessionSecret = process.env.SESSION_SECRET || config.sessionSecret;
+    if (process.env.ENROLLMENT_KEY) config.enrollmentKey = process.env.ENROLLMENT_KEY;
     config.smtpHost = process.env.SMTP_HOST || config.smtpHost;
     config.smtpPort = parseInt(process.env.SMTP_PORT || config.smtpPort, 10);
     config.smtpUser = process.env.SMTP_USER || config.smtpUser;
@@ -53,5 +54,10 @@ function save(config) {
 }
 
 const config = load();
+
+// Persist config on first run to ensure enrollmentKey and sessionSecret are stable
+if (!fs.existsSync(CONFIG_PATH)) {
+    save(config);
+}
 
 module.exports = { config, save, load };
