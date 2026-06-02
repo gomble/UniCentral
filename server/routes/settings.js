@@ -8,6 +8,7 @@ router.use(requireAdmin);
 
 router.get('/', (req, res) => {
     res.json({
+        baseUrl: config.baseUrl,
         enrollmentKey: config.enrollmentKey,
         smtpHost: config.smtpHost,
         smtpPort: config.smtpPort,

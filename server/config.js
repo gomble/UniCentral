@@ -7,6 +7,7 @@ const CONFIG_PATH = path.join(DATA_DIR, 'config.json');
 
 const defaults = {
     port: 3000,
+    baseUrl: '',
     sessionSecret: crypto.randomBytes(32).toString('hex'),
     enrollmentKey: crypto.randomBytes(24).toString('hex'),
     heartbeatInterval: 30,
@@ -33,6 +34,7 @@ function load() {
     const config = { ...defaults, ...saved };
 
     config.port = parseInt(process.env.PORT || config.port, 10);
+    config.baseUrl = process.env.BASE_URL || config.baseUrl;
     config.sessionSecret = process.env.SESSION_SECRET || config.sessionSecret;
     config.smtpHost = process.env.SMTP_HOST || config.smtpHost;
     config.smtpPort = parseInt(process.env.SMTP_PORT || config.smtpPort, 10);

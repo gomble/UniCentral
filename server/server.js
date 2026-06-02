@@ -10,6 +10,7 @@ const { initAgentWebSocket } = require('./ws/agent-handler');
 const app = express();
 const server = http.createServer(app);
 
+app.set('trust proxy', true);
 app.use(compression());
 app.use(express.json());
 
@@ -19,6 +20,8 @@ const sessionMiddleware = session({
     saveUninitialized: false,
     cookie: {
         httpOnly: true,
+        secure: process.env.NODE_ENV === 'production' && !!config.baseUrl,
+        sameSite: 'lax',
         maxAge: 24 * 60 * 60 * 1000
     }
 });
@@ -83,8 +86,13 @@ app.get('/api/agent/install-script/:os', (req, res) => {
     }
 });
 
+function getBaseUrl(req) {
+    if (config.baseUrl) return config.baseUrl;
+    return `${req.protocol}://${req.get('host')}`;
+}
+
 function generateWindowsScript(req) {
-    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const baseUrl = getBaseUrl(req);
     return `# UniCentral Agent Installer for Windows
 $ErrorActionPreference = "Stop"
 $Key = $args[0]
@@ -110,7 +118,7 @@ Write-Host "UniCentral Agent installed and running!" -ForegroundColor Green
 }
 
 function generateLinuxScript(req) {
-    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const baseUrl = getBaseUrl(req);
     return `#!/bin/bash
 set -e
 KEY="\${1:-}"

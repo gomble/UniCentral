@@ -117,7 +117,11 @@ createApp({
 
         async function loadSettings() {
             const res = await fetch('/api/settings');
-            if (res.ok) Object.assign(settingsForm, await res.json());
+            if (res.ok) {
+                const data = await res.json();
+                Object.assign(settingsForm, data);
+                if (data.baseUrl) baseUrl.value = data.baseUrl;
+            }
         }
 
         function navigate(target, id) {
