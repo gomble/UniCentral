@@ -93,10 +93,12 @@ function getBaseUrl(req) {
 
 function generateWindowsScript(req) {
     const baseUrl = getBaseUrl(req);
-    return `# UniCentral Agent Installer for Windows
-$ErrorActionPreference = "Stop"
-$Key = $args[0]
-$Category = if ($args[1]) { $args[1] } else { "client" }
+    const key = req.query.key || '';
+    const category = req.query.category || 'client';
+    return `$ErrorActionPreference = "Stop"
+$Server = "${baseUrl}"
+$Key = "${key}"
+$Category = "${category}"
 if (-not $Key) { $Key = Read-Host "Enter enrollment key" }
 $InstallDir = "C:\\Program Files\\UniCentral"
 $ConfigDir = "C:\\ProgramData\\UniCentral"
@@ -106,9 +108,9 @@ Write-Host "Installing UniCentral Agent..." -ForegroundColor Cyan
 New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
 New-Item -ItemType Directory -Force -Path $ConfigDir | Out-Null
 
-Invoke-WebRequest -Uri "${baseUrl}/api/agent/download/windows/amd64" -OutFile "$InstallDir\\unicentral-agent.exe" -UseBasicParsing
+Invoke-WebRequest -Uri "$Server/api/agent/download/windows/amd64" -OutFile "$InstallDir\\unicentral-agent.exe" -UseBasicParsing
 
-@{server="${baseUrl}";enrollment_key=$Key;category=$Category} | ConvertTo-Json | Set-Content "$ConfigDir\\config.json"
+@{server=$Server;enrollment_key=$Key;category=$Category} | ConvertTo-Json | Set-Content "$ConfigDir\\config.json"
 
 & "$InstallDir\\unicentral-agent.exe" --install --config "$ConfigDir\\config.json"
 Start-Service UniCentralAgent
@@ -119,10 +121,13 @@ Write-Host "UniCentral Agent installed and running!" -ForegroundColor Green
 
 function generateLinuxScript(req) {
     const baseUrl = getBaseUrl(req);
+    const key = req.query.key || '';
+    const category = req.query.category || 'client';
     return `#!/bin/bash
 set -e
-KEY="\${1:-}"
-CATEGORY="\${2:-client}"
+SERVER="${baseUrl}"
+KEY="${key}"
+CATEGORY="${category}"
 if [ -z "$KEY" ]; then read -p "Enter enrollment key: " KEY; fi
 
 echo "Installing UniCentral Agent..."
@@ -134,12 +139,12 @@ case $ARCH in
     *) echo "Unsupported architecture: $ARCH"; exit 1 ;;
 esac
 
-curl -sL "${baseUrl}/api/agent/download/linux/$ARCH" -o /usr/local/bin/unicentral-agent
+curl -sL "$SERVER/api/agent/download/linux/$ARCH" -o /usr/local/bin/unicentral-agent
 chmod +x /usr/local/bin/unicentral-agent
 
 mkdir -p /etc/unicentral
 cat > /etc/unicentral/config.json <<EOF
-{"server": "${baseUrl}", "enrollment_key": "$KEY", "category": "$CATEGORY"}
+{"server": "$SERVER", "enrollment_key": "$KEY", "category": "$CATEGORY"}
 EOF
 chmod 600 /etc/unicentral/config.json
 
