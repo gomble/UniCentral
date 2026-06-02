@@ -157,9 +157,11 @@ function handleAgentConnection(ws, request) {
 
 function handleRegister(ws, key, payload) {
     const { hostname, os_type, os_version, agent_version, ip_addresses, category } = payload;
+    console.log(`[WS] Register attempt: hostname=${hostname}, os=${os_type}, key_match=${key === config.enrollmentKey}`);
 
     // Validate enrollment key or legacy token
     if (key === config.enrollmentKey) {
+        try {
         // Self-registration with enrollment key - create machine automatically
         const { v4: uuidv4 } = require('uuid');
         const machineId = uuidv4();
@@ -188,8 +190,15 @@ function handleRegister(ws, key, payload) {
             telemetry_interval: config.telemetryInterval
         }));
 
+        console.log(`[WS] Machine registered: ${machineId} (${hostname})`);
         broadcastToDashboards({ type: 'machine_registered', machineId });
         return;
+        } catch (err) {
+            console.error('[WS] Registration failed:', err.message);
+            ws.send(createMessage(MSG_TYPES.ERROR, { message: 'Registration failed: ' + err.message }));
+            ws.close();
+            return;
+        }
     }
 
     // Legacy: token-based registration (pre-created machine)
