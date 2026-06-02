@@ -1,12 +1,16 @@
 package connection
 
 import (
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/url"
 	"os"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -76,10 +80,19 @@ func (c *Client) connect() error {
 	serverURL = strings.Replace(serverURL, "http://", "ws://", 1)
 
 	params := url.Values{}
-	if c.cfg.MachineID != "" {
+	if c.cfg.MachineID != "" && c.cfg.MachineSecret != "" {
+		// Reconnect with HMAC signature
+		ts := strconv.FormatInt(time.Now().Unix(), 10)
+		sig := computeHmac(c.cfg.MachineID, ts, c.cfg.MachineSecret)
 		params.Set("machine_id", c.cfg.MachineID)
-	}
-	if c.cfg.Token != "" {
+		params.Set("ts", ts)
+		params.Set("sig", sig)
+	} else if c.cfg.MachineID != "" {
+		// Legacy reconnect without HMAC
+		params.Set("machine_id", c.cfg.MachineID)
+	} else if c.cfg.EnrollmentKey != "" {
+		params.Set("enrollment_key", c.cfg.EnrollmentKey)
+	} else if c.cfg.Token != "" {
 		params.Set("token", c.cfg.Token)
 	}
 
@@ -92,7 +105,7 @@ func (c *Client) connect() error {
 	c.conn = conn
 	log.Println("Connected to server")
 
-	if c.cfg.MachineID == "" && c.cfg.Token != "" {
+	if c.cfg.MachineID == "" {
 		c.register()
 	}
 
@@ -130,6 +143,11 @@ func (c *Client) register() {
 	hostname, _ := os.Hostname()
 	ips := collectors.GetIPAddresses()
 
+	category := c.cfg.Category
+	if category == "" {
+		category = "client"
+	}
+
 	msg := Message{
 		Type:      "register",
 		Timestamp: time.Now().Unix(),
@@ -139,6 +157,7 @@ func (c *Client) register() {
 			"os_version":    collectors.GetOSVersion(),
 			"agent_version": c.cfg.AgentVersion,
 			"ip_addresses":  ips,
+			"category":      category,
 		},
 	}
 
@@ -179,13 +198,19 @@ func (c *Client) handleMessage(raw []byte) {
 	case "registered":
 		payload, _ := json.Marshal(msg.Payload)
 		var reg struct {
-			MachineID string `json:"machine_id"`
+			MachineID     string `json:"machine_id"`
+			MachineSecret string `json:"machine_secret"`
 		}
 		json.Unmarshal(payload, &reg)
 		if reg.MachineID != "" {
 			config.SetMachineID(reg.MachineID)
 			c.cfg.MachineID = reg.MachineID
 			log.Printf("Registered with machine_id: %s", reg.MachineID)
+		}
+		if reg.MachineSecret != "" {
+			config.SetMachineSecret(reg.MachineSecret)
+			c.cfg.MachineSecret = reg.MachineSecret
+			log.Println("Machine secret stored for HMAC authentication")
 		}
 
 	case "command":
@@ -227,4 +252,10 @@ func (c *Client) backoff() {
 	case <-c.done:
 	case <-time.After(5 * time.Second):
 	}
+}
+
+func computeHmac(machineID, timestamp, secret string) string {
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write([]byte(machineID + ":" + timestamp))
+	return hex.EncodeToString(mac.Sum(nil))
 }

@@ -9,10 +9,13 @@ import (
 )
 
 type Config struct {
-	Server       string `json:"server"`
-	Token        string `json:"token"`
-	MachineID    string `json:"machine_id"`
-	AgentVersion string `json:"agent_version"`
+	Server        string `json:"server"`
+	Token         string `json:"token"`
+	EnrollmentKey string `json:"enrollment_key"`
+	MachineID     string `json:"machine_id"`
+	MachineSecret string `json:"machine_secret"`
+	AgentVersion  string `json:"agent_version"`
+	Category      string `json:"category"`
 }
 
 var (
@@ -63,5 +66,11 @@ func Save() error {
 func SetMachineID(id string) {
 	Get().MachineID = id
 	Get().Token = ""
+	Get().EnrollmentKey = ""
+	Save()
+}
+
+func SetMachineSecret(secret string) {
+	Get().MachineSecret = secret
 	Save()
 }

@@ -314,6 +314,30 @@
                 <!-- Settings View -->
                 <div v-if="view === 'settings'">
                     <div class="page-header"><h1>Einstellungen</h1></div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Agent-Enrollment</h3>
+                            <button class="btn btn-ghost btn-sm" @click="regenerateEnrollmentKey">Key neu generieren</button>
+                        </div>
+                        <p style="color:var(--text-secondary);margin-bottom:0.8rem;font-size:0.85rem">
+                            Mit diesem Key können sich Maschinen selbst registrieren. Die Verbindung wird nach Registrierung per HMAC-Signatur gesichert.
+                        </p>
+                        <div class="form-group">
+                            <label>Enrollment Key</label>
+                            <div class="token-display">{{ settingsForm.enrollmentKey }}</div>
+                        </div>
+                        <div style="margin-top:1rem">
+                            <label style="font-size:0.8rem;color:var(--text-muted);display:block;margin-bottom:0.4rem">Windows (PowerShell als Admin):</label>
+                            <div class="token-display" style="font-size:0.78rem">powershell -Command "iwr {{ baseUrl }}/api/agent/install-script/windows -UseBasicParsing | iex" {{ settingsForm.enrollmentKey }} server</div>
+                        </div>
+                        <div style="margin-top:0.8rem">
+                            <label style="font-size:0.8rem;color:var(--text-muted);display:block;margin-bottom:0.4rem">Linux (bash als root):</label>
+                            <div class="token-display" style="font-size:0.78rem">curl -sL {{ baseUrl }}/api/agent/install-script/linux | bash -s -- {{ settingsForm.enrollmentKey }} server</div>
+                        </div>
+                        <p style="color:var(--text-muted);font-size:0.8rem;margin-top:0.8rem">Ersetze "server" mit "client" für Client-Maschinen.</p>
+                    </div>
+
                     <div class="card">
                         <div class="card-header"><h3>E-Mail (SMTP)</h3></div>
                         <div class="form-group">

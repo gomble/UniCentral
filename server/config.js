@@ -8,6 +8,7 @@ const CONFIG_PATH = path.join(DATA_DIR, 'config.json');
 const defaults = {
     port: 3000,
     sessionSecret: crypto.randomBytes(32).toString('hex'),
+    enrollmentKey: crypto.randomBytes(24).toString('hex'),
     heartbeatInterval: 30,
     telemetryInterval: 300,
     offlineThreshold: 90,

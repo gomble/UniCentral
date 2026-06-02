@@ -39,7 +39,9 @@ func main() {
 	install := flag.Bool("install", false, "Install as system service")
 	uninstall := flag.Bool("uninstall", false, "Uninstall system service")
 	server := flag.String("server", "", "Server URL for registration")
-	token := flag.String("token", "", "Registration token")
+	token := flag.String("token", "", "Registration token (legacy)")
+	enrollmentKey := flag.String("enrollment-key", "", "Enrollment key for auto-registration")
+	category := flag.String("category", "client", "Machine category: server or client")
 	showVersion := flag.Bool("version", false, "Show version")
 	flag.Parse()
 
@@ -59,6 +61,12 @@ func main() {
 	}
 	if *token != "" {
 		config.Get().Token = *token
+	}
+	if *enrollmentKey != "" {
+		config.Get().EnrollmentKey = *enrollmentKey
+	}
+	if *category != "" {
+		config.Get().Category = *category
 	}
 
 	config.Get().AgentVersion = version

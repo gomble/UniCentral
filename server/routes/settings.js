@@ -8,6 +8,7 @@ router.use(requireAdmin);
 
 router.get('/', (req, res) => {
     res.json({
+        enrollmentKey: config.enrollmentKey,
         smtpHost: config.smtpHost,
         smtpPort: config.smtpPort,
         smtpUser: config.smtpUser,
@@ -19,8 +20,15 @@ router.get('/', (req, res) => {
     });
 });
 
+router.post('/regenerate-enrollment-key', (req, res) => {
+    const crypto = require('crypto');
+    config.enrollmentKey = crypto.randomBytes(24).toString('hex');
+    save(config);
+    res.json({ enrollmentKey: config.enrollmentKey });
+});
+
 router.post('/', (req, res) => {
-    const allowed = ['smtpHost', 'smtpPort', 'smtpUser', 'smtpPassword', 'smtpFrom', 'smtpTls',
+    const allowed = ['enrollmentKey', 'smtpHost', 'smtpPort', 'smtpUser', 'smtpPassword', 'smtpFrom', 'smtpTls',
                      'heartbeatInterval', 'telemetryInterval', 'offlineThreshold'];
 
     for (const key of allowed) {

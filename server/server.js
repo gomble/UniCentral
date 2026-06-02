@@ -65,24 +65,21 @@ function generateWindowsScript(req) {
     const baseUrl = `${req.protocol}://${req.get('host')}`;
     return `# UniCentral Agent Installer for Windows
 $ErrorActionPreference = "Stop"
-$Token = $args[0]
-if (-not $Token) { $Token = Read-Host "Enter registration token" }
+$Key = $args[0]
+$Category = if ($args[1]) { $args[1] } else { "client" }
+if (-not $Key) { $Key = Read-Host "Enter enrollment key" }
 $InstallDir = "C:\\Program Files\\UniCentral"
 $ConfigDir = "C:\\ProgramData\\UniCentral"
 
 Write-Host "Installing UniCentral Agent..." -ForegroundColor Cyan
 
-# Create directories
 New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
 New-Item -ItemType Directory -Force -Path $ConfigDir | Out-Null
 
-# Download agent
 Invoke-WebRequest -Uri "${baseUrl}/api/agent/download/windows/amd64" -OutFile "$InstallDir\\unicentral-agent.exe" -UseBasicParsing
 
-# Write config
-@{server="${baseUrl}";token=$Token} | ConvertTo-Json | Set-Content "$ConfigDir\\config.json"
+@{server="${baseUrl}";enrollment_key=$Key;category=$Category} | ConvertTo-Json | Set-Content "$ConfigDir\\config.json"
 
-# Install and start service
 & "$InstallDir\\unicentral-agent.exe" --install --config "$ConfigDir\\config.json"
 Start-Service UniCentralAgent
 
@@ -94,28 +91,27 @@ function generateLinuxScript(req) {
     const baseUrl = `${req.protocol}://${req.get('host')}`;
     return `#!/bin/bash
 set -e
-TOKEN="\${1:-}"
-if [ -z "$TOKEN" ]; then read -p "Enter registration token: " TOKEN; fi
+KEY="\${1:-}"
+CATEGORY="\${2:-client}"
+if [ -z "$KEY" ]; then read -p "Enter enrollment key: " KEY; fi
 
 echo "Installing UniCentral Agent..."
 
-# Detect architecture
 ARCH=$(uname -m)
 case $ARCH in
     x86_64) ARCH="amd64" ;;
-    aarch64) ARCH="arm64" ;;
+    aarch64|arm64) ARCH="arm64" ;;
     *) echo "Unsupported architecture: $ARCH"; exit 1 ;;
 esac
 
-# Download agent
 curl -sL "${baseUrl}/api/agent/download/linux/$ARCH" -o /usr/local/bin/unicentral-agent
 chmod +x /usr/local/bin/unicentral-agent
 
-# Create config
 mkdir -p /etc/unicentral
 cat > /etc/unicentral/config.json <<EOF
-{"server": "${baseUrl}", "token": "$TOKEN"}
+{"server": "${baseUrl}", "enrollment_key": "$KEY", "category": "$CATEGORY"}
 EOF
+chmod 600 /etc/unicentral/config.json
 
 # Create systemd service
 cat > /etc/systemd/system/unicentral-agent.service <<EOF

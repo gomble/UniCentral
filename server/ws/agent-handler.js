@@ -1,10 +1,24 @@
 const WebSocket = require('ws');
 const url = require('url');
+const crypto = require('crypto');
 const db = require('../db');
 const { config } = require('../config');
 const { MSG_TYPES, createMessage, parseMessage } = require('./protocol');
 
 const connectedAgents = new Map();
+
+function verifyHmac(machineId, timestamp, signature) {
+    const machine = db.prepare('SELECT machine_secret FROM machines WHERE machine_id = ?').get(machineId);
+    if (!machine || !machine.machine_secret) return false;
+    const expected = crypto.createHmac('sha256', machine.machine_secret)
+        .update(`${machineId}:${timestamp}`)
+        .digest('hex');
+    return crypto.timingSafeEqual(Buffer.from(signature, 'hex'), Buffer.from(expected, 'hex'));
+}
+
+function generateMachineSecret() {
+    return crypto.randomBytes(32).toString('hex');
+}
 
 function initAgentWebSocket(server, sessionMiddleware) {
     const wss = new WebSocket.Server({ noServer: true });
@@ -47,10 +61,14 @@ function initAgentWebSocket(server, sessionMiddleware) {
 
 function handleAgentConnection(ws, request) {
     const params = new URLSearchParams(url.parse(request.url).query);
-    const token = params.get('token');
+    const enrollmentKey = params.get('enrollment_key');
     const machineId = params.get('machine_id');
+    const signature = params.get('sig');
+    const timestamp = params.get('ts');
+    // Legacy support for old token-based registration
+    const token = params.get('token');
 
-    let currentMachineId = machineId;
+    let currentMachineId = null;
 
     ws.on('message', (raw) => {
         const msg = parseMessage(raw);
@@ -58,7 +76,7 @@ function handleAgentConnection(ws, request) {
 
         switch (msg.type) {
             case MSG_TYPES.REGISTER:
-                handleRegister(ws, token, machineId, msg.payload);
+                handleRegister(ws, enrollmentKey || token, msg.payload);
                 break;
             case MSG_TYPES.HEARTBEAT:
                 handleHeartbeat(currentMachineId || ws._machineId, msg.payload);
@@ -85,30 +103,97 @@ function handleAgentConnection(ws, request) {
         if (id) connectedAgents.delete(id);
     });
 
-    if (machineId) {
+    // Reconnect with HMAC authentication
+    if (machineId && signature && timestamp) {
+        const tsAge = Math.abs(Date.now() / 1000 - parseInt(timestamp));
+        if (tsAge > 300) {
+            ws.send(createMessage(MSG_TYPES.ERROR, { message: 'Signature expired' }));
+            ws.close();
+            return;
+        }
+        if (!verifyHmac(machineId, timestamp, signature)) {
+            ws.send(createMessage(MSG_TYPES.ERROR, { message: 'Invalid signature' }));
+            ws.close();
+            return;
+        }
         const machine = db.prepare('SELECT * FROM machines WHERE machine_id = ?').get(machineId);
         if (machine) {
+            currentMachineId = machineId;
             connectedAgents.set(machineId, ws);
             ws._machineId = machineId;
             db.prepare('UPDATE machines SET status = ?, last_seen = CURRENT_TIMESTAMP WHERE machine_id = ?')
                 .run('online', machineId);
             broadcastToDashboards({ type: 'machine_connected', machineId });
         } else {
-            ws.send(createMessage(MSG_TYPES.ERROR, { message: 'Unknown machine_id' }));
+            ws.send(createMessage(MSG_TYPES.ERROR, { message: 'Unknown machine' }));
+            ws.close();
+        }
+        return;
+    }
+
+    // Legacy: reconnect by machine_id without HMAC (for backwards compat during migration)
+    if (machineId && !signature) {
+        const machine = db.prepare('SELECT * FROM machines WHERE machine_id = ?').get(machineId);
+        if (machine) {
+            currentMachineId = machineId;
+            connectedAgents.set(machineId, ws);
+            ws._machineId = machineId;
+            db.prepare('UPDATE machines SET status = ?, last_seen = CURRENT_TIMESTAMP WHERE machine_id = ?')
+                .run('online', machineId);
+            broadcastToDashboards({ type: 'machine_connected', machineId });
+        } else {
+            ws.send(createMessage(MSG_TYPES.ERROR, { message: 'Unknown machine' }));
             ws.close();
         }
     }
 }
 
-function handleRegister(ws, token, machineId, payload) {
-    const { hostname, os_type, os_version, agent_version, ip_addresses } = payload;
+function handleRegister(ws, key, payload) {
+    const { hostname, os_type, os_version, agent_version, ip_addresses, category } = payload;
 
-    const machine = db.prepare('SELECT * FROM machines WHERE registration_token = ?').get(token);
+    // Validate enrollment key or legacy token
+    if (key === config.enrollmentKey) {
+        // Self-registration with enrollment key - create machine automatically
+        const { v4: uuidv4 } = require('uuid');
+        const machineId = uuidv4();
+        const machineSecret = generateMachineSecret();
+
+        db.prepare(`
+            INSERT INTO machines (machine_id, hostname, os_type, category, agent_version, ip_address, status, last_seen, machine_secret)
+            VALUES (?, ?, ?, ?, ?, ?, 'online', CURRENT_TIMESTAMP, ?)
+        `).run(
+            machineId,
+            hostname || 'unknown',
+            os_type || 'windows',
+            category || 'client',
+            agent_version || '',
+            Array.isArray(ip_addresses) ? ip_addresses.join(', ') : (ip_addresses || ''),
+            machineSecret
+        );
+
+        ws._machineId = machineId;
+        connectedAgents.set(machineId, ws);
+
+        ws.send(createMessage(MSG_TYPES.REGISTERED, {
+            machine_id: machineId,
+            machine_secret: machineSecret,
+            heartbeat_interval: config.heartbeatInterval,
+            telemetry_interval: config.telemetryInterval
+        }));
+
+        broadcastToDashboards({ type: 'machine_registered', machineId });
+        return;
+    }
+
+    // Legacy: token-based registration (pre-created machine)
+    const machine = db.prepare('SELECT * FROM machines WHERE registration_token = ?').get(key);
     if (!machine) {
-        ws.send(createMessage(MSG_TYPES.ERROR, { message: 'Invalid registration token' }));
+        ws.send(createMessage(MSG_TYPES.ERROR, { message: 'Invalid enrollment key or token' }));
         ws.close();
         return;
     }
+
+    const machineSecret = generateMachineSecret();
 
     db.prepare(`
         UPDATE machines SET
@@ -118,13 +203,15 @@ function handleRegister(ws, token, machineId, payload) {
             ip_address = ?,
             status = 'online',
             last_seen = CURRENT_TIMESTAMP,
-            registration_token = NULL
+            registration_token = NULL,
+            machine_secret = ?
         WHERE machine_id = ?
     `).run(
         hostname || machine.hostname,
         os_type || machine.os_type,
         agent_version || '',
         Array.isArray(ip_addresses) ? ip_addresses.join(', ') : (ip_addresses || ''),
+        machineSecret,
         machine.machine_id
     );
 
@@ -133,6 +220,7 @@ function handleRegister(ws, token, machineId, payload) {
 
     ws.send(createMessage(MSG_TYPES.REGISTERED, {
         machine_id: machine.machine_id,
+        machine_secret: machineSecret,
         heartbeat_interval: config.heartbeatInterval,
         telemetry_interval: config.telemetryInterval
     }));

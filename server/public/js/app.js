@@ -280,6 +280,15 @@ createApp({
             alert(data.success ? 'Test-Email gesendet!' : `Fehler: ${data.error}`);
         }
 
+        async function regenerateEnrollmentKey() {
+            if (!confirm('Enrollment Key wirklich neu generieren? Bestehende Install-Befehle werden ungültig.')) return;
+            const res = await fetch('/api/settings/regenerate-enrollment-key', { method: 'POST' });
+            const data = await res.json();
+            if (data.enrollmentKey) {
+                settingsForm.enrollmentKey = data.enrollmentKey;
+            }
+        }
+
         async function acknowledgeAlert(id) {
             await fetch(`/api/monitoring/alerts/${id}/acknowledge`, { method: 'POST' });
             await loadAlerts();
@@ -322,7 +331,7 @@ createApp({
             machineUpdates, machineShares, telemetryHistory, telemetryRange,
             telemetryCanvas, baseUrl, newMachine, settingsForm,
             navigate, addMachine, deleteMachine, showToken, sendCommand,
-            saveSettings, testEmail, acknowledgeAlert, logout,
+            saveSettings, testEmail, regenerateEnrollmentKey, acknowledgeAlert, logout,
             loadTelemetryHistory, formatTime, formatBytes, diskPercent
         };
     }

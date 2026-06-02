@@ -1,26 +1,30 @@
 #!/bin/bash
 set -e
 
-TOKEN=""
+ENROLLMENT_KEY=""
 SERVER=""
+CATEGORY="client"
 
 while [[ $# -gt 0 ]]; do
     case $1 in
-        --token) TOKEN="$2"; shift 2 ;;
+        --key|--enrollment-key) ENROLLMENT_KEY="$2"; shift 2 ;;
         --server) SERVER="$2"; shift 2 ;;
-        *) TOKEN="$1"; shift ;;
+        --category) CATEGORY="$2"; shift 2 ;;
+        --token) ENROLLMENT_KEY="$2"; shift 2 ;;
+        *) ENROLLMENT_KEY="$1"; shift ;;
     esac
 done
 
-if [ -z "$TOKEN" ]; then
-    read -p "Enter registration token: " TOKEN
+if [ -z "$ENROLLMENT_KEY" ]; then
+    read -p "Enter enrollment key: " ENROLLMENT_KEY
 fi
 if [ -z "$SERVER" ]; then
     read -p "Enter server URL (e.g. https://unicentral.example.com): " SERVER
 fi
 
 echo "=== UniCentral Agent Installer ==="
-echo "Server: $SERVER"
+echo "Server:   $SERVER"
+echo "Category: $CATEGORY"
 echo ""
 
 # Detect architecture
@@ -44,7 +48,8 @@ mkdir -p /etc/unicentral
 cat > /etc/unicentral/config.json <<EOF
 {
   "server": "$SERVER",
-  "token": "$TOKEN"
+  "enrollment_key": "$ENROLLMENT_KEY",
+  "category": "$CATEGORY"
 }
 EOF
 chmod 600 /etc/unicentral/config.json
@@ -79,5 +84,6 @@ echo "Binary:  /usr/local/bin/unicentral-agent"
 echo "Config:  /etc/unicentral/config.json"
 echo "Service: unicentral-agent"
 echo ""
+echo "The agent will auto-register with the central server."
 echo "Check status: systemctl status unicentral-agent"
 echo "View logs:    journalctl -u unicentral-agent -f"
