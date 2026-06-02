@@ -12,6 +12,16 @@ createApp({
         const showAddMachine = ref(false);
         const showTokenModal = ref(false);
         const showAddVeeam = ref(false);
+        const veeamInstances = ref([]);
+        const newVeeam = reactive({
+            name: '', base_url: '', username: '', password: '',
+            poll_interval_seconds: 300, verify_ssl: false
+        });
+        const showBatchInstall = ref(false);
+        const batchInstallPkg = ref('');
+        const batchInstallMethod = ref('auto');
+        const selectedMachines = ref([]);
+        const commandHistory = ref([]);
         const tokenMachine = ref({});
         const selectedMachine = ref(null);
         const machineDisks = ref([]);
@@ -87,7 +97,7 @@ createApp({
         }
 
         async function loadDashboard() {
-            await Promise.all([loadMachines(), loadStats(), loadAlerts(), loadSettings()]);
+            await Promise.all([loadMachines(), loadStats(), loadAlerts(), loadSettings(), loadVeeamInstances()]);
         }
 
         async function loadMachines() {
@@ -114,6 +124,8 @@ createApp({
             view.value = target;
             if (target === 'machine-detail' && id) {
                 loadMachineDetail(id);
+            } else if (target === 'command-history') {
+                loadCommandHistory();
             }
         }
 
@@ -280,6 +292,43 @@ createApp({
             alert(data.success ? 'Test-Email gesendet!' : `Fehler: ${data.error}`);
         }
 
+        async function loadVeeamInstances() {
+            const res = await fetch('/api/veeam/instances');
+            if (res.ok) {
+                const instances = await res.json();
+                for (const inst of instances) {
+                    const jobsRes = await fetch(`/api/veeam/instances/${inst.id}/jobs`);
+                    inst.jobs = jobsRes.ok ? await jobsRes.json() : [];
+                }
+                veeamInstances.value = instances;
+            }
+        }
+
+        async function addVeeamInstance() {
+            if (!newVeeam.name || !newVeeam.base_url || !newVeeam.username || !newVeeam.password) {
+                alert('Alle Felder ausfüllen'); return;
+            }
+            const res = await fetch('/api/veeam/instances', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(newVeeam)
+            });
+            if (res.ok) {
+                showAddVeeam.value = false;
+                newVeeam.name = ''; newVeeam.base_url = ''; newVeeam.username = ''; newVeeam.password = '';
+                await loadVeeamInstances();
+            } else {
+                const err = await res.json();
+                alert(err.error || 'Fehler beim Hinzufügen');
+            }
+        }
+
+        async function deleteVeeamInstance(id) {
+            if (!confirm('Veeam-Instanz wirklich entfernen?')) return;
+            await fetch(`/api/veeam/instances/${id}`, { method: 'DELETE' });
+            await loadVeeamInstances();
+        }
+
         async function regenerateEnrollmentKey() {
             if (!confirm('Enrollment Key wirklich neu generieren? Bestehende Install-Befehle werden ungültig.')) return;
             const res = await fetch('/api/settings/regenerate-enrollment-key', { method: 'POST' });
@@ -287,6 +336,57 @@ createApp({
             if (data.enrollmentKey) {
                 settingsForm.enrollmentKey = data.enrollmentKey;
             }
+        }
+
+        function toggleAllMachines(e) {
+            if (e.target.checked) {
+                selectedMachines.value = machines.value.map(m => m.machine_id);
+            } else {
+                selectedMachines.value = [];
+            }
+        }
+
+        async function batchCommand(type) {
+            const online = selectedMachines.value.filter(mid => {
+                const m = machines.value.find(x => x.machine_id === mid);
+                return m && m.status === 'online';
+            });
+            if (!online.length) { alert('Keine der ausgewählten Maschinen ist online.'); return; }
+            if (!confirm(`"${type}" auf ${online.length} Maschine(n) ausführen?`)) return;
+
+            for (const mid of online) {
+                await fetch(`/api/commands/${mid}/${type}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({})
+                });
+            }
+            selectedMachines.value = [];
+        }
+
+        async function executeBatchInstall() {
+            if (!batchInstallPkg.value) { alert('Paketname eingeben'); return; }
+            const online = selectedMachines.value.filter(mid => {
+                const m = machines.value.find(x => x.machine_id === mid);
+                return m && m.status === 'online';
+            });
+            if (!online.length) { alert('Keine der ausgewählten Maschinen ist online.'); return; }
+
+            for (const mid of online) {
+                await fetch(`/api/commands/${mid}/install-software`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ package_name: batchInstallPkg.value, method: batchInstallMethod.value })
+                });
+            }
+            showBatchInstall.value = false;
+            batchInstallPkg.value = '';
+            selectedMachines.value = [];
+        }
+
+        async function loadCommandHistory() {
+            const res = await fetch('/api/commands/history');
+            if (res.ok) commandHistory.value = await res.json();
         }
 
         async function acknowledgeAlert(id) {
@@ -326,11 +426,15 @@ createApp({
 
         return {
             view, username, machines, stats, alerts, alertCount,
-            showAddMachine, showTokenModal, showAddVeeam, tokenMachine,
-            selectedMachine, machineDisks, machineServices, machineFirewall,
+            showAddMachine, showTokenModal, showAddVeeam, showBatchInstall,
+            batchInstallPkg, batchInstallMethod, selectedMachines, commandHistory,
+            veeamInstances, newVeeam,
+            tokenMachine, selectedMachine, machineDisks, machineServices, machineFirewall,
             machineUpdates, machineShares, telemetryHistory, telemetryRange,
             telemetryCanvas, baseUrl, newMachine, settingsForm,
             navigate, addMachine, deleteMachine, showToken, sendCommand,
+            toggleAllMachines, batchCommand, executeBatchInstall,
+            addVeeamInstance, deleteVeeamInstance,
             saveSettings, testEmail, regenerateEnrollmentKey, acknowledgeAlert, logout,
             loadTelemetryHistory, formatTime, formatBytes, diskPercent
         };

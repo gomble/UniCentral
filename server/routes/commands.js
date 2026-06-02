@@ -85,7 +85,19 @@ router.post('/:machineId/update-agent', requireAdmin, (req, res) => {
     res.json(result);
 });
 
-// Command history
+// Global command history
+router.get('/history', (req, res) => {
+    const commands = db.prepare(`
+        SELECT cl.*, m.hostname, m.display_name
+        FROM command_log cl
+        LEFT JOIN machines m ON cl.machine_id = m.machine_id
+        ORDER BY cl.created_at DESC
+        LIMIT 100
+    `).all();
+    res.json(commands);
+});
+
+// Machine-specific command history
 router.get('/:machineId/history', (req, res) => {
     const machine = db.prepare('SELECT * FROM machines WHERE id = ? OR machine_id = ?').get(req.params.machineId, req.params.machineId);
     if (!machine) return res.status(404).json({ error: 'Machine not found' });

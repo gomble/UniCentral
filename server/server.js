@@ -47,6 +47,8 @@ app.use('/auth', require('./routes/auth'));
 app.use('/api/machines', require('./routes/machines'));
 app.use('/api/commands', require('./routes/commands'));
 app.use('/api/monitoring', require('./routes/monitoring'));
+app.use('/api/notifications', require('./routes/notifications'));
+app.use('/api/veeam', require('./routes/veeam'));
 app.use('/api/settings', require('./routes/settings'));
 
 // Agent download endpoint
@@ -140,6 +142,14 @@ echo "UniCentral Agent installed and running!"
 
 // Initialize WebSocket for agent connections
 initAgentWebSocket(server, sessionMiddleware);
+
+// Start notification engine
+const notificationEngine = require('./services/notification-engine');
+notificationEngine.start();
+
+// Start Veeam poller
+const veeamPoller = require('./services/veeam-poller');
+veeamPoller.start();
 
 // Start server
 server.listen(config.port, () => {

@@ -109,13 +109,29 @@
                 <div v-if="view === 'machines'">
                     <div class="page-header">
                         <h1>Maschinen</h1>
-                        <button class="btn btn-primary" @click="showAddMachine = true">+ Maschine hinzufügen</button>
+                        <div style="display:flex;gap:0.5rem">
+                            <button class="btn btn-ghost btn-sm" @click="navigate('command-history')">Befehlshistorie</button>
+                            <button class="btn btn-primary" @click="showAddMachine = true">+ Maschine hinzufügen</button>
+                        </div>
+                    </div>
+
+                    <!-- Batch Action Bar -->
+                    <div v-if="selectedMachines.length" class="card" style="display:flex;align-items:center;gap:1rem;padding:0.8rem 1.2rem;margin-bottom:1rem;border-color:var(--accent)">
+                        <span style="font-size:0.85rem"><strong>{{ selectedMachines.length }}</strong> ausgewählt</span>
+                        <button class="btn btn-ghost btn-sm" @click="batchCommand('restart')">Neustart</button>
+                        <button class="btn btn-ghost btn-sm" @click="batchCommand('shutdown')">Herunterfahren</button>
+                        <button class="btn btn-ghost btn-sm" @click="batchCommand('trigger_updates')">Updates</button>
+                        <button class="btn btn-ghost btn-sm" @click="showBatchInstall = true">Software installieren</button>
+                        <button class="btn btn-ghost btn-sm" @click="batchCommand('update_agent')">Agent aktualisieren</button>
+                        <span style="flex:1"></span>
+                        <button class="btn btn-ghost btn-sm" @click="selectedMachines = []">Auswahl aufheben</button>
                     </div>
 
                     <div class="card">
                         <table class="machine-table" v-if="machines.length">
                             <thead>
                                 <tr>
+                                    <th><input type="checkbox" @change="toggleAllMachines" :checked="selectedMachines.length === machines.length"></th>
                                     <th>Status</th>
                                     <th>Hostname</th>
                                     <th>OS</th>
@@ -127,6 +143,7 @@
                             </thead>
                             <tbody>
                                 <tr v-for="m in machines" :key="m.id">
+                                    <td><input type="checkbox" :value="m.machine_id" v-model="selectedMachines" @click.stop></td>
                                     <td><span class="status-badge" :class="m.status">{{ m.status }}</span></td>
                                     <td @click="navigate('machine-detail', m.id)" style="cursor:pointer"><strong>{{ m.display_name || m.hostname }}</strong></td>
                                     <td><span class="os-badge">{{ m.os_type }}</span></td>
@@ -141,6 +158,31 @@
                             </tbody>
                         </table>
                         <p v-else style="color: var(--text-muted); padding: 1rem 0;">Keine Maschinen vorhanden.</p>
+                    </div>
+                </div>
+
+                <!-- Command History View -->
+                <div v-if="view === 'command-history'">
+                    <div class="page-header">
+                        <h1>Befehlshistorie</h1>
+                        <button class="btn btn-ghost btn-sm" @click="navigate('machines')">← Zurück</button>
+                    </div>
+                    <div class="card">
+                        <table class="machine-table" v-if="commandHistory.length">
+                            <thead><tr><th>Zeitpunkt</th><th>Maschine</th><th>Befehl</th><th>Status</th><th>Ergebnis</th></tr></thead>
+                            <tbody>
+                                <tr v-for="c in commandHistory" :key="c.id">
+                                    <td style="font-size:0.8rem">{{ formatTime(c.created_at) }}</td>
+                                    <td>{{ c.machine_id.slice(0,8) }}</td>
+                                    <td><span class="os-badge">{{ c.command_type }}</span></td>
+                                    <td>
+                                        <span class="status-badge" :class="c.status === 'completed' ? 'online' : c.status === 'failed' ? 'offline' : 'warning'">{{ c.status }}</span>
+                                    </td>
+                                    <td style="font-size:0.8rem;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ c.result || '–' }}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                        <p v-else style="color:var(--text-muted)">Keine Befehle ausgeführt.</p>
                     </div>
                 </div>
 
@@ -290,7 +332,39 @@
                         <h1>Veeam Backup</h1>
                         <button class="btn btn-primary" @click="showAddVeeam = true">+ Veeam Instanz</button>
                     </div>
-                    <p style="color: var(--text-muted)">Veeam-Integration wird in Phase 4 implementiert.</p>
+
+                    <!-- Instances -->
+                    <div class="card" v-for="inst in veeamInstances" :key="inst.id">
+                        <div class="card-header">
+                            <div>
+                                <h3 style="display:inline">{{ inst.name }}</h3>
+                                <span class="status-badge" :class="inst.status === 'connected' ? 'online' : inst.status === 'error' ? 'offline' : 'warning'" style="margin-left:0.5rem">{{ inst.status }}</span>
+                            </div>
+                            <div style="display:flex;gap:0.5rem;align-items:center">
+                                <span style="font-size:0.75rem;color:var(--text-muted)" v-if="inst.last_polled">Letzter Poll: {{ formatTime(inst.last_polled) }}</span>
+                                <button class="btn btn-danger btn-sm" @click="deleteVeeamInstance(inst.id)">Entfernen</button>
+                            </div>
+                        </div>
+                        <table class="machine-table" v-if="inst.jobs && inst.jobs.length">
+                            <thead><tr><th>Job</th><th>Typ</th><th>Letzter Status</th><th>Letzte Ausführung</th><th>Nächster Lauf</th></tr></thead>
+                            <tbody>
+                                <tr v-for="j in inst.jobs" :key="j.id">
+                                    <td><strong>{{ j.job_name }}</strong></td>
+                                    <td><span class="os-badge">{{ j.job_type || '–' }}</span></td>
+                                    <td>
+                                        <span class="status-badge" :class="j.last_run_status === 'Success' ? 'online' : j.last_run_status === 'Failed' ? 'offline' : 'warning'">
+                                            {{ j.last_run_status || 'Unbekannt' }}
+                                        </span>
+                                    </td>
+                                    <td>{{ formatTime(j.last_run_time) }}</td>
+                                    <td>{{ formatTime(j.next_run_time) }}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                        <p v-else style="color:var(--text-muted)">Keine Jobs gefunden oder noch nicht gepollt.</p>
+                    </div>
+
+                    <p v-if="!veeamInstances.length" style="color:var(--text-muted)">Keine Veeam-Instanzen konfiguriert. Klicke auf "+ Veeam Instanz" um eine hinzuzufügen.</p>
                 </div>
 
                 <!-- Alerts View -->
@@ -447,6 +521,71 @@
                 </div>
                 <div class="modal-actions">
                     <button class="btn btn-ghost" @click="showTokenModal = false">Schließen</button>
+                </div>
+            </div>
+        </div>
+        <!-- Add Veeam Modal -->
+        <div class="modal-overlay" v-if="showAddVeeam" @click.self="showAddVeeam = false">
+            <div class="modal">
+                <h2>Veeam Instanz hinzufügen</h2>
+                <div class="form-group">
+                    <label>Name</label>
+                    <input v-model="newVeeam.name" placeholder="z.B. Veeam Hauptserver">
+                </div>
+                <div class="form-group">
+                    <label>URL (mit Port)</label>
+                    <input v-model="newVeeam.base_url" placeholder="https://veeam-server:9419">
+                </div>
+                <div class="form-group">
+                    <label>Benutzername</label>
+                    <input v-model="newVeeam.username" placeholder="DOMAIN\\Administrator">
+                </div>
+                <div class="form-group">
+                    <label>Passwort</label>
+                    <input v-model="newVeeam.password" type="password">
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+                    <div class="form-group">
+                        <label>Poll-Intervall (Sek.)</label>
+                        <input v-model.number="newVeeam.poll_interval_seconds" type="number">
+                    </div>
+                    <div class="form-group">
+                        <label>SSL verifizieren</label>
+                        <select v-model="newVeeam.verify_ssl">
+                            <option :value="false">Nein (self-signed)</option>
+                            <option :value="true">Ja</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-actions">
+                    <button class="btn btn-ghost" @click="showAddVeeam = false">Abbrechen</button>
+                    <button class="btn btn-primary" @click="addVeeamInstance">Hinzufügen</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Batch Install Modal -->
+        <div class="modal-overlay" v-if="showBatchInstall" @click.self="showBatchInstall = false">
+            <div class="modal">
+                <h2>Software installieren</h2>
+                <p style="color:var(--text-secondary);margin-bottom:1rem;font-size:0.85rem">Wird auf {{ selectedMachines.length }} Maschine(n) ausgeführt.</p>
+                <div class="form-group">
+                    <label>Paketname</label>
+                    <input v-model="batchInstallPkg" placeholder="z.B. 7zip, notepad++, htop">
+                </div>
+                <div class="form-group">
+                    <label>Methode</label>
+                    <select v-model="batchInstallMethod">
+                        <option value="auto">Automatisch (winget/apt/dnf)</option>
+                        <option value="winget">winget (Windows)</option>
+                        <option value="choco">Chocolatey (Windows)</option>
+                        <option value="apt">apt (Debian/Ubuntu)</option>
+                        <option value="dnf">dnf (RHEL/Fedora)</option>
+                    </select>
+                </div>
+                <div class="modal-actions">
+                    <button class="btn btn-ghost" @click="showBatchInstall = false">Abbrechen</button>
+                    <button class="btn btn-primary" @click="executeBatchInstall">Installieren</button>
                 </div>
             </div>
         </div>
