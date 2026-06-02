@@ -1,0 +1,230 @@
+package connection
+
+import (
+	"encoding/json"
+	"fmt"
+	"log"
+	"net/url"
+	"os"
+	"runtime"
+	"strings"
+	"time"
+
+	"github.com/gorilla/websocket"
+	"github.com/unicentral/agent/internal/collectors"
+	"github.com/unicentral/agent/internal/commands"
+	"github.com/unicentral/agent/internal/config"
+)
+
+type Message struct {
+	Type      string      `json:"type"`
+	ID        string      `json:"id"`
+	Timestamp int64       `json:"timestamp"`
+	Payload   interface{} `json:"payload"`
+}
+
+type CommandPayload struct {
+	CommandID  int64                  `json:"command_id"`
+	Type       string                 `json:"type"`
+	Parameters map[string]interface{} `json:"parameters"`
+}
+
+type Client struct {
+	cfg       *config.Config
+	conn      *websocket.Conn
+	done      chan struct{}
+	heartbeat *time.Ticker
+	telemetry *time.Ticker
+}
+
+func New(cfg *config.Config) *Client {
+	return &Client{
+		cfg:  cfg,
+		done: make(chan struct{}),
+	}
+}
+
+func (c *Client) Run() {
+	for {
+		select {
+		case <-c.done:
+			return
+		default:
+			err := c.connect()
+			if err != nil {
+				log.Printf("Connection failed: %v, retrying...", err)
+			}
+			c.backoff()
+		}
+	}
+}
+
+func (c *Client) Close() {
+	close(c.done)
+	if c.conn != nil {
+		c.conn.Close()
+	}
+}
+
+func (c *Client) connect() error {
+	serverURL := c.cfg.Server
+	if serverURL == "" {
+		return fmt.Errorf("no server URL configured")
+	}
+
+	serverURL = strings.Replace(serverURL, "https://", "wss://", 1)
+	serverURL = strings.Replace(serverURL, "http://", "ws://", 1)
+
+	params := url.Values{}
+	if c.cfg.MachineID != "" {
+		params.Set("machine_id", c.cfg.MachineID)
+	}
+	if c.cfg.Token != "" {
+		params.Set("token", c.cfg.Token)
+	}
+
+	wsURL := fmt.Sprintf("%s/ws/agent?%s", serverURL, params.Encode())
+
+	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	if err != nil {
+		return err
+	}
+	c.conn = conn
+	log.Println("Connected to server")
+
+	if c.cfg.MachineID == "" && c.cfg.Token != "" {
+		c.register()
+	}
+
+	c.heartbeat = time.NewTicker(30 * time.Second)
+	c.telemetry = time.NewTicker(5 * time.Minute)
+
+	go c.sendHeartbeat()
+
+	go func() {
+		time.Sleep(5 * time.Second)
+		c.sendTelemetry()
+	}()
+
+	for {
+		select {
+		case <-c.done:
+			return nil
+		case <-c.heartbeat.C:
+			c.sendHeartbeat()
+		case <-c.telemetry.C:
+			c.sendTelemetry()
+		default:
+			_, message, err := conn.ReadMessage()
+			if err != nil {
+				c.heartbeat.Stop()
+				c.telemetry.Stop()
+				return err
+			}
+			c.handleMessage(message)
+		}
+	}
+}
+
+func (c *Client) register() {
+	hostname, _ := os.Hostname()
+	ips := collectors.GetIPAddresses()
+
+	msg := Message{
+		Type:      "register",
+		Timestamp: time.Now().Unix(),
+		Payload: map[string]interface{}{
+			"hostname":      hostname,
+			"os_type":       runtime.GOOS,
+			"os_version":    collectors.GetOSVersion(),
+			"agent_version": c.cfg.AgentVersion,
+			"ip_addresses":  ips,
+		},
+	}
+
+	c.send(msg)
+}
+
+func (c *Client) sendHeartbeat() {
+	cpu, mem, uptime := collectors.GetBasicMetrics()
+	msg := Message{
+		Type:      "heartbeat",
+		Timestamp: time.Now().Unix(),
+		Payload: map[string]interface{}{
+			"cpu_percent":    cpu,
+			"memory_percent": mem,
+			"uptime_seconds": uptime,
+		},
+	}
+	c.send(msg)
+}
+
+func (c *Client) sendTelemetry() {
+	data := collectors.CollectAll()
+	msg := Message{
+		Type:      "telemetry",
+		Timestamp: time.Now().Unix(),
+		Payload:   data,
+	}
+	c.send(msg)
+}
+
+func (c *Client) handleMessage(raw []byte) {
+	var msg Message
+	if err := json.Unmarshal(raw, &msg); err != nil {
+		return
+	}
+
+	switch msg.Type {
+	case "registered":
+		payload, _ := json.Marshal(msg.Payload)
+		var reg struct {
+			MachineID string `json:"machine_id"`
+		}
+		json.Unmarshal(payload, &reg)
+		if reg.MachineID != "" {
+			config.SetMachineID(reg.MachineID)
+			c.cfg.MachineID = reg.MachineID
+			log.Printf("Registered with machine_id: %s", reg.MachineID)
+		}
+
+	case "command":
+		payload, _ := json.Marshal(msg.Payload)
+		var cmd CommandPayload
+		json.Unmarshal(payload, &cmd)
+		go c.executeCommand(cmd)
+	}
+}
+
+func (c *Client) executeCommand(cmd CommandPayload) {
+	result := commands.Execute(cmd.Type, cmd.Parameters)
+
+	response := Message{
+		Type:      "command_result",
+		Timestamp: time.Now().Unix(),
+		Payload: map[string]interface{}{
+			"command_id": cmd.CommandID,
+			"status":     result.Status,
+			"result":     result.Output,
+		},
+	}
+	c.send(response)
+}
+
+func (c *Client) send(msg Message) {
+	if c.conn == nil {
+		return
+	}
+	data, err := json.Marshal(msg)
+	if err != nil {
+		return
+	}
+	c.conn.WriteMessage(websocket.TextMessage, data)
+}
+
+func (c *Client) backoff() {
+	select {
+	case <-c.done:
+	case <-time.After(5 * time.Second):
+	}
+}

@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UniCentral</title>
+    <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+    <div id="app">
+        <div class="app-layout">
+            <aside class="sidebar">
+                <div class="sidebar-header">
+                    <h1>UniCentral</h1>
+                    <small>v0.1.0</small>
+                </div>
+                <nav class="sidebar-nav">
+                    <div class="nav-item" :class="{active: view === 'dashboard'}" @click="navigate('dashboard')">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+                        <span>Dashboard</span>
+                    </div>
+                    <div class="nav-item" :class="{active: view === 'machines'}" @click="navigate('machines')">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+                        <span>Maschinen</span>
+                    </div>
+                    <div class="nav-item" :class="{active: view === 'veeam'}" @click="navigate('veeam')">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                        <span>Veeam Backup</span>
+                    </div>
+                    <div class="nav-item" :class="{active: view === 'alerts'}" @click="navigate('alerts')">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+                        <span>Alarme</span>
+                        <span v-if="alertCount" class="nav-badge">{{ alertCount }}</span>
+                    </div>
+                    <div class="nav-item" :class="{active: view === 'settings'}" @click="navigate('settings')">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15 1.65 1.65 0 003 14.08V14a2 2 0 014 0v.09c0 .67.44 1.26 1.09 1.49"/></svg>
+                        <span>Einstellungen</span>
+                    </div>
+                </nav>
+                <div class="sidebar-footer">
+                    <div @click="logout" style="cursor:pointer">Abmelden ({{ username }})</div>
+                </div>
+            </aside>
+
+            <main class="main-content">
+                <!-- Dashboard View -->
+                <div v-if="view === 'dashboard'">
+                    <div class="page-header"><h1>Dashboard</h1></div>
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-value">{{ stats.total || 0 }}</div>
+                            <div class="stat-label">Maschinen gesamt</div>
+                        </div>
+                        <div class="stat-card online">
+                            <div class="stat-value">{{ stats.online || 0 }}</div>
+                            <div class="stat-label">Online</div>
+                        </div>
+                        <div class="stat-card offline">
+                            <div class="stat-value">{{ stats.offline || 0 }}</div>
+                            <div class="stat-label">Offline</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value">{{ stats.servers || 0 }}</div>
+                            <div class="stat-label">Server</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value">{{ stats.clients || 0 }}</div>
+                            <div class="stat-label">Clients</div>
+                        </div>
+                        <div class="stat-card warning">
+                            <div class="stat-value">{{ stats.activeAlerts || 0 }}</div>
+                            <div class="stat-label">Aktive Alarme</div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <h2>Maschinen</h2>
+                        </div>
+                        <table class="machine-table" v-if="machines.length">
+                            <thead>
+                                <tr>
+                                    <th>Status</th>
+                                    <th>Hostname</th>
+                                    <th>OS</th>
+                                    <th>Typ</th>
+                                    <th>Gruppe</th>
+                                    <th>IP</th>
+                                    <th>Zuletzt gesehen</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="m in machines" :key="m.id" @click="navigate('machine-detail', m.id)">
+                                    <td><span class="status-badge" :class="m.status">{{ m.status }}</span></td>
+                                    <td><strong>{{ m.display_name || m.hostname }}</strong></td>
+                                    <td><span class="os-badge">{{ m.os_type }}</span></td>
+                                    <td><span class="category-badge" :class="m.category">{{ m.category }}</span></td>
+                                    <td>{{ m.group_name || '–' }}</td>
+                                    <td>{{ m.ip_address || '–' }}</td>
+                                    <td>{{ formatTime(m.last_seen) }}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                        <p v-else style="color: var(--text-muted); padding: 1rem 0;">Noch keine Maschinen registriert. Füge eine Maschine hinzu um zu starten.</p>
+                    </div>
+                </div>
+
+                <!-- Machines View -->
+                <div v-if="view === 'machines'">
+                    <div class="page-header">
+                        <h1>Maschinen</h1>
+                        <button class="btn btn-primary" @click="showAddMachine = true">+ Maschine hinzufügen</button>
+                    </div>
+
+                    <div class="card">
+                        <table class="machine-table" v-if="machines.length">
+                            <thead>
+                                <tr>
+                                    <th>Status</th>
+                                    <th>Hostname</th>
+                                    <th>OS</th>
+                                    <th>Typ</th>
+                                    <th>Gruppe</th>
+                                    <th>Agent</th>
+                                    <th>Aktionen</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="m in machines" :key="m.id">
+                                    <td><span class="status-badge" :class="m.status">{{ m.status }}</span></td>
+                                    <td @click="navigate('machine-detail', m.id)" style="cursor:pointer"><strong>{{ m.display_name || m.hostname }}</strong></td>
+                                    <td><span class="os-badge">{{ m.os_type }}</span></td>
+                                    <td><span class="category-badge" :class="m.category">{{ m.category }}</span></td>
+                                    <td>{{ m.group_name || '–' }}</td>
+                                    <td>{{ m.agent_version || '–' }}</td>
+                                    <td>
+                                        <button class="btn btn-ghost btn-sm" @click.stop="showToken(m)" title="Install-Befehl">Token</button>
+                                        <button class="btn btn-danger btn-sm" @click.stop="deleteMachine(m)" title="Entfernen">✕</button>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                        <p v-else style="color: var(--text-muted); padding: 1rem 0;">Keine Maschinen vorhanden.</p>
+                    </div>
+                </div>
+
+                <!-- Machine Detail View -->
+                <div v-if="view === 'machine-detail' && selectedMachine">
+                    <div class="page-header">
+                        <h1>{{ selectedMachine.display_name || selectedMachine.hostname }}</h1>
+                        <div style="display:flex;gap:0.5rem">
+                            <button class="btn btn-ghost btn-sm" @click="navigate('machines')">← Zurück</button>
+                            <button class="btn btn-warning btn-sm" @click="sendCommand('restart')" :disabled="selectedMachine.status !== 'online'">Neustart</button>
+                            <button class="btn btn-danger btn-sm" @click="sendCommand('shutdown')" :disabled="selectedMachine.status !== 'online'">Herunterfahren</button>
+                        </div>
+                    </div>
+
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-value" :style="{color: selectedMachine.status === 'online' ? 'var(--success)' : 'var(--danger)'}">{{ selectedMachine.status }}</div>
+                            <div class="stat-label">Status</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" style="font-size:1.2rem">{{ selectedMachine.os_type }}</div>
+                            <div class="stat-label">Betriebssystem</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" style="font-size:1.2rem">{{ selectedMachine.ip_address || '–' }}</div>
+                            <div class="stat-label">IP-Adresse</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" style="font-size:1.2rem">{{ selectedMachine.agent_version || '–' }}</div>
+                            <div class="stat-label">Agent Version</div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header"><h3>Laufwerke</h3></div>
+                        <div v-if="machineDisks.length">
+                            <div v-for="d in machineDisks" :key="d.id" style="margin-bottom:0.8rem">
+                                <div style="display:flex;justify-content:space-between;margin-bottom:0.3rem">
+                                    <span>{{ d.drive_letter || d.mount_point }}</span>
+                                    <span>{{ formatBytes(d.free_bytes) }} frei / {{ formatBytes(d.total_bytes) }}</span>
+                                </div>
+                                <div style="background:var(--bg-primary);border-radius:4px;height:8px;overflow:hidden">
+                                    <div :style="{width: diskPercent(d) + '%', background: diskPercent(d) > 90 ? 'var(--danger)' : diskPercent(d) > 75 ? 'var(--warning)' : 'var(--success)', height: '100%'}"></div>
+                                </div>
+                            </div>
+                        </div>
+                        <p v-else style="color:var(--text-muted)">Keine Laufwerksdaten verfügbar</p>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header"><h3>Dienste</h3></div>
+                        <div v-if="machineServices.length" style="max-height:300px;overflow-y:auto">
+                            <table class="machine-table">
+                                <thead><tr><th>Dienst</th><th>Status</th><th>Starttyp</th></tr></thead>
+                                <tbody>
+                                    <tr v-for="s in machineServices" :key="s.id">
+                                        <td>{{ s.display_name || s.service_name }}</td>
+                                        <td><span class="status-badge" :class="s.status === 'running' ? 'online' : 'offline'">{{ s.status }}</span></td>
+                                        <td>{{ s.start_type }}</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <p v-else style="color:var(--text-muted)">Keine Dienstdaten verfügbar</p>
+                    </div>
+                </div>
+
+                <!-- Veeam View -->
+                <div v-if="view === 'veeam'">
+                    <div class="page-header">
+                        <h1>Veeam Backup</h1>
+                        <button class="btn btn-primary" @click="showAddVeeam = true">+ Veeam Instanz</button>
+                    </div>
+                    <p style="color: var(--text-muted)">Veeam-Integration wird in Phase 4 implementiert.</p>
+                </div>
+
+                <!-- Alerts View -->
+                <div v-if="view === 'alerts'">
+                    <div class="page-header"><h1>Alarme</h1></div>
+                    <div class="card">
+                        <div v-if="alerts.length">
+                            <div v-for="a in alerts" :key="a.id" class="alert-item" style="padding:0.8rem 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+                                <div>
+                                    <span class="status-badge" :class="a.severity">{{ a.severity }}</span>
+                                    <strong style="margin-left:0.5rem">{{ a.hostname || 'System' }}</strong>: {{ a.message }}
+                                    <div style="font-size:0.75rem;color:var(--text-muted);margin-top:0.2rem">{{ formatTime(a.created_at) }}</div>
+                                </div>
+                                <button v-if="!a.acknowledged" class="btn btn-ghost btn-sm" @click="acknowledgeAlert(a.id)">OK</button>
+                            </div>
+                        </div>
+                        <p v-else style="color:var(--text-muted)">Keine Alarme vorhanden.</p>
+                    </div>
+                </div>
+
+                <!-- Settings View -->
+                <div v-if="view === 'settings'">
+                    <div class="page-header"><h1>Einstellungen</h1></div>
+                    <div class="card">
+                        <div class="card-header"><h3>E-Mail (SMTP)</h3></div>
+                        <div class="form-group">
+                            <label>SMTP Host</label>
+                            <input v-model="settingsForm.smtpHost" placeholder="smtp.example.com">
+                        </div>
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+                            <div class="form-group">
+                                <label>SMTP Port</label>
+                                <input v-model.number="settingsForm.smtpPort" type="number">
+                            </div>
+                            <div class="form-group">
+                                <label>TLS</label>
+                                <select v-model="settingsForm.smtpTls">
+                                    <option :value="true">Ja</option>
+                                    <option :value="false">Nein</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>SMTP Benutzer</label>
+                            <input v-model="settingsForm.smtpUser">
+                        </div>
+                        <div class="form-group">
+                            <label>SMTP Passwort</label>
+                            <input v-model="settingsForm.smtpPassword" type="password">
+                        </div>
+                        <div class="form-group">
+                            <label>Absender-Adresse</label>
+                            <input v-model="settingsForm.smtpFrom" placeholder="unicentral@example.com">
+                        </div>
+                        <div style="display:flex;gap:0.5rem;margin-top:1rem">
+                            <button class="btn btn-primary" @click="saveSettings">Speichern</button>
+                            <button class="btn btn-ghost" @click="testEmail">Test-Email senden</button>
+                        </div>
+                    </div>
+
+                    <div class="card" style="margin-top:1rem">
+                        <div class="card-header"><h3>Agent-Intervalle</h3></div>
+                        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem">
+                            <div class="form-group">
+                                <label>Heartbeat (Sek.)</label>
+                                <input v-model.number="settingsForm.heartbeatInterval" type="number">
+                            </div>
+                            <div class="form-group">
+                                <label>Telemetrie (Sek.)</label>
+                                <input v-model.number="settingsForm.telemetryInterval" type="number">
+                            </div>
+                            <div class="form-group">
+                                <label>Offline nach (Sek.)</label>
+                                <input v-model.number="settingsForm.offlineThreshold" type="number">
+                            </div>
+                        </div>
+                        <button class="btn btn-primary" @click="saveSettings">Speichern</button>
+                    </div>
+                </div>
+            </main>
+        </div>
+
+        <!-- Add Machine Modal -->
+        <div class="modal-overlay" v-if="showAddMachine" @click.self="showAddMachine = false">
+            <div class="modal">
+                <h2>Maschine hinzufügen</h2>
+                <div class="form-group">
+                    <label>Hostname</label>
+                    <input v-model="newMachine.hostname" placeholder="server01.domain.local">
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+                    <div class="form-group">
+                        <label>Betriebssystem</label>
+                        <select v-model="newMachine.os_type">
+                            <option value="windows">Windows</option>
+                            <option value="linux">Linux</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Kategorie</label>
+                        <select v-model="newMachine.category">
+                            <option value="server">Server</option>
+                            <option value="client">Client</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Anzeigename (optional)</label>
+                    <input v-model="newMachine.display_name" placeholder="z.B. Domänencontroller">
+                </div>
+                <div class="modal-actions">
+                    <button class="btn btn-ghost" @click="showAddMachine = false">Abbrechen</button>
+                    <button class="btn btn-primary" @click="addMachine">Hinzufügen</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Token Modal -->
+        <div class="modal-overlay" v-if="showTokenModal" @click.self="showTokenModal = false">
+            <div class="modal">
+                <h2>Agent-Installation</h2>
+                <p style="margin-bottom:1rem;color:var(--text-secondary)">Führe folgenden Befehl auf der Zielmaschine aus:</p>
+                <div v-if="tokenMachine.os_type === 'windows'">
+                    <label style="font-size:0.8rem;color:var(--text-muted)">Windows (PowerShell als Admin):</label>
+                    <div class="token-display">powershell -Command "iwr {{ baseUrl }}/api/agent/install-script/windows -UseBasicParsing | iex" -Token {{ tokenMachine.registration_token }}</div>
+                </div>
+                <div v-else>
+                    <label style="font-size:0.8rem;color:var(--text-muted)">Linux (bash als root):</label>
+                    <div class="token-display">curl -sL {{ baseUrl }}/api/agent/install-script/linux | bash -s -- --token {{ tokenMachine.registration_token }}</div>
+                </div>
+                <div class="modal-actions">
+                    <button class="btn btn-ghost" @click="showTokenModal = false">Schließen</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+    <script src="/js/app.js"></script>
+</body>
+</html>

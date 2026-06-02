@@ -1,0 +1,168 @@
+package commands
+
+import (
+	"fmt"
+	"os/exec"
+	"runtime"
+)
+
+type Result struct {
+	Status string `json:"status"`
+	Output string `json:"output"`
+}
+
+func Execute(cmdType string, params map[string]interface{}) Result {
+	switch cmdType {
+	case "restart":
+		return execRestart()
+	case "shutdown":
+		return execShutdown()
+	case "install_software":
+		pkg, _ := params["package_name"].(string)
+		method, _ := params["method"].(string)
+		return execInstallSoftware(pkg, method)
+	case "enable_firewall":
+		return execFirewall(true)
+	case "disable_firewall":
+		return execFirewall(false)
+	case "add_firewall_rule":
+		return execAddFirewallRule(params)
+	case "trigger_updates":
+		return execTriggerUpdates()
+	default:
+		return Result{Status: "failed", Output: fmt.Sprintf("unknown command: %s", cmdType)}
+	}
+}
+
+func execRestart() Result {
+	var cmd *exec.Cmd
+	if runtime.GOOS == "windows" {
+		cmd = exec.Command("shutdown", "/r", "/t", "5")
+	} else {
+		cmd = exec.Command("shutdown", "-r", "+0")
+	}
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return Result{Status: "failed", Output: err.Error()}
+	}
+	return Result{Status: "completed", Output: string(out)}
+}
+
+func execShutdown() Result {
+	var cmd *exec.Cmd
+	if runtime.GOOS == "windows" {
+		cmd = exec.Command("shutdown", "/s", "/t", "5")
+	} else {
+		cmd = exec.Command("shutdown", "-h", "now")
+	}
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return Result{Status: "failed", Output: err.Error()}
+	}
+	return Result{Status: "completed", Output: string(out)}
+}
+
+func execInstallSoftware(pkg, method string) Result {
+	if pkg == "" {
+		return Result{Status: "failed", Output: "no package specified"}
+	}
+
+	var cmd *exec.Cmd
+	if runtime.GOOS == "windows" {
+		switch method {
+		case "choco":
+			cmd = exec.Command("choco", "install", pkg, "-y")
+		default:
+			cmd = exec.Command("winget", "install", "--id", pkg, "--accept-package-agreements", "--accept-source-agreements")
+		}
+	} else {
+		if _, err := exec.LookPath("apt-get"); err == nil {
+			cmd = exec.Command("apt-get", "install", "-y", pkg)
+		} else {
+			cmd = exec.Command("dnf", "install", "-y", pkg)
+		}
+	}
+
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return Result{Status: "failed", Output: string(out) + "\n" + err.Error()}
+	}
+	return Result{Status: "completed", Output: string(out)}
+}
+
+func execFirewall(enable bool) Result {
+	var cmd *exec.Cmd
+	if runtime.GOOS == "windows" {
+		state := "on"
+		if !enable {
+			state = "off"
+		}
+		cmd = exec.Command("netsh", "advfirewall", "set", "allprofiles", "state", state)
+	} else {
+		if enable {
+			cmd = exec.Command("ufw", "enable")
+		} else {
+			cmd = exec.Command("ufw", "disable")
+		}
+	}
+
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return Result{Status: "failed", Output: string(out) + "\n" + err.Error()}
+	}
+	return Result{Status: "completed", Output: string(out)}
+}
+
+func execAddFirewallRule(params map[string]interface{}) Result {
+	name, _ := params["rule_name"].(string)
+	direction, _ := params["direction"].(string)
+	action, _ := params["action"].(string)
+	protocol, _ := params["protocol"].(string)
+	port, _ := params["port"].(string)
+
+	var cmd *exec.Cmd
+	if runtime.GOOS == "windows" {
+		dir := "in"
+		if direction == "outbound" {
+			dir = "out"
+		}
+		cmd = exec.Command("netsh", "advfirewall", "firewall", "add", "rule",
+			fmt.Sprintf("name=%s", name),
+			fmt.Sprintf("dir=%s", dir),
+			fmt.Sprintf("action=%s", action),
+			fmt.Sprintf("protocol=%s", protocol),
+			fmt.Sprintf("localport=%s", port))
+	} else {
+		if action == "allow" {
+			cmd = exec.Command("ufw", "allow", fmt.Sprintf("%s/%s", port, protocol))
+		} else {
+			cmd = exec.Command("ufw", "deny", fmt.Sprintf("%s/%s", port, protocol))
+		}
+	}
+
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return Result{Status: "failed", Output: string(out) + "\n" + err.Error()}
+	}
+	return Result{Status: "completed", Output: string(out)}
+}
+
+func execTriggerUpdates() Result {
+	var cmd *exec.Cmd
+	if runtime.GOOS == "windows" {
+		cmd = exec.Command("powershell", "-Command",
+			"Install-Module PSWindowsUpdate -Force -Confirm:$false; Import-Module PSWindowsUpdate; Get-WindowsUpdate -Install -AcceptAll -AutoReboot")
+	} else {
+		if _, err := exec.LookPath("apt-get"); err == nil {
+			cmd = exec.Command("bash", "-c", "apt-get update && apt-get upgrade -y")
+		} else {
+			cmd = exec.Command("dnf", "upgrade", "-y")
+		}
+	}
+
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return Result{Status: "failed", Output: string(out) + "\n" + err.Error()}
+	}
+	return Result{Status: "completed", Output: string(out)}
+}

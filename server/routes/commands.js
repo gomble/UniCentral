@@ -1,0 +1,103 @@
+const express = require('express');
+const router = express.Router();
+const db = require('../db');
+const { requireAuth, requireAdmin } = require('../auth');
+const { sendCommandToAgent } = require('../ws/agent-handler');
+
+router.use(requireAuth);
+
+router.post('/:machineId/restart', requireAdmin, (req, res) => {
+    const machine = db.prepare('SELECT * FROM machines WHERE id = ? OR machine_id = ?').get(req.params.machineId, req.params.machineId);
+    if (!machine) return res.status(404).json({ error: 'Machine not found' });
+
+    const result = sendCommandToAgent(machine.machine_id, 'restart', { delay: req.body.delay || 0 });
+    res.json(result);
+});
+
+router.post('/:machineId/shutdown', requireAdmin, (req, res) => {
+    const machine = db.prepare('SELECT * FROM machines WHERE id = ? OR machine_id = ?').get(req.params.machineId, req.params.machineId);
+    if (!machine) return res.status(404).json({ error: 'Machine not found' });
+
+    const result = sendCommandToAgent(machine.machine_id, 'shutdown', { delay: req.body.delay || 0 });
+    res.json(result);
+});
+
+router.post('/:machineId/install-software', requireAdmin, (req, res) => {
+    const machine = db.prepare('SELECT * FROM machines WHERE id = ? OR machine_id = ?').get(req.params.machineId, req.params.machineId);
+    if (!machine) return res.status(404).json({ error: 'Machine not found' });
+
+    const { package_name, method } = req.body;
+    if (!package_name) return res.status(400).json({ error: 'package_name required' });
+
+    const result = sendCommandToAgent(machine.machine_id, 'install_software', {
+        package_name,
+        method: method || 'auto'
+    });
+    res.json(result);
+});
+
+router.post('/:machineId/firewall/enable', requireAdmin, (req, res) => {
+    const machine = db.prepare('SELECT * FROM machines WHERE id = ? OR machine_id = ?').get(req.params.machineId, req.params.machineId);
+    if (!machine) return res.status(404).json({ error: 'Machine not found' });
+
+    const result = sendCommandToAgent(machine.machine_id, 'enable_firewall', {});
+    res.json(result);
+});
+
+router.post('/:machineId/firewall/disable', requireAdmin, (req, res) => {
+    const machine = db.prepare('SELECT * FROM machines WHERE id = ? OR machine_id = ?').get(req.params.machineId, req.params.machineId);
+    if (!machine) return res.status(404).json({ error: 'Machine not found' });
+
+    const result = sendCommandToAgent(machine.machine_id, 'disable_firewall', {});
+    res.json(result);
+});
+
+router.post('/:machineId/firewall/rule', requireAdmin, (req, res) => {
+    const machine = db.prepare('SELECT * FROM machines WHERE id = ? OR machine_id = ?').get(req.params.machineId, req.params.machineId);
+    if (!machine) return res.status(404).json({ error: 'Machine not found' });
+
+    const { rule_name, direction, action, protocol, port } = req.body;
+    if (!rule_name || !direction || !action || !port) {
+        return res.status(400).json({ error: 'rule_name, direction, action, and port required' });
+    }
+
+    const result = sendCommandToAgent(machine.machine_id, 'add_firewall_rule', {
+        rule_name, direction, action, protocol: protocol || 'tcp', port
+    });
+    res.json(result);
+});
+
+router.post('/:machineId/trigger-updates', requireAdmin, (req, res) => {
+    const machine = db.prepare('SELECT * FROM machines WHERE id = ? OR machine_id = ?').get(req.params.machineId, req.params.machineId);
+    if (!machine) return res.status(404).json({ error: 'Machine not found' });
+
+    const result = sendCommandToAgent(machine.machine_id, 'trigger_updates', {});
+    res.json(result);
+});
+
+router.post('/:machineId/update-agent', requireAdmin, (req, res) => {
+    const machine = db.prepare('SELECT * FROM machines WHERE id = ? OR machine_id = ?').get(req.params.machineId, req.params.machineId);
+    if (!machine) return res.status(404).json({ error: 'Machine not found' });
+
+    const result = sendCommandToAgent(machine.machine_id, 'update_agent', {
+        download_url: `${req.protocol}://${req.get('host')}/api/agent/download/${machine.os_type}/amd64`
+    });
+    res.json(result);
+});
+
+// Command history
+router.get('/:machineId/history', (req, res) => {
+    const machine = db.prepare('SELECT * FROM machines WHERE id = ? OR machine_id = ?').get(req.params.machineId, req.params.machineId);
+    if (!machine) return res.status(404).json({ error: 'Machine not found' });
+
+    const commands = db.prepare(`
+        SELECT * FROM command_log
+        WHERE machine_id = ?
+        ORDER BY created_at DESC
+        LIMIT 50
+    `).all(machine.machine_id);
+
+    res.json(commands);
+});
+
+module.exports = router;

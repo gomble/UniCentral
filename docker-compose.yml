@@ -1,0 +1,16 @@
+services:
+  unicentral:
+    build: .
+    container_name: unicentral
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+    volumes:
+      - unicentral-data:/app/data
+      - unicentral-agents:/app/releases
+    restart: unless-stopped
+
+volumes:
+  unicentral-data:
+  unicentral-agents:
