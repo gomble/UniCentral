@@ -51,7 +51,27 @@ app.use('/api/notifications', require('./routes/notifications'));
 app.use('/api/veeam', require('./routes/veeam'));
 app.use('/api/settings', require('./routes/settings'));
 
-// Agent download endpoint
+// Agent binary download
+app.get('/api/agent/download/:os/:arch', (req, res) => {
+    const { os, arch } = req.params;
+    let filename;
+    if (os === 'windows') {
+        filename = `unicentral-agent-windows-${arch}.exe`;
+    } else if (os === 'linux') {
+        filename = `unicentral-agent-linux-${arch}`;
+    } else {
+        return res.status(400).json({ error: 'Unsupported OS' });
+    }
+
+    const filePath = path.join(__dirname, '..', 'releases', filename);
+    const fs = require('fs');
+    if (!fs.existsSync(filePath)) {
+        return res.status(404).json({ error: 'Agent binary not found. Build may still be in progress.' });
+    }
+    res.download(filePath, filename);
+});
+
+// Agent install script
 app.get('/api/agent/install-script/:os', (req, res) => {
     const os = req.params.os;
     if (os === 'windows') {

@@ -112,29 +112,39 @@ func (c *Client) connect() error {
 	c.heartbeat = time.NewTicker(30 * time.Second)
 	c.telemetry = time.NewTicker(5 * time.Minute)
 
-	go c.sendHeartbeat()
-
+	// Initial telemetry after short delay
 	go func() {
 		time.Sleep(5 * time.Second)
 		c.sendTelemetry()
 	}()
 
+	// Read messages in separate goroutine
+	readErr := make(chan error, 1)
+	go func() {
+		for {
+			_, message, err := conn.ReadMessage()
+			if err != nil {
+				readErr <- err
+				return
+			}
+			c.handleMessage(message)
+		}
+	}()
+
 	for {
 		select {
 		case <-c.done:
+			c.heartbeat.Stop()
+			c.telemetry.Stop()
 			return nil
+		case err := <-readErr:
+			c.heartbeat.Stop()
+			c.telemetry.Stop()
+			return err
 		case <-c.heartbeat.C:
 			c.sendHeartbeat()
 		case <-c.telemetry.C:
 			c.sendTelemetry()
-		default:
-			_, message, err := conn.ReadMessage()
-			if err != nil {
-				c.heartbeat.Stop()
-				c.telemetry.Stop()
-				return err
-			}
-			c.handleMessage(message)
 		}
 	}
 }
