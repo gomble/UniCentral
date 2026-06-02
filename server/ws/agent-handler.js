@@ -25,6 +25,7 @@ function initAgentWebSocket(server, sessionMiddleware) {
 
     server.on('upgrade', (request, socket, head) => {
         const pathname = url.parse(request.url).pathname;
+        console.log(`[WS] Upgrade request: ${pathname}`);
 
         if (pathname === '/ws/agent') {
             wss.handleUpgrade(request, socket, head, (ws) => {
@@ -68,11 +69,17 @@ function handleAgentConnection(ws, request) {
     // Legacy support for old token-based registration
     const token = params.get('token');
 
+    console.log(`[WS] Agent connection: machine_id=${machineId || 'none'}, enrollment_key=${enrollmentKey ? 'present' : 'none'}, token=${token ? 'present' : 'none'}`);
+
     let currentMachineId = null;
 
     ws.on('message', (raw) => {
         const msg = parseMessage(raw);
-        if (!msg) return;
+        if (!msg) {
+            console.log('[WS] Failed to parse message:', raw.toString().slice(0, 200));
+            return;
+        }
+        console.log(`[WS] Message received: type=${msg.type}`);
 
         switch (msg.type) {
             case MSG_TYPES.REGISTER:
