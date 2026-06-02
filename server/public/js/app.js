@@ -282,6 +282,32 @@ createApp({
             });
         }
 
+        async function updateAgent() {
+            if (!selectedMachine.value) return;
+
+            const res = await fetch('/api/deploy/update-agent', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ machine_id: selectedMachine.value.machine_id })
+            });
+            const data = await res.json();
+
+            if (data.success) {
+                alert('Update-Befehl gesendet. Agent startet sich in wenigen Sekunden neu.');
+            } else if (data.error && data.error.includes('unknown command')) {
+                // Old agent doesn't support update_agent - show manual command
+                const manRes = await fetch('/api/deploy/update-agent-manual', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ machine_id: selectedMachine.value.machine_id })
+                });
+                const manData = await manRes.json();
+                alert(`Agent unterstützt Remote-Update noch nicht. Führe diesen Befehl auf der Maschine aus:\n\n${manData.command}`);
+            } else {
+                alert(data.error || 'Update fehlgeschlagen');
+            }
+        }
+
         async function saveSettings() {
             const res = await fetch('/api/settings', {
                 method: 'POST',
@@ -467,7 +493,7 @@ createApp({
             tokenMachine, selectedMachine, machineDisks, machineServices, machineFirewall,
             machineUpdates, machineShares, telemetryHistory, telemetryRange,
             telemetryCanvas, baseUrl, newMachine, settingsForm,
-            navigate, addMachine, deleteMachine, showToken, sendCommand,
+            navigate, addMachine, deleteMachine, showToken, sendCommand, updateAgent,
             toggleAllMachines, batchCommand, executeBatchInstall,
             showDeployModal, onlineAgents, deployForm, deployResult, executeDeploy,
             addVeeamInstance, deleteVeeamInstance,

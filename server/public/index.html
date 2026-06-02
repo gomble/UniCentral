@@ -193,6 +193,7 @@
                         <h1>{{ selectedMachine.display_name || selectedMachine.hostname }}</h1>
                         <div style="display:flex;gap:0.5rem">
                             <button class="btn btn-ghost btn-sm" @click="navigate('machines')">← Zurück</button>
+                            <button class="btn btn-primary btn-sm" @click="updateAgent" :disabled="selectedMachine.status !== 'online'">Agent aktualisieren</button>
                             <button class="btn btn-warning btn-sm" @click="sendCommand('restart')" :disabled="selectedMachine.status !== 'online'">Neustart</button>
                             <button class="btn btn-danger btn-sm" @click="sendCommand('shutdown')" :disabled="selectedMachine.status !== 'online'">Herunterfahren</button>
                         </div>

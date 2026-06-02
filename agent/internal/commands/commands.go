@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os/exec"
 	"runtime"
+
+	"github.com/unicentral/agent/internal/updater"
 )
 
 type Result struct {
@@ -31,6 +33,8 @@ func Execute(cmdType string, params map[string]interface{}) Result {
 		return execTriggerUpdates()
 	case "deploy_neighbor":
 		return execDeployNeighbor(params)
+	case "update_agent":
+		return execUpdateAgent(params)
 	default:
 		return Result{Status: "failed", Output: fmt.Sprintf("unknown command: %s", cmdType)}
 	}
@@ -147,6 +151,19 @@ func execAddFirewallRule(params map[string]interface{}) Result {
 		return Result{Status: "failed", Output: string(out) + "\n" + err.Error()}
 	}
 	return Result{Status: "completed", Output: string(out)}
+}
+
+func execUpdateAgent(params map[string]interface{}) Result {
+	downloadURL, _ := params["download_url"].(string)
+	if downloadURL == "" {
+		return Result{Status: "failed", Output: "no download_url provided"}
+	}
+
+	err := updater.Update(downloadURL)
+	if err != nil {
+		return Result{Status: "failed", Output: err.Error()}
+	}
+	return Result{Status: "completed", Output: "Agent update initiated, restarting..."}
 }
 
 func execTriggerUpdates() Result {
