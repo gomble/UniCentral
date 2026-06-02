@@ -17,6 +17,13 @@ createApp({
             name: '', base_url: '', username: '', password: '',
             poll_interval_seconds: 300, verify_ssl: false
         });
+        const showDeployModal = ref(false);
+        const onlineAgents = ref([]);
+        const deployForm = reactive({
+            relay_machine_id: '', target_ip: '', target_os: 'windows',
+            username: '', password: '', category: 'client'
+        });
+        const deployResult = ref(null);
         const showBatchInstall = ref(false);
         const batchInstallPkg = ref('');
         const batchInstallMethod = ref('auto');
@@ -97,7 +104,7 @@ createApp({
         }
 
         async function loadDashboard() {
-            await Promise.all([loadMachines(), loadStats(), loadAlerts(), loadSettings(), loadVeeamInstances()]);
+            await Promise.all([loadMachines(), loadStats(), loadAlerts(), loadSettings(), loadVeeamInstances(), loadOnlineAgents()]);
         }
 
         async function loadMachines() {
@@ -296,6 +303,30 @@ createApp({
             alert(data.success ? 'Test-Email gesendet!' : `Fehler: ${data.error}`);
         }
 
+        async function loadOnlineAgents() {
+            const res = await fetch('/api/deploy/online-agents');
+            if (res.ok) onlineAgents.value = await res.json();
+        }
+
+        async function executeDeploy() {
+            if (!deployForm.relay_machine_id || !deployForm.target_ip || !deployForm.username) {
+                deployResult.value = { success: false, message: 'Relay, Ziel-IP und Benutzername erforderlich' };
+                return;
+            }
+            deployResult.value = null;
+            const res = await fetch('/api/deploy/deploy', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(deployForm)
+            });
+            const data = await res.json();
+            if (data.success) {
+                deployResult.value = { success: true, message: 'Deploy-Befehl gesendet! Maschine erscheint in Kürze.' };
+            } else {
+                deployResult.value = { success: false, message: data.error || 'Deploy fehlgeschlagen' };
+            }
+        }
+
         async function loadVeeamInstances() {
             const res = await fetch('/api/veeam/instances');
             if (res.ok) {
@@ -438,6 +469,7 @@ createApp({
             telemetryCanvas, baseUrl, newMachine, settingsForm,
             navigate, addMachine, deleteMachine, showToken, sendCommand,
             toggleAllMachines, batchCommand, executeBatchInstall,
+            showDeployModal, onlineAgents, deployForm, deployResult, executeDeploy,
             addVeeamInstance, deleteVeeamInstance,
             saveSettings, testEmail, regenerateEnrollmentKey, acknowledgeAlert, logout,
             loadTelemetryHistory, formatTime, formatBytes, diskPercent

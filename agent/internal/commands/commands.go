@@ -29,6 +29,8 @@ func Execute(cmdType string, params map[string]interface{}) Result {
 		return execAddFirewallRule(params)
 	case "trigger_updates":
 		return execTriggerUpdates()
+	case "deploy_neighbor":
+		return execDeployNeighbor(params)
 	default:
 		return Result{Status: "failed", Output: fmt.Sprintf("unknown command: %s", cmdType)}
 	}

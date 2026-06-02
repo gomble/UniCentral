@@ -50,6 +50,7 @@ app.use('/auth', require('./routes/auth'));
 app.use('/api/machines', require('./routes/machines'));
 app.use('/api/commands', require('./routes/commands'));
 app.use('/api/monitoring', require('./routes/monitoring'));
+app.use('/api/deploy', require('./routes/deployment'));
 app.use('/api/notifications', require('./routes/notifications'));
 app.use('/api/veeam', require('./routes/veeam'));
 app.use('/api/settings', require('./routes/settings'));
