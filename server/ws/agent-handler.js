@@ -200,6 +200,17 @@ function handleTelemetry(machineId, payload) {
         }
     }
 
+    if (payload.firewall && payload.firewall.rules) {
+        db.prepare('DELETE FROM firewall_rules WHERE machine_id = ?').run(machineId);
+        const stmt = db.prepare(`
+            INSERT INTO firewall_rules (machine_id, rule_name, direction, action, protocol, port, enabled)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        `);
+        for (const rule of payload.firewall.rules) {
+            stmt.run(machineId, rule.name || '', rule.direction || '', rule.action || '', rule.protocol || '', rule.port || '', rule.enabled ? 1 : 0);
+        }
+    }
+
     broadcastToDashboards({ type: 'telemetry', machineId, data: payload });
 }
 

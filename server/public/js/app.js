@@ -16,6 +16,12 @@ createApp({
         const selectedMachine = ref(null);
         const machineDisks = ref([]);
         const machineServices = ref([]);
+        const machineFirewall = ref({ enabled: false, rules: [] });
+        const machineUpdates = ref({ available: 0, pending: [], reboot_required: false });
+        const machineShares = ref([]);
+        const telemetryHistory = ref([]);
+        const telemetryRange = ref('24h');
+        const telemetryCanvas = ref(null);
         const baseUrl = ref(window.location.origin);
 
         const newMachine = reactive({
@@ -117,13 +123,100 @@ createApp({
                 selectedMachine.value = await res.json();
                 const mid = selectedMachine.value.machine_id;
 
-                const [disksRes, servicesRes] = await Promise.all([
+                const [disksRes, servicesRes, firewallRes, updatesRes, sharesRes] = await Promise.all([
                     fetch(`/api/monitoring/machines/${mid}/disks`),
-                    fetch(`/api/monitoring/machines/${mid}/services`)
+                    fetch(`/api/monitoring/machines/${mid}/services`),
+                    fetch(`/api/monitoring/machines/${mid}/firewall-status`),
+                    fetch(`/api/monitoring/machines/${mid}/updates`),
+                    fetch(`/api/monitoring/machines/${mid}/shares`)
                 ]);
                 if (disksRes.ok) machineDisks.value = await disksRes.json();
                 if (servicesRes.ok) machineServices.value = await servicesRes.json();
+                if (firewallRes.ok) machineFirewall.value = await firewallRes.json();
+                if (updatesRes.ok) machineUpdates.value = await updatesRes.json();
+                if (sharesRes.ok) machineShares.value = await sharesRes.json();
+
+                await loadTelemetryHistory();
             }
+        }
+
+        async function loadTelemetryHistory() {
+            if (!selectedMachine.value) return;
+            const mid = selectedMachine.value.machine_id;
+            const res = await fetch(`/api/monitoring/machines/${mid}/telemetry?range=${telemetryRange.value}`);
+            if (res.ok) {
+                telemetryHistory.value = await res.json();
+                setTimeout(() => drawChart(), 50);
+            }
+        }
+
+        function drawChart() {
+            const canvas = telemetryCanvas.value;
+            if (!canvas || !telemetryHistory.value.length) return;
+
+            const ctx = canvas.getContext('2d');
+            const rect = canvas.parentElement.getBoundingClientRect();
+            canvas.width = rect.width;
+            canvas.height = rect.height;
+
+            const data = telemetryHistory.value;
+            const w = canvas.width;
+            const h = canvas.height;
+            const padding = { top: 20, right: 10, bottom: 30, left: 40 };
+            const chartW = w - padding.left - padding.right;
+            const chartH = h - padding.top - padding.bottom;
+
+            ctx.clearRect(0, 0, w, h);
+
+            // Grid
+            ctx.strokeStyle = '#2a3a4e';
+            ctx.lineWidth = 0.5;
+            for (let i = 0; i <= 4; i++) {
+                const y = padding.top + (chartH / 4) * i;
+                ctx.beginPath();
+                ctx.moveTo(padding.left, y);
+                ctx.lineTo(w - padding.right, y);
+                ctx.stroke();
+                ctx.fillStyle = '#5c6f82';
+                ctx.font = '10px sans-serif';
+                ctx.fillText((100 - i * 25) + '%', 5, y + 4);
+            }
+
+            // CPU line
+            ctx.beginPath();
+            ctx.strokeStyle = '#3b82f6';
+            ctx.lineWidth = 1.5;
+            data.forEach((d, i) => {
+                const x = padding.left + (i / (data.length - 1)) * chartW;
+                const y = padding.top + chartH - (d.cpu_percent / 100) * chartH;
+                if (i === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            });
+            ctx.stroke();
+
+            // Memory line
+            ctx.beginPath();
+            ctx.strokeStyle = '#22c55e';
+            ctx.lineWidth = 1.5;
+            data.forEach((d, i) => {
+                const x = padding.left + (i / (data.length - 1)) * chartW;
+                const y = padding.top + chartH - (d.memory_percent / 100) * chartH;
+                if (i === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            });
+            ctx.stroke();
+
+            // Legend
+            ctx.fillStyle = '#3b82f6';
+            ctx.fillRect(padding.left, h - 15, 12, 3);
+            ctx.fillStyle = '#8899aa';
+            ctx.font = '11px sans-serif';
+            ctx.fillText('CPU', padding.left + 16, h - 10);
+
+            ctx.fillStyle = '#22c55e';
+            ctx.fillRect(padding.left + 60, h - 15, 12, 3);
+            ctx.fillStyle = '#8899aa';
+            ctx.fillText('RAM', padding.left + 76, h - 10);
         }
 
         async function addMachine() {
@@ -225,11 +318,12 @@ createApp({
         return {
             view, username, machines, stats, alerts, alertCount,
             showAddMachine, showTokenModal, showAddVeeam, tokenMachine,
-            selectedMachine, machineDisks, machineServices, baseUrl,
-            newMachine, settingsForm,
+            selectedMachine, machineDisks, machineServices, machineFirewall,
+            machineUpdates, machineShares, telemetryHistory, telemetryRange,
+            telemetryCanvas, baseUrl, newMachine, settingsForm,
             navigate, addMachine, deleteMachine, showToken, sendCommand,
             saveSettings, testEmail, acknowledgeAlert, logout,
-            formatTime, formatBytes, diskPercent
+            loadTelemetryHistory, formatTime, formatBytes, diskPercent
         };
     }
 }).mount('#app');

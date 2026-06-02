@@ -206,6 +206,82 @@
                         </div>
                         <p v-else style="color:var(--text-muted)">Keine Dienstdaten verfügbar</p>
                     </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Firewall</h3>
+                            <div style="display:flex;gap:0.5rem">
+                                <span class="status-badge" :class="machineFirewall.enabled ? 'online' : 'offline'">
+                                    {{ machineFirewall.enabled ? 'Aktiv' : 'Inaktiv' }}
+                                </span>
+                                <button class="btn btn-sm" :class="machineFirewall.enabled ? 'btn-danger' : 'btn-success'" @click="sendCommand(machineFirewall.enabled ? 'disable_firewall' : 'enable_firewall')" :disabled="selectedMachine.status !== 'online'">
+                                    {{ machineFirewall.enabled ? 'Deaktivieren' : 'Aktivieren' }}
+                                </button>
+                            </div>
+                        </div>
+                        <div v-if="machineFirewall.rules && machineFirewall.rules.length" style="max-height:250px;overflow-y:auto">
+                            <table class="machine-table">
+                                <thead><tr><th>Regel</th><th>Richtung</th><th>Aktion</th><th>Port</th></tr></thead>
+                                <tbody>
+                                    <tr v-for="(r, i) in machineFirewall.rules" :key="i">
+                                        <td>{{ r.rule_name || r.name }}</td>
+                                        <td>{{ r.direction }}</td>
+                                        <td><span :style="{color: r.action === 'allow' ? 'var(--success)' : 'var(--danger)'}">{{ r.action }}</span></td>
+                                        <td>{{ r.port || '–' }}</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <p v-else style="color:var(--text-muted)">Keine Firewall-Regeln vorhanden</p>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Windows Updates</h3>
+                            <span v-if="machineUpdates.reboot_required" class="status-badge warning">Neustart erforderlich</span>
+                        </div>
+                        <div v-if="machineUpdates.available > 0">
+                            <p style="margin-bottom:0.5rem;color:var(--warning)">{{ machineUpdates.available }} Update(s) verfügbar</p>
+                            <ul style="list-style:none;padding:0">
+                                <li v-for="(u, i) in machineUpdates.pending" :key="i" style="padding:0.3rem 0;border-bottom:1px solid var(--border);font-size:0.85rem">{{ u }}</li>
+                            </ul>
+                            <button class="btn btn-primary btn-sm" style="margin-top:0.8rem" @click="sendCommand('trigger_updates')" :disabled="selectedMachine.status !== 'online'">Updates installieren</button>
+                        </div>
+                        <p v-else style="color:var(--success)">System ist aktuell</p>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header"><h3>Netzwerkfreigaben</h3></div>
+                        <div v-if="machineShares.length">
+                            <table class="machine-table">
+                                <thead><tr><th>Freigabe</th><th>Pfad</th><th>Beschreibung</th></tr></thead>
+                                <tbody>
+                                    <tr v-for="s in machineShares" :key="s.id">
+                                        <td><strong>{{ s.share_name }}</strong></td>
+                                        <td>{{ s.path }}</td>
+                                        <td>{{ s.description || '–' }}</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <p v-else style="color:var(--text-muted)">Keine Freigaben gefunden</p>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Verlauf (24h)</h3>
+                            <select v-model="telemetryRange" @change="loadTelemetryHistory" style="background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);border-radius:4px;padding:0.3rem 0.5rem;font-size:0.8rem">
+                                <option value="1h">1 Stunde</option>
+                                <option value="6h">6 Stunden</option>
+                                <option value="24h">24 Stunden</option>
+                                <option value="7d">7 Tage</option>
+                            </select>
+                        </div>
+                        <div v-if="telemetryHistory.length" style="position:relative;height:200px">
+                            <canvas ref="telemetryCanvas"></canvas>
+                        </div>
+                        <p v-else style="color:var(--text-muted)">Keine Verlaufsdaten verfügbar</p>
+                    </div>
                 </div>
 
                 <!-- Veeam View -->

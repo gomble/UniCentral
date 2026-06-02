@@ -68,6 +68,42 @@ router.get('/machines/:machineId/telemetry', (req, res) => {
     res.json(telemetry);
 });
 
+router.get('/machines/:machineId/updates', (req, res) => {
+    const machine = db.prepare('SELECT * FROM machines WHERE id = ? OR machine_id = ?').get(req.params.machineId, req.params.machineId);
+    if (!machine) return res.status(404).json({ error: 'Machine not found' });
+
+    const latest = db.prepare(`
+        SELECT data_json FROM machine_telemetry
+        WHERE machine_id = ?
+        ORDER BY collected_at DESC LIMIT 1
+    `).get(machine.machine_id);
+
+    if (latest && latest.data_json) {
+        const data = JSON.parse(latest.data_json);
+        res.json(data.updates || { available: 0, pending: [], reboot_required: false });
+    } else {
+        res.json({ available: 0, pending: [], reboot_required: false });
+    }
+});
+
+router.get('/machines/:machineId/firewall-status', (req, res) => {
+    const machine = db.prepare('SELECT * FROM machines WHERE id = ? OR machine_id = ?').get(req.params.machineId, req.params.machineId);
+    if (!machine) return res.status(404).json({ error: 'Machine not found' });
+
+    const latest = db.prepare(`
+        SELECT data_json FROM machine_telemetry
+        WHERE machine_id = ?
+        ORDER BY collected_at DESC LIMIT 1
+    `).get(machine.machine_id);
+
+    if (latest && latest.data_json) {
+        const data = JSON.parse(latest.data_json);
+        res.json(data.firewall || { enabled: false, rules: [] });
+    } else {
+        res.json({ enabled: false, rules: [] });
+    }
+});
+
 // Alerts
 router.get('/alerts', (req, res) => {
     const alerts = db.prepare(`
