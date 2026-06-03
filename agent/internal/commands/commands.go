@@ -35,6 +35,8 @@ func Execute(cmdType string, params map[string]interface{}) Result {
 		return execDeployNeighbor(params)
 	case "update_agent":
 		return execUpdateAgent(params)
+	case "scan_network":
+		return execScanNetwork(params)
 	default:
 		return Result{Status: "failed", Output: fmt.Sprintf("unknown command: %s", cmdType)}
 	}

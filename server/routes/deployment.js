@@ -81,6 +81,56 @@ router.post('/update-agent-manual', (req, res) => {
     res.json({ command, os_type: machine.os_type });
 });
 
+router.post('/scan-network', (req, res) => {
+    const { relay_machine_id, subnet } = req.body;
+
+    if (!relay_machine_id) {
+        return res.status(400).json({ error: 'relay_machine_id required' });
+    }
+
+    const relay = db.prepare('SELECT * FROM machines WHERE machine_id = ?').get(relay_machine_id);
+    if (!relay || relay.status !== 'online') {
+        return res.status(400).json({ error: 'Relay machine not online' });
+    }
+
+    const result = sendCommandToAgent(relay_machine_id, 'scan_network', {
+        subnet: subnet || ''
+    });
+
+    res.json(result);
+});
+
+router.post('/batch-deploy', (req, res) => {
+    const { relay_machine_id, targets, username, password } = req.body;
+
+    if (!relay_machine_id || !targets || !targets.length || !username) {
+        return res.status(400).json({ error: 'relay_machine_id, targets[], and username required' });
+    }
+
+    const relay = db.prepare('SELECT * FROM machines WHERE machine_id = ?').get(relay_machine_id);
+    if (!relay || relay.status !== 'online') {
+        return res.status(400).json({ error: 'Relay machine not online' });
+    }
+
+    const baseUrl = config.baseUrl || `${req.protocol}://${req.get('host')}`;
+    const results = [];
+
+    for (const target of targets) {
+        const result = sendCommandToAgent(relay_machine_id, 'deploy_neighbor', {
+            target_ip: target.ip,
+            target_os: target.os_guess || 'windows',
+            username,
+            password: password || '',
+            server_url: baseUrl,
+            enrollment_key: config.enrollmentKey,
+            category: target.category || 'client'
+        });
+        results.push({ ip: target.ip, ...result });
+    }
+
+    res.json({ success: true, results });
+});
+
 router.get('/online-agents', (req, res) => {
     const agents = db.prepare("SELECT id, machine_id, hostname, display_name, os_type FROM machines WHERE status = 'online'").all();
     res.json(agents);

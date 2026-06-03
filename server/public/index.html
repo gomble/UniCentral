@@ -535,52 +535,93 @@
         </div>
         <!-- Deploy Modal -->
         <div class="modal-overlay" v-if="showDeployModal" @click.self="showDeployModal = false">
-            <div class="modal">
+            <div class="modal" style="max-width:650px">
                 <h2>Remote Agent Deploy</h2>
-                <p style="color:var(--text-secondary);margin-bottom:1rem;font-size:0.85rem">
-                    Installiert den Agent auf einer Maschine im selben Netzwerk über einen bereits registrierten Agent (Relay).
-                </p>
+
+                <!-- Step 1: Select relay and scan -->
                 <div class="form-group">
-                    <label>Relay-Agent (führt die Installation aus)</label>
-                    <select v-model="deployForm.relay_machine_id">
+                    <label>Relay-Agent (führt Scan + Installation aus)</label>
+                    <select v-model="deployForm.relay_machine_id" @change="scanResults = []; scanDone = false">
                         <option value="">-- Wählen --</option>
                         <option v-for="m in onlineAgents" :key="m.machine_id" :value="m.machine_id">{{ m.display_name || m.hostname }} ({{ m.os_type }})</option>
                     </select>
                 </div>
-                <div class="form-group">
-                    <label>Ziel-IP</label>
-                    <input v-model="deployForm.target_ip" placeholder="192.168.1.50">
+
+                <div style="display:flex;gap:0.5rem;margin-bottom:1rem" v-if="deployForm.relay_machine_id">
+                    <button class="btn btn-primary btn-sm" @click="scanNetwork" :disabled="scanning">{{ scanning ? 'Scannt...' : 'Netzwerk scannen' }}</button>
+                    <span v-if="scanning" style="color:var(--text-muted);font-size:0.8rem;align-self:center">Dies kann 10-30 Sekunden dauern...</span>
                 </div>
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
-                    <div class="form-group">
-                        <label>Ziel-OS</label>
-                        <select v-model="deployForm.target_os">
+
+                <!-- Step 2: Scan results with checkboxes -->
+                <div v-if="scanDone && scanResults.length" class="card" style="max-height:250px;overflow-y:auto;margin-bottom:1rem;padding:0.8rem">
+                    <table class="machine-table" style="margin:0">
+                        <thead><tr><th><input type="checkbox" @change="toggleAllScan" :checked="deployTargets.length === scanResults.length"></th><th>IP</th><th>Hostname</th><th>OS</th><th>Kategorie</th></tr></thead>
+                        <tbody>
+                            <tr v-for="h in scanResults" :key="h.ip">
+                                <td><input type="checkbox" :value="h.ip" v-model="deployTargets"></td>
+                                <td>{{ h.ip }}</td>
+                                <td>{{ h.hostname || '–' }}</td>
+                                <td>
+                                    <select v-model="h.os_guess" style="background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);border-radius:4px;padding:0.2rem;font-size:0.8rem">
+                                        <option value="windows">Windows</option>
+                                        <option value="linux">Linux</option>
+                                        <option value="unknown">Unbekannt</option>
+                                    </select>
+                                </td>
+                                <td>
+                                    <select v-model="h.category" style="background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);border-radius:4px;padding:0.2rem;font-size:0.8rem">
+                                        <option value="server">Server</option>
+                                        <option value="client">Client</option>
+                                    </select>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <p v-if="scanDone && !scanResults.length" style="color:var(--text-muted);margin-bottom:1rem;font-size:0.85rem">Keine erreichbaren Hosts im Netzwerk gefunden.</p>
+
+                <!-- Step 3: Credentials + Deploy -->
+                <div v-if="deployTargets.length > 0">
+                    <div style="border-top:1px solid var(--border);padding-top:1rem;margin-top:0.5rem">
+                        <p style="font-size:0.85rem;color:var(--text-secondary);margin-bottom:0.8rem"><strong>{{ deployTargets.length }}</strong> Ziel(e) ausgewählt</p>
+                        <div class="form-group">
+                            <label>Benutzername (Admin auf allen Zielen)</label>
+                            <input v-model="deployForm.username" placeholder="Administrator oder DOMAIN\\User">
+                        </div>
+                        <div class="form-group">
+                            <label>Passwort</label>
+                            <input v-model="deployForm.password" type="password">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Manueller Deploy (single target) -->
+                <div v-if="!scanDone" style="border-top:1px solid var(--border);padding-top:1rem;margin-top:0.5rem">
+                    <p style="font-size:0.8rem;color:var(--text-muted);margin-bottom:0.5rem">Oder manuell eine einzelne IP deployen:</p>
+                    <div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:0.5rem">
+                        <input v-model="deployForm.target_ip" placeholder="192.168.1.50" style="background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);border-radius:var(--radius);padding:0.5rem;font-size:0.85rem">
+                        <select v-model="deployForm.target_os" style="background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);border-radius:var(--radius);padding:0.5rem;font-size:0.85rem">
                             <option value="windows">Windows</option>
                             <option value="linux">Linux</option>
                         </select>
-                    </div>
-                    <div class="form-group">
-                        <label>Kategorie</label>
-                        <select v-model="deployForm.category">
+                        <select v-model="deployForm.category" style="background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);border-radius:var(--radius);padding:0.5rem;font-size:0.85rem">
                             <option value="server">Server</option>
                             <option value="client">Client</option>
                         </select>
                     </div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;margin-top:0.5rem">
+                        <input v-model="deployForm.username" placeholder="Username" style="background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);border-radius:var(--radius);padding:0.5rem;font-size:0.85rem">
+                        <input v-model="deployForm.password" type="password" placeholder="Passwort" style="background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);border-radius:var(--radius);padding:0.5rem;font-size:0.85rem">
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label>Benutzername (Admin auf Ziel)</label>
-                    <input v-model="deployForm.username" placeholder="Administrator oder DOMAIN\\User">
-                </div>
-                <div class="form-group">
-                    <label>Passwort</label>
-                    <input v-model="deployForm.password" type="password">
-                </div>
+
                 <div v-if="deployResult" :style="{color: deployResult.success ? 'var(--success)' : 'var(--danger)', marginTop: '0.8rem', fontSize: '0.85rem'}">
                     {{ deployResult.message }}
                 </div>
                 <div class="modal-actions">
-                    <button class="btn btn-ghost" @click="showDeployModal = false">Schließen</button>
-                    <button class="btn btn-primary" @click="executeDeploy">Deploy starten</button>
+                    <button class="btn btn-ghost" @click="showDeployModal = false; scanResults = []; scanDone = false; deployTargets = []">Schließen</button>
+                    <button class="btn btn-primary" v-if="deployTargets.length > 0" @click="executeBatchDeploy">{{ deployTargets.length }} Maschine(n) deployen</button>
+                    <button class="btn btn-primary" v-else-if="!scanDone && deployForm.target_ip" @click="executeDeploy">Deploy starten</button>
                 </div>
             </div>
         </div>

@@ -19,6 +19,10 @@ createApp({
         });
         const showDeployModal = ref(false);
         const onlineAgents = ref([]);
+        const scanning = ref(false);
+        const scanDone = ref(false);
+        const scanResults = ref([]);
+        const deployTargets = ref([]);
         const deployForm = reactive({
             relay_machine_id: '', target_ip: '', target_os: 'windows',
             username: '', password: '', category: 'client'
@@ -334,6 +338,91 @@ createApp({
             if (res.ok) onlineAgents.value = await res.json();
         }
 
+        async function scanNetwork() {
+            if (!deployForm.relay_machine_id) return;
+            scanning.value = true;
+            scanDone.value = false;
+            scanResults.value = [];
+            deployTargets.value = [];
+            deployResult.value = null;
+
+            const res = await fetch('/api/deploy/scan-network', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ relay_machine_id: deployForm.relay_machine_id })
+            });
+            const data = await res.json();
+
+            if (data.success) {
+                // Poll command result for up to 60 seconds
+                const cmdId = data.command_id;
+                for (let i = 0; i < 30; i++) {
+                    await new Promise(r => setTimeout(r, 2000));
+                    const checkRes = await fetch(`/api/commands/${deployForm.relay_machine_id}/history`);
+                    if (checkRes.ok) {
+                        const cmds = await checkRes.json();
+                        const cmd = cmds.find(c => c.id === cmdId);
+                        if (cmd && cmd.status === 'completed') {
+                            try {
+                                const hosts = JSON.parse(cmd.result);
+                                // Filter out already registered machines
+                                const registered = machines.value.map(m => m.ip_address).join(',');
+                                scanResults.value = hosts.filter(h => !registered.includes(h.ip)).map(h => ({
+                                    ...h,
+                                    category: h.os_guess === 'windows' ? 'client' : 'server'
+                                }));
+                            } catch { scanResults.value = []; }
+                            break;
+                        } else if (cmd && cmd.status === 'failed') {
+                            deployResult.value = { success: false, message: 'Scan fehlgeschlagen: ' + (cmd.result || '') };
+                            break;
+                        }
+                    }
+                }
+            } else {
+                deployResult.value = { success: false, message: data.error || 'Scan konnte nicht gestartet werden' };
+            }
+
+            scanning.value = false;
+            scanDone.value = true;
+        }
+
+        function toggleAllScan(e) {
+            if (e.target.checked) {
+                deployTargets.value = scanResults.value.map(h => h.ip);
+            } else {
+                deployTargets.value = [];
+            }
+        }
+
+        async function executeBatchDeploy() {
+            if (!deployForm.username) {
+                deployResult.value = { success: false, message: 'Benutzername erforderlich' };
+                return;
+            }
+            deployResult.value = null;
+
+            const targets = scanResults.value.filter(h => deployTargets.value.includes(h.ip));
+
+            const res = await fetch('/api/deploy/batch-deploy', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    relay_machine_id: deployForm.relay_machine_id,
+                    targets,
+                    username: deployForm.username,
+                    password: deployForm.password
+                })
+            });
+            const data = await res.json();
+            if (data.success) {
+                deployResult.value = { success: true, message: `Deploy gestartet für ${data.results.length} Maschine(n). Sie erscheinen in Kürze im Dashboard.` };
+                deployTargets.value = [];
+            } else {
+                deployResult.value = { success: false, message: data.error || 'Batch-Deploy fehlgeschlagen' };
+            }
+        }
+
         async function executeDeploy() {
             if (!deployForm.relay_machine_id || !deployForm.target_ip || !deployForm.username) {
                 deployResult.value = { success: false, message: 'Relay, Ziel-IP und Benutzername erforderlich' };
@@ -495,7 +584,8 @@ createApp({
             telemetryCanvas, baseUrl, newMachine, settingsForm,
             navigate, addMachine, deleteMachine, showToken, sendCommand, updateAgent,
             toggleAllMachines, batchCommand, executeBatchInstall,
-            showDeployModal, onlineAgents, deployForm, deployResult, executeDeploy,
+            showDeployModal, onlineAgents, scanning, scanDone, scanResults, deployTargets,
+            deployForm, deployResult, scanNetwork, toggleAllScan, executeBatchDeploy, executeDeploy,
             addVeeamInstance, deleteVeeamInstance,
             saveSettings, testEmail, regenerateEnrollmentKey, acknowledgeAlert, logout,
             loadTelemetryHistory, formatTime, formatBytes, diskPercent
