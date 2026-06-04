@@ -165,6 +165,30 @@ createApp({
         function handleCommandResultEvent(data) {
             const p = data.data || {};
 
+            // AD command results
+            if (p.command_type === 'ad_list_users') {
+                if (p.status === 'completed') {
+                    try {
+                        const parsed = JSON.parse(p.result);
+                        adUsers.value = Array.isArray(parsed) ? parsed : (parsed ? [parsed] : []);
+                        adUsersOutput.value = '';
+                    } catch { adUsersOutput.value = 'Fehler beim Verarbeiten der Benutzerliste'; }
+                    adUsersLoading.value = false;
+                } else if (p.status === 'failed') {
+                    adUsersLoading.value = false;
+                    adUsersOutput.value = '';
+                    toast('Benutzer-Abruf fehlgeschlagen: ' + (p.result || ''), 'error');
+                }
+            }
+            if (['ad_create_user', 'ad_update_user', 'ad_delete_user'].includes(p.command_type)) {
+                if (p.status === 'completed') {
+                    toast(p.result || 'Operation erfolgreich', 'success');
+                    loadADUsers();
+                } else if (p.status === 'failed') {
+                    toast('Fehler: ' + (p.result || 'Unbekannter Fehler'), 'error');
+                }
+            }
+
             // Live progress for machine-detail view
             if (selectedMachine.value && selectedMachine.value.machine_id === data.machineId) {
                 if (!liveCommand.value || liveCommand.value.command_id === p.command_id || p.status === 'running') {
@@ -281,6 +305,9 @@ createApp({
                 loadCommandHistory();
             } else if (target === 'updates') {
                 loadUpdatesMachines();
+            } else if (target === 'ad-admin') {
+                loadADDomainControllers();
+                loadADTemplates();
             }
         }
 
@@ -868,6 +895,273 @@ createApp({
             return Math.round(((d.total_bytes - d.free_bytes) / d.total_bytes) * 100);
         }
 
+        function formatUptime(seconds) {
+            if (!seconds) return '–';
+            const d = Math.floor(seconds / 86400);
+            const h = Math.floor((seconds % 86400) / 3600);
+            const m = Math.floor((seconds % 3600) / 60);
+            if (d > 0) return `${d}T ${h}h ${m}m`;
+            if (h > 0) return `${h}h ${m}m`;
+            return `${m}m`;
+        }
+
+        const machineUptime = computed(() => {
+            if (!selectedMachine.value) return 0;
+            const m = machines.value.find(x => x.machine_id === selectedMachine.value.machine_id);
+            return m && m._telemetry ? m._telemetry.uptime || 0 : 0;
+        });
+
+        // AD-Verwaltung state
+        const adDomainControllers = ref([]);
+        const adSelectedDC = ref('');
+        const adUsers = ref([]);
+        const adGroups = ref([]);
+        const adUsersLoading = ref(false);
+        const adUsersOutput = ref('');
+        const adTemplates = ref([]);
+        const showADUserModal = ref(false);
+        const showADTemplatesModal = ref(false);
+        const adUserSearch = ref('');
+        const adUserFormMode = ref('create');
+        const adUserFormTab = ref('general');
+        const adEditingUser = ref(null);
+        const adUserForm = reactive({
+            sam_account_name: '', given_name: '', surname: '', display_name: '',
+            password: '', email: '', upn: '', department: '', title: '', company: '',
+            description: '', office_phone: '', mobile_phone: '', ou: '',
+            enabled: true, password_never_expires: false, change_password_at_logon: true,
+            cannot_change_password: false, groups: []
+        });
+        const adTemplateForm = reactive({ name: '', description: '' });
+
+        const adFilteredUsers = computed(() => {
+            if (!adUserSearch.value) return adUsers.value;
+            const q = adUserSearch.value.toLowerCase();
+            return adUsers.value.filter(u =>
+                (u.sam_account_name || '').toLowerCase().includes(q) ||
+                (u.display_name || '').toLowerCase().includes(q) ||
+                (u.given_name || '').toLowerCase().includes(q) ||
+                (u.surname || '').toLowerCase().includes(q) ||
+                (u.email || '').toLowerCase().includes(q) ||
+                (u.department || '').toLowerCase().includes(q)
+            );
+        });
+
+        async function loadADDomainControllers() {
+            const res = await apiFetch('/api/ad/domain-controllers');
+            if (res.ok) adDomainControllers.value = await res.json();
+        }
+
+        async function loadADUsers() {
+            if (!adSelectedDC.value) return;
+            adUsersLoading.value = true;
+            adUsersOutput.value = 'Verbinde mit Domänen Controller...';
+            const res = await apiFetch(`/api/ad/${adSelectedDC.value}/command`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ type: 'ad_list_users', parameters: {} })
+            });
+            if (!res.ok) {
+                adUsersLoading.value = false;
+                adUsersOutput.value = '';
+                toast('Fehler beim Senden des Befehls', 'error');
+            }
+        }
+
+        async function loadADGroups() {
+            if (!adSelectedDC.value) return;
+            const res = await apiFetch(`/api/ad/${adSelectedDC.value}/command`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ type: 'ad_list_groups', parameters: {} })
+            });
+            const data = await res.json();
+            if (!data.success) { toast('Fehler beim Laden der Gruppen', 'error'); return; }
+
+            const cmdId = data.command_id;
+            for (let i = 0; i < 30; i++) {
+                await new Promise(r => setTimeout(r, 2000));
+                const checkRes = await apiFetch(`/api/commands/${adSelectedDC.value}/history`);
+                if (checkRes.ok) {
+                    const cmds = await checkRes.json();
+                    const cmd = cmds.find(c => c.id === cmdId);
+                    if (cmd && cmd.status === 'completed') {
+                        try {
+                            const parsed = JSON.parse(cmd.result);
+                            adGroups.value = Array.isArray(parsed) ? parsed : (parsed ? [parsed] : []);
+                            toast(`${adGroups.value.length} Gruppen geladen.`, 'success');
+                        } catch { toast('Fehler beim Parsen der Gruppen', 'error'); }
+                        break;
+                    } else if (cmd && cmd.status === 'failed') {
+                        toast('Gruppen-Abruf fehlgeschlagen: ' + (cmd.result || ''), 'error');
+                        break;
+                    }
+                }
+            }
+        }
+
+        function openCreateADUser() {
+            adUserFormMode.value = 'create';
+            adUserFormTab.value = 'general';
+            Object.assign(adUserForm, {
+                sam_account_name: '', given_name: '', surname: '', display_name: '',
+                password: '', email: '', upn: '', department: '', title: '', company: '',
+                description: '', office_phone: '', mobile_phone: '', ou: '',
+                enabled: true, password_never_expires: false, change_password_at_logon: true,
+                cannot_change_password: false, groups: []
+            });
+            adEditingUser.value = null;
+            showADUserModal.value = true;
+        }
+
+        function openEditADUser(user) {
+            adUserFormMode.value = 'edit';
+            adUserFormTab.value = 'general';
+            adEditingUser.value = user;
+            Object.assign(adUserForm, {
+                sam_account_name: user.sam_account_name || '',
+                given_name: user.given_name || '',
+                surname: user.surname || '',
+                display_name: user.display_name || '',
+                password: '',
+                email: user.email || '',
+                upn: user.upn || '',
+                department: user.department || '',
+                title: user.title || '',
+                company: user.company || '',
+                description: user.description || '',
+                office_phone: user.office_phone || '',
+                mobile_phone: user.mobile_phone || '',
+                ou: '',
+                enabled: user.enabled !== false,
+                password_never_expires: user.password_never_expires || false,
+                change_password_at_logon: false,
+                cannot_change_password: user.cannot_change_password || false,
+                groups: Array.isArray(user.groups) ? [...user.groups] : []
+            });
+            showADUserModal.value = true;
+        }
+
+        function openDuplicateADUser(user) {
+            adUserFormMode.value = 'duplicate';
+            adUserFormTab.value = 'general';
+            adEditingUser.value = null;
+            Object.assign(adUserForm, {
+                sam_account_name: '', given_name: '', surname: '', display_name: '',
+                password: '', email: '', upn: '',
+                department: user.department || '',
+                title: user.title || '',
+                company: user.company || '',
+                description: user.description || '',
+                office_phone: '', mobile_phone: '', ou: '',
+                enabled: user.enabled !== false,
+                password_never_expires: user.password_never_expires || false,
+                change_password_at_logon: true,
+                cannot_change_password: user.cannot_change_password || false,
+                groups: Array.isArray(user.groups) ? [...user.groups] : []
+            });
+            showADUserModal.value = true;
+        }
+
+        async function saveADUser() {
+            if (!adUserForm.given_name || !adUserForm.surname || !adUserForm.sam_account_name) {
+                toast('Vorname, Nachname und Benutzername sind erforderlich', 'error');
+                return;
+            }
+            if (adUserFormMode.value !== 'edit' && !adUserForm.password) {
+                toast('Passwort ist erforderlich', 'error');
+                return;
+            }
+
+            let type, parameters;
+            if (adUserFormMode.value === 'edit') {
+                const originalGroups = adEditingUser.value?.groups || [];
+                const newGroups = adUserForm.groups;
+                const addGroups = newGroups.filter(g => !originalGroups.includes(g));
+                const removeGroups = originalGroups.filter(g => !newGroups.includes(g));
+                type = 'ad_update_user';
+                parameters = { ...adUserForm, add_groups: addGroups, remove_groups: removeGroups };
+                delete parameters.groups;
+                delete parameters.password;
+            } else {
+                type = 'ad_create_user';
+                parameters = { ...adUserForm };
+            }
+
+            const res = await apiFetch(`/api/ad/${adSelectedDC.value}/command`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ type, parameters })
+            });
+            showADUserModal.value = false;
+            if (res.ok) toast('Befehl gesendet, warte auf Ergebnis...', 'info');
+            else toast('Fehler beim Senden des Befehls', 'error');
+        }
+
+        async function confirmDeleteADUser(user) {
+            if (!await confirmDialog(`Benutzer "${user.display_name || user.sam_account_name}" wirklich löschen?`)) return;
+            await apiFetch(`/api/ad/${adSelectedDC.value}/command`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ type: 'ad_delete_user', parameters: { sam_account_name: user.sam_account_name } })
+            });
+            toast('Löschbefehl gesendet...', 'info');
+        }
+
+        async function loadADTemplates() {
+            const res = await apiFetch('/api/ad/templates');
+            if (res.ok) adTemplates.value = await res.json();
+        }
+
+        async function deleteADTemplate(id) {
+            if (!await confirmDialog('Vorlage wirklich löschen?')) return;
+            await apiFetch(`/api/ad/templates/${id}`, { method: 'DELETE' });
+            await loadADTemplates();
+        }
+
+        function applyADTemplate(templateId) {
+            if (!templateId) return;
+            const t = adTemplates.value.find(x => x.id === parseInt(templateId));
+            if (!t || !t.properties) return;
+            const p = t.properties;
+            if (p.department !== undefined) adUserForm.department = p.department;
+            if (p.title !== undefined) adUserForm.title = p.title;
+            if (p.company !== undefined) adUserForm.company = p.company;
+            if (p.ou !== undefined) adUserForm.ou = p.ou;
+            if (p.enabled !== undefined) adUserForm.enabled = p.enabled;
+            if (p.password_never_expires !== undefined) adUserForm.password_never_expires = p.password_never_expires;
+            if (Array.isArray(p.groups)) adUserForm.groups = [...p.groups];
+        }
+
+        async function saveADTemplateFromForm() {
+            const name = prompt('Name der Vorlage:');
+            if (!name) return;
+            const properties = {
+                department: adUserForm.department,
+                title: adUserForm.title,
+                company: adUserForm.company,
+                ou: adUserForm.ou,
+                enabled: adUserForm.enabled,
+                password_never_expires: adUserForm.password_never_expires,
+                change_password_at_logon: adUserForm.change_password_at_logon,
+                cannot_change_password: adUserForm.cannot_change_password,
+                groups: [...adUserForm.groups]
+            };
+            await apiFetch('/api/ad/templates', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, properties })
+            });
+            await loadADTemplates();
+            toast(`Vorlage "${name}" gespeichert.`, 'success');
+        }
+
+        function adAutoDisplayName() {
+            const fn = adUserForm.given_name || '';
+            const sn = adUserForm.surname || '';
+            adUserForm.display_name = (fn + ' ' + sn).trim();
+        }
+
         return {
             view, username, machines, stats, alerts, alertCount,
             showAddMachine, showTokenModal, showAddVeeam, showBatchInstall, showGroupsModal,
@@ -877,6 +1171,7 @@ createApp({
             tokenMachine, selectedMachine, machineDisks, machineServices, machineFirewall,
             machineUpdates, machineShares, telemetryHistory, telemetryRange,
             telemetryCanvas, baseUrl, newMachine, settingsForm,
+            machineUptime,
             navigate, addMachine, deleteMachine, showToken, sendCommand, updateAgent,
             showEditMachine, editMachineForm, openEditMachine, saveEditMachine,
             triggerUpdates, scheduleUpdates, scheduleTime,
@@ -890,7 +1185,13 @@ createApp({
             deployForm, deployResult, scanNetwork, toggleAllScan, executeBatchDeploy, executeDeploy,
             addVeeamInstance, deleteVeeamInstance,
             saveSettings, testEmail, regenerateEnrollmentKey, acknowledgeAlert, logout,
-            loadTelemetryHistory, formatTime, formatBytes, diskPercent,
+            loadTelemetryHistory, formatTime, formatBytes, diskPercent, formatUptime,
+            adDomainControllers, adSelectedDC, adUsers, adGroups, adUsersLoading, adUsersOutput,
+            adTemplates, showADUserModal, showADTemplatesModal, adUserSearch, adUserFormMode,
+            adUserFormTab, adEditingUser, adUserForm, adTemplateForm, adFilteredUsers,
+            loadADDomainControllers, loadADUsers, loadADGroups,
+            openCreateADUser, openEditADUser, openDuplicateADUser, saveADUser, confirmDeleteADUser,
+            loadADTemplates, deleteADTemplate, applyADTemplate, saveADTemplateFromForm, adAutoDisplayName,
             toasts, confirmData
         };
     }

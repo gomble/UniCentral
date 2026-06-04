@@ -52,6 +52,16 @@ func Execute(cmdType string, params map[string]interface{}, onProgress ProgressF
 		return execUpdateAgent(params)
 	case "scan_network":
 		return execScanNetwork(params)
+	case "ad_list_users":
+		return execADListUsers(params)
+	case "ad_list_groups":
+		return execADListGroups(params)
+	case "ad_create_user":
+		return execADCreateUser(params)
+	case "ad_update_user":
+		return execADUpdateUser(params)
+	case "ad_delete_user":
+		return execADDeleteUser(params)
 	default:
 		return Result{Status: "failed", Output: fmt.Sprintf("unknown command: %s", cmdType)}
 	}

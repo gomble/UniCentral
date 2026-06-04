@@ -41,6 +41,10 @@
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0115-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 01-15 6.7L3 16"/></svg>
                         <span>Updates</span>
                     </div>
+                    <div class="nav-item" :class="{active: view === 'ad-admin'}" @click="navigate('ad-admin')">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                        <span>AD-Verwaltung</span>
+                    </div>
                     <div class="nav-item" :class="{active: view === 'veeam'}" @click="navigate('veeam')">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                         <span>Veeam Backup</span>
@@ -199,6 +203,7 @@
                                     <th>Typ</th>
                                     <th>Gruppe</th>
                                     <th>Agent</th>
+                                    <th>Laufzeit</th>
                                     <th>Aktionen</th>
                                 </tr>
                             </thead>
@@ -206,11 +211,15 @@
                                 <tr v-for="m in filteredMachines" :key="m.id">
                                     <td><input type="checkbox" :value="m.machine_id" v-model="selectedMachines" @click.stop></td>
                                     <td><span class="status-badge" :class="m.status">{{ m.status }}</span></td>
-                                    <td @click="navigate('machine-detail', m.id)" style="cursor:pointer"><strong>{{ m.display_name || m.hostname }}</strong></td>
+                                    <td @click="navigate('machine-detail', m.id)" style="cursor:pointer">
+                                        <span v-if="m.is_domain_controller" style="background:#7c3aed;color:#fff;font-size:0.6rem;padding:1px 4px;border-radius:3px;margin-right:4px;vertical-align:middle">DC</span>
+                                        <strong>{{ m.display_name || m.hostname }}</strong>
+                                    </td>
                                     <td><span class="os-badge">{{ m.os_type }}</span></td>
                                     <td><span class="category-badge" :class="m.category">{{ m.category }}</span></td>
                                     <td>{{ m.group_name || '–' }}</td>
                                     <td>{{ m.agent_version || '–' }}</td>
+                                    <td style="color:var(--text-muted);font-size:0.82rem">{{ m._telemetry && m._telemetry.uptime ? formatUptime(m._telemetry.uptime) : '–' }}</td>
                                     <td>
                                         <button class="btn btn-ghost btn-sm" @click.stop="showToken(m)" title="Install-Befehl">Token</button>
                                         <button class="btn btn-danger btn-sm" @click.stop="deleteMachine(m)" title="Entfernen">✕</button>
@@ -438,6 +447,14 @@
                         <div class="stat-card">
                             <div class="stat-value" style="font-size:1.2rem">{{ selectedMachine.agent_version || '–' }}</div>
                             <div class="stat-label">Agent Version</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" style="font-size:1.2rem">{{ machineUptime ? formatUptime(machineUptime) : '–' }}</div>
+                            <div class="stat-label">Laufzeit</div>
+                        </div>
+                        <div class="stat-card" v-if="selectedMachine.is_domain_controller">
+                            <div class="stat-value" style="font-size:0.95rem;color:#a78bfa">DC</div>
+                            <div class="stat-label">{{ selectedMachine.domain_name || 'Domäne' }}</div>
                         </div>
                     </div>
 
@@ -722,6 +739,73 @@
                         <button class="btn btn-primary" @click="saveSettings">Speichern</button>
                     </div>
                 </div>
+
+                <!-- AD-Verwaltung View -->
+                <div v-if="view === 'ad-admin'">
+                    <div class="page-header">
+                        <h1>AD-Verwaltung</h1>
+                        <button class="btn btn-ghost btn-sm" @click="showADTemplatesModal = true">Vorlagen</button>
+                    </div>
+
+                    <div class="card" style="margin-bottom:1rem">
+                        <div class="card-header"><h3>Domänen Controller</h3></div>
+                        <div v-if="adDomainControllers.length" style="display:flex;gap:0.8rem;align-items:center;flex-wrap:wrap">
+                            <select v-model="adSelectedDC" @change="adUsers = []; adGroups = []" style="background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);border-radius:var(--radius);padding:0.45rem 0.7rem;font-size:0.9rem;min-width:260px">
+                                <option value="">-- DC auswählen --</option>
+                                <option v-for="dc in adDomainControllers" :key="dc.machine_id" :value="dc.machine_id">
+                                    {{ dc.display_name || dc.hostname }}{{ dc.domain_name ? ' (' + dc.domain_name + ')' : '' }}{{ dc.status !== 'online' ? ' [Offline]' : '' }}
+                                </option>
+                            </select>
+                            <button class="btn btn-primary btn-sm" @click="loadADUsers" :disabled="!adSelectedDC || adUsersLoading">{{ adUsersLoading ? 'Laden...' : 'Benutzer laden' }}</button>
+                            <button class="btn btn-ghost btn-sm" @click="loadADGroups" :disabled="!adSelectedDC">Gruppen laden</button>
+                            <span v-if="adGroups.length" style="font-size:0.8rem;color:var(--text-muted)">{{ adGroups.length }} Gruppen geladen</span>
+                        </div>
+                        <p v-else style="color:var(--text-muted)">Kein Domänen Controller erkannt. Sobald ein Agent auf einem DC läuft und Telemetrie sendet, erscheint er hier automatisch.</p>
+                        <div v-if="adUsersOutput" style="margin-top:0.8rem;font-size:0.78rem;color:var(--text-muted);font-family:monospace;background:var(--bg-primary);padding:0.4rem 0.6rem;border-radius:4px">{{ adUsersOutput }}</div>
+                    </div>
+
+                    <div class="card" v-if="adSelectedDC">
+                        <div class="card-header">
+                            <h3>Benutzer <span v-if="adUsers.length" style="color:var(--text-muted);font-size:0.8rem;font-weight:normal">({{ adFilteredUsers.length }}{{ adUsers.length !== adFilteredUsers.length ? ' von ' + adUsers.length : '' }})</span></h3>
+                            <div style="display:flex;gap:0.5rem;align-items:center">
+                                <input v-model="adUserSearch" placeholder="Suchen..." style="background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);border-radius:var(--radius);padding:0.35rem 0.7rem;font-size:0.85rem;width:200px">
+                                <button class="btn btn-primary btn-sm" @click="openCreateADUser">+ Benutzer erstellen</button>
+                            </div>
+                        </div>
+                        <div v-if="adUsersLoading" style="padding:2rem;text-align:center;color:var(--text-muted)">Benutzerliste wird geladen...</div>
+                        <div v-else-if="adFilteredUsers.length">
+                            <table class="machine-table">
+                                <thead>
+                                    <tr>
+                                        <th>Benutzername</th>
+                                        <th>Name</th>
+                                        <th>E-Mail</th>
+                                        <th>Abteilung</th>
+                                        <th>Titel</th>
+                                        <th>Status</th>
+                                        <th>Aktionen</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr v-for="u in adFilteredUsers" :key="u.sam_account_name">
+                                        <td><strong>{{ u.sam_account_name }}</strong></td>
+                                        <td>{{ u.display_name || (u.given_name + ' ' + u.surname) }}</td>
+                                        <td>{{ u.email || '–' }}</td>
+                                        <td>{{ u.department || '–' }}</td>
+                                        <td>{{ u.title || '–' }}</td>
+                                        <td><span class="status-badge" :class="u.enabled ? 'online' : 'offline'">{{ u.enabled ? 'Aktiv' : 'Deaktiviert' }}</span></td>
+                                        <td>
+                                            <button class="btn btn-ghost btn-sm" @click="openEditADUser(u)">Bearb.</button>
+                                            <button class="btn btn-ghost btn-sm" @click="openDuplicateADUser(u)" title="Duplizieren">Dupl.</button>
+                                            <button class="btn btn-danger btn-sm" @click="confirmDeleteADUser(u)">✕</button>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <p v-else style="padding:1rem;color:var(--text-muted)">{{ adUsers.length ? 'Keine Benutzer gefunden.' : 'Noch keine Benutzer geladen. Klicke auf "Benutzer laden".' }}</p>
+                    </div>
+                </div>
             </main>
         </div>
 
@@ -970,6 +1054,169 @@
                 <div class="modal-actions">
                     <button class="btn btn-ghost" @click="showAddVeeam = false">Abbrechen</button>
                     <button class="btn btn-primary" @click="addVeeamInstance">Hinzufuegen</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- AD User Modal -->
+        <div class="modal-overlay" v-if="showADUserModal" @click.self="showADUserModal = false">
+            <div class="modal" style="max-width:720px">
+                <h2>{{ adUserFormMode === 'edit' ? 'Benutzer bearbeiten' : adUserFormMode === 'duplicate' ? 'Benutzer duplizieren' : 'Benutzer erstellen' }}</h2>
+
+                <div v-if="adUserFormMode !== 'edit' && adTemplates.length" style="display:flex;align-items:center;gap:0.5rem;margin-bottom:1rem;padding-bottom:0.8rem;border-bottom:1px solid var(--border)">
+                    <span style="font-size:0.82rem;color:var(--text-muted)">Vorlage:</span>
+                    <select @change="applyADTemplate($event.target.value)" style="background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);border-radius:var(--radius);padding:0.3rem 0.6rem;font-size:0.82rem">
+                        <option value="">-- Vorlage wählen --</option>
+                        <option v-for="t in adTemplates" :key="t.id" :value="t.id">{{ t.name }}</option>
+                    </select>
+                </div>
+
+                <div style="display:flex;gap:0.3rem;border-bottom:1px solid var(--border);margin-bottom:1rem">
+                    <button class="btn btn-sm" :class="adUserFormTab === 'general' ? 'btn-primary' : 'btn-ghost'" @click="adUserFormTab = 'general'">Allgemein</button>
+                    <button class="btn btn-sm" :class="adUserFormTab === 'options' ? 'btn-primary' : 'btn-ghost'" @click="adUserFormTab = 'options'">Optionen</button>
+                    <button class="btn btn-sm" :class="adUserFormTab === 'groups' ? 'btn-primary' : 'btn-ghost'" @click="adUserFormTab = 'groups'">Gruppen<span v-if="adUserForm.groups.length" style="margin-left:3px;color:var(--accent)">({{ adUserForm.groups.length }})</span></button>
+                </div>
+
+                <div v-if="adUserFormTab === 'general'">
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem">
+                        <div class="form-group">
+                            <label>Vorname *</label>
+                            <input v-model="adUserForm.given_name" @input="adAutoDisplayName" placeholder="Max">
+                        </div>
+                        <div class="form-group">
+                            <label>Nachname *</label>
+                            <input v-model="adUserForm.surname" @input="adAutoDisplayName" placeholder="Mustermann">
+                        </div>
+                    </div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem">
+                        <div class="form-group">
+                            <label>Anzeigename</label>
+                            <input v-model="adUserForm.display_name" placeholder="Max Mustermann">
+                        </div>
+                        <div class="form-group">
+                            <label>Benutzername (SAM) *</label>
+                            <input v-model="adUserForm.sam_account_name" placeholder="mmustermann" :disabled="adUserFormMode === 'edit'" :style="adUserFormMode === 'edit' ? 'opacity:0.6' : ''">
+                        </div>
+                    </div>
+                    <div class="form-group" v-if="adUserFormMode !== 'edit'">
+                        <label>Passwort *</label>
+                        <input v-model="adUserForm.password" type="password" placeholder="Sicheres Passwort">
+                    </div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem">
+                        <div class="form-group">
+                            <label>E-Mail</label>
+                            <input v-model="adUserForm.email" type="email" placeholder="m.mustermann@firma.de">
+                        </div>
+                        <div class="form-group">
+                            <label>UPN</label>
+                            <input v-model="adUserForm.upn" placeholder="mmustermann@domain.local">
+                        </div>
+                    </div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.8rem">
+                        <div class="form-group">
+                            <label>Abteilung</label>
+                            <input v-model="adUserForm.department" placeholder="IT">
+                        </div>
+                        <div class="form-group">
+                            <label>Titel / Position</label>
+                            <input v-model="adUserForm.title" placeholder="Systemadministrator">
+                        </div>
+                        <div class="form-group">
+                            <label>Unternehmen</label>
+                            <input v-model="adUserForm.company" placeholder="Firma GmbH">
+                        </div>
+                    </div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem">
+                        <div class="form-group">
+                            <label>Telefon (Büro)</label>
+                            <input v-model="adUserForm.office_phone" placeholder="+49 123 456789">
+                        </div>
+                        <div class="form-group">
+                            <label>Mobil</label>
+                            <input v-model="adUserForm.mobile_phone" placeholder="+49 170 1234567">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Beschreibung</label>
+                        <input v-model="adUserForm.description" placeholder="Optionale Beschreibung">
+                    </div>
+                    <div class="form-group" v-if="adUserFormMode !== 'edit'">
+                        <label>OU-Pfad (optional)</label>
+                        <input v-model="adUserForm.ou" placeholder="OU=Mitarbeiter,DC=domain,DC=local">
+                    </div>
+                </div>
+
+                <div v-if="adUserFormTab === 'options'" style="display:flex;flex-direction:column;gap:1rem;padding:0.5rem 0">
+                    <label style="display:flex;align-items:center;gap:0.7rem;cursor:pointer">
+                        <input type="checkbox" v-model="adUserForm.enabled">
+                        <div><div>Konto aktiviert</div><div style="font-size:0.75rem;color:var(--text-muted)">Benutzer kann sich anmelden</div></div>
+                    </label>
+                    <label style="display:flex;align-items:center;gap:0.7rem;cursor:pointer">
+                        <input type="checkbox" v-model="adUserForm.password_never_expires">
+                        <div><div>Passwort läuft nie ab</div><div style="font-size:0.75rem;color:var(--text-muted)">Passwort-Ablaufrichtlinie deaktivieren</div></div>
+                    </label>
+                    <label v-if="adUserFormMode !== 'edit'" style="display:flex;align-items:center;gap:0.7rem;cursor:pointer">
+                        <input type="checkbox" v-model="adUserForm.change_password_at_logon">
+                        <div><div>Passwort bei Anmeldung ändern</div><div style="font-size:0.75rem;color:var(--text-muted)">Benutzer muss Passwort beim ersten Login setzen</div></div>
+                    </label>
+                    <label style="display:flex;align-items:center;gap:0.7rem;cursor:pointer">
+                        <input type="checkbox" v-model="adUserForm.cannot_change_password">
+                        <div><div>Kann Passwort nicht ändern</div><div style="font-size:0.75rem;color:var(--text-muted)">Passwortänderung durch Benutzer sperren</div></div>
+                    </label>
+                </div>
+
+                <div v-if="adUserFormTab === 'groups'">
+                    <div v-if="adGroups.length">
+                        <p style="font-size:0.8rem;color:var(--text-muted);margin-bottom:0.6rem">{{ adUserForm.groups.length }} Gruppe(n) ausgewählt</p>
+                        <div style="max-height:320px;overflow-y:auto;display:flex;flex-direction:column;gap:0.15rem">
+                            <label v-for="g in adGroups" :key="g.sam_account_name" style="display:flex;align-items:center;gap:0.6rem;cursor:pointer;padding:0.35rem 0.5rem;border-radius:4px;transition:background 0.1s" :style="{background: adUserForm.groups.includes(g.sam_account_name) ? 'var(--bg-secondary)' : 'transparent'}">
+                                <input type="checkbox" :value="g.sam_account_name" v-model="adUserForm.groups">
+                                <div>
+                                    <div style="font-size:0.85rem">{{ g.name || g.sam_account_name }}</div>
+                                    <div v-if="g.description" style="font-size:0.72rem;color:var(--text-muted)">{{ g.description }}</div>
+                                </div>
+                                <span style="margin-left:auto;font-size:0.7rem;color:var(--text-muted)">{{ g.scope }}</span>
+                            </label>
+                        </div>
+                    </div>
+                    <p v-else style="color:var(--text-muted)">Keine Gruppen geladen. Bitte "Gruppen laden" im Hauptbereich klicken.</p>
+                </div>
+
+                <div class="modal-actions">
+                    <button class="btn btn-ghost" @click="showADUserModal = false">Abbrechen</button>
+                    <button class="btn btn-ghost btn-sm" v-if="adUserFormMode !== 'edit'" @click="saveADTemplateFromForm">Als Vorlage</button>
+                    <button class="btn btn-primary" @click="saveADUser">{{ adUserFormMode === 'edit' ? 'Aktualisieren' : 'Erstellen' }}</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- AD Templates Modal -->
+        <div class="modal-overlay" v-if="showADTemplatesModal" @click.self="showADTemplatesModal = false">
+            <div class="modal" style="max-width:580px">
+                <h2>Benutzer-Vorlagen</h2>
+                <p style="font-size:0.82rem;color:var(--text-muted);margin-bottom:1rem">Vorlagen speichern Standardwerte für Abteilung, Titel, Gruppen und Konto-Optionen. Beim Erstellen eines Benutzers können sie per Dropdown angewendet werden.</p>
+
+                <div v-for="t in adTemplates" :key="t.id" style="border:1px solid var(--border);border-radius:var(--radius);padding:0.8rem;margin-bottom:0.5rem">
+                    <div style="display:flex;justify-content:space-between;align-items:flex-start">
+                        <div>
+                            <strong>{{ t.name }}</strong>
+                            <div v-if="t.description" style="font-size:0.8rem;color:var(--text-muted)">{{ t.description }}</div>
+                            <div style="font-size:0.75rem;color:var(--text-muted);margin-top:0.25rem;display:flex;gap:0.8rem;flex-wrap:wrap">
+                                <span v-if="t.properties.department">Abt.: {{ t.properties.department }}</span>
+                                <span v-if="t.properties.title">Titel: {{ t.properties.title }}</span>
+                                <span v-if="t.properties.company">Firma: {{ t.properties.company }}</span>
+                                <span v-if="t.properties.groups && t.properties.groups.length">{{ t.properties.groups.length }} Gruppe(n)</span>
+                                <span v-if="t.properties.ou" style="font-family:monospace">OU gesetzt</span>
+                            </div>
+                        </div>
+                        <button class="btn btn-danger btn-sm" @click="deleteADTemplate(t.id)">✕</button>
+                    </div>
+                </div>
+
+                <p v-if="!adTemplates.length" style="color:var(--text-muted);margin-bottom:0.5rem">Keine Vorlagen vorhanden. Erstelle eine Vorlage über den Button "Als Vorlage" im Benutzer-Formular.</p>
+
+                <div class="modal-actions">
+                    <button class="btn btn-ghost" @click="showADTemplatesModal = false">Schliessen</button>
                 </div>
             </div>
         </div>

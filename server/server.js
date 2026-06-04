@@ -63,6 +63,7 @@ app.use('/api/notifications', require('./routes/notifications'));
 app.use('/api/veeam', require('./routes/veeam'));
 app.use('/api/settings', require('./routes/settings'));
 app.use('/api/updates', require('./routes/updates'));
+app.use('/api/ad', require('./routes/active-directory'));
 
 // Agent version check (used by auto-update)
 app.get('/api/agent/version', (req, res) => {

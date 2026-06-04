@@ -314,6 +314,11 @@ function handleTelemetry(machineId, payload) {
         }
     }
 
+    if (payload.is_domain_controller !== undefined) {
+        db.prepare('UPDATE machines SET is_domain_controller = ?, domain_name = ? WHERE machine_id = ?')
+            .run(payload.is_domain_controller ? 1 : 0, payload.domain_name || '', machineId);
+    }
+
     if (payload.firewall && payload.firewall.rules) {
         db.prepare('DELETE FROM firewall_rules WHERE machine_id = ?').run(machineId);
         const stmt = db.prepare(`

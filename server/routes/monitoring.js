@@ -24,7 +24,7 @@ router.get('/dashboard-telemetry', (req, res) => {
                     diskPercent = totalAll > 0 ? ((totalAll - freeAll) / totalAll) * 100 : 0;
                 }
             } catch {}
-            result[m.machine_id] = { cpu: tel.cpu_percent, mem: tel.memory_percent, disk: diskPercent };
+            result[m.machine_id] = { cpu: tel.cpu_percent, mem: tel.memory_percent, disk: diskPercent, uptime: tel.uptime_seconds || 0 };
         }
     }
     res.json(result);
