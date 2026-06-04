@@ -937,13 +937,21 @@ createApp({
         const adGroupSearch = ref('');
 
         const adGroupsFiltered = computed(() => {
-            if (!adGroupSearch.value) return adGroups.value;
-            const q = adGroupSearch.value.toLowerCase();
-            return adGroups.value.filter(g =>
-                (g.sam_account_name || '').toLowerCase().includes(q) ||
-                (g.name || '').toLowerCase().includes(q) ||
-                (g.description || '').toLowerCase().includes(q)
-            );
+            let groups = adGroups.value;
+            if (adGroupSearch.value) {
+                const q = adGroupSearch.value.toLowerCase();
+                groups = groups.filter(g =>
+                    (g.sam_account_name || '').toLowerCase().includes(q) ||
+                    (g.name || '').toLowerCase().includes(q) ||
+                    (g.description || '').toLowerCase().includes(q)
+                );
+            }
+            return [...groups].sort((a, b) => {
+                const aChecked = adUserForm.groups.includes(a.sam_account_name) ? 0 : 1;
+                const bChecked = adUserForm.groups.includes(b.sam_account_name) ? 0 : 1;
+                if (aChecked !== bChecked) return aChecked - bChecked;
+                return (a.name || a.sam_account_name).localeCompare(b.name || b.sam_account_name, 'de');
+            });
         });
 
         function removeFromADGroup(groupName) {

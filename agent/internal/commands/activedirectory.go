@@ -7,12 +7,14 @@ import (
 	"strings"
 )
 
+const psUTF8Prefix = "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8\n$OutputEncoding = [System.Text.Encoding]::UTF8\n"
+
 func runPSAD(script string) (string, error) {
 	if runtime.GOOS != "windows" {
 		return "", fmt.Errorf("Active Directory-Befehle sind nur unter Windows verfuegbar")
 	}
 	out, err := exec.Command("powershell", "-NoProfile", "-NonInteractive",
-		"-ExecutionPolicy", "Bypass", "-Command", script).CombinedOutput()
+		"-ExecutionPolicy", "Bypass", "-Command", psUTF8Prefix+script).CombinedOutput()
 	return strings.TrimSpace(string(out)), err
 }
 
