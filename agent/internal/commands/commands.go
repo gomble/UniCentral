@@ -175,8 +175,8 @@ func execUpdateAgent(params map[string]interface{}) Result {
 func execTriggerUpdates() Result {
 	var cmd *exec.Cmd
 	if runtime.GOOS == "windows" {
-		cmd = exec.Command("powershell", "-Command",
-			"[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; Install-Module PSWindowsUpdate -Force -Confirm:$false -Scope CurrentUser; Import-Module PSWindowsUpdate; Get-WindowsUpdate -Install -AcceptAll -AutoReboot")
+		cmd = exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command",
+			"[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $ProgressPreference='SilentlyContinue'; $ConfirmPreference='None'; if (!(Get-Module -ListAvailable PSWindowsUpdate)) { Install-Module PSWindowsUpdate -Force -Confirm:$false -Scope AllUsers }; Import-Module PSWindowsUpdate; Get-WindowsUpdate -Install -AcceptAll -AutoReboot -Confirm:$false")
 	} else {
 		if _, err := exec.LookPath("apt-get"); err == nil {
 			cmd = exec.Command("bash", "-c", "apt-get update && apt-get upgrade -y && [ -f /var/run/reboot-required ] && reboot")
@@ -195,8 +195,8 @@ func execTriggerUpdates() Result {
 func execTriggerUpdatesReboot() Result {
 	var cmd *exec.Cmd
 	if runtime.GOOS == "windows" {
-		cmd = exec.Command("powershell", "-Command",
-			"Install-Module PSWindowsUpdate -Force -Confirm:$false -Scope CurrentUser; Import-Module PSWindowsUpdate; Get-WindowsUpdate -Install -AcceptAll -AutoReboot")
+		cmd = exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command",
+			"[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $ProgressPreference='SilentlyContinue'; $ConfirmPreference='None'; if (!(Get-Module -ListAvailable PSWindowsUpdate)) { Install-Module PSWindowsUpdate -Force -Confirm:$false -Scope AllUsers }; Import-Module PSWindowsUpdate; Get-WindowsUpdate -Install -AcceptAll -AutoReboot -Confirm:$false")
 	} else {
 		if _, err := exec.LookPath("apt-get"); err == nil {
 			cmd = exec.Command("bash", "-c", "apt-get update && apt-get upgrade -y && reboot")
@@ -221,7 +221,7 @@ func execScheduleUpdates(params map[string]interface{}) Result {
 	var cmd *exec.Cmd
 	if runtime.GOOS == "windows" {
 		psScript := fmt.Sprintf(`
-$action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-Command Install-Module PSWindowsUpdate -Force -Confirm:$false -Scope CurrentUser; Import-Module PSWindowsUpdate; Get-WindowsUpdate -Install -AcceptAll -AutoReboot"
+$action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -NonInteractive -Command `$ConfirmPreference='None'; if (!(Get-Module -ListAvailable PSWindowsUpdate)) { Install-Module PSWindowsUpdate -Force -Confirm:`$false -Scope AllUsers }; Import-Module PSWindowsUpdate; Get-WindowsUpdate -Install -AcceptAll -AutoReboot -Confirm:`$false"
 $trigger = New-ScheduledTaskTrigger -Once -At "%s"
 $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable
 Register-ScheduledTask -TaskName "UniCentral-WindowsUpdate" -Action $action -Trigger $trigger -Settings $settings -User "SYSTEM" -RunLevel Highest -Force
