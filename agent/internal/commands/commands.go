@@ -220,13 +220,11 @@ func execScheduleUpdates(params map[string]interface{}) Result {
 
 	var cmd *exec.Cmd
 	if runtime.GOOS == "windows" {
-		psScript := fmt.Sprintf(`
-$action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -NonInteractive -Command `$ConfirmPreference='None'; if (!(Get-Module -ListAvailable PSWindowsUpdate)) { Install-Module PSWindowsUpdate -Force -Confirm:`$false -Scope AllUsers }; Import-Module PSWindowsUpdate; Get-WindowsUpdate -Install -AcceptAll -AutoReboot -Confirm:`$false"
-$trigger = New-ScheduledTaskTrigger -Once -At "%s"
-$settings = New-ScheduledTaskSettingsSet -StartWhenAvailable
-Register-ScheduledTask -TaskName "UniCentral-WindowsUpdate" -Action $action -Trigger $trigger -Settings $settings -User "SYSTEM" -RunLevel Highest -Force
-`, scheduleTime)
-		cmd = exec.Command("powershell", "-Command", psScript)
+		psScript := "$action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument '-NoProfile -NonInteractive -Command Install-Module PSWindowsUpdate -Force -Confirm:$false -Scope AllUsers; Import-Module PSWindowsUpdate; Get-WindowsUpdate -Install -AcceptAll -AutoReboot -Confirm:$false'; " +
+			"$trigger = New-ScheduledTaskTrigger -Once -At '" + scheduleTime + "'; " +
+			"$settings = New-ScheduledTaskSettingsSet -StartWhenAvailable; " +
+			"Register-ScheduledTask -TaskName 'UniCentral-WindowsUpdate' -Action $action -Trigger $trigger -Settings $settings -User 'SYSTEM' -RunLevel Highest -Force"
+		cmd = exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command", psScript)
 	} else {
 		// Create a one-time cron via at command
 		script := "apt-get update && apt-get upgrade -y && reboot"
