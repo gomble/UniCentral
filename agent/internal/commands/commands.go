@@ -179,28 +179,52 @@ func execTriggerUpdates() Result {
 func execTriggerUpdatesReboot() Result {
 	var cmd *exec.Cmd
 	if runtime.GOOS == "windows" {
-		// Use UsoClient + COM API fallback - works non-interactively without PSWindowsUpdate
 		script := `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-Write-Output "Starting Windows Update scan..."
-UsoClient StartScan
-Start-Sleep -Seconds 10
-Write-Output "Downloading updates..."
-UsoClient StartDownload
-Start-Sleep -Seconds 30
-Write-Output "Installing updates..."
-UsoClient StartInstall
-Start-Sleep -Seconds 10
-# Check if reboot is needed
-$reboot = Test-Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired"
-if ($reboot) {
-    Write-Output "Reboot required - restarting in 30 seconds..."
-    shutdown /r /t 30 /c "UniCentral: Neustart nach Windows Update"
+$ProgressPreference = 'SilentlyContinue'
+Write-Output "Creating Windows Update session..."
+$session = New-Object -ComObject Microsoft.Update.Session
+$searcher = $session.CreateUpdateSearcher()
+
+Write-Output "Searching for updates..."
+$result = $searcher.Search("IsInstalled=0 AND Type='Software'")
+$updates = $result.Updates
+
+if ($updates.Count -eq 0) {
+    Write-Output "No updates available."
+    exit 0
+}
+
+Write-Output "$($updates.Count) update(s) found:"
+foreach ($u in $updates) { Write-Output "  - $($u.Title)" }
+
+Write-Output ""
+Write-Output "Downloading..."
+$downloader = $session.CreateUpdateDownloader()
+$downloader.Updates = $updates
+$downloader.Download() | Out-Null
+
+Write-Output "Installing..."
+$installer = $session.CreateUpdateInstaller()
+$installer.Updates = $updates
+$installResult = $installer.Install()
+
+Write-Output ""
+Write-Output "Result: $($installResult.ResultCode)"
+for ($i = 0; $i -lt $updates.Count; $i++) {
+    $r = $installResult.GetUpdateResult($i)
+    Write-Output "  [$($r.ResultCode)] $($updates.Item($i).Title)"
+}
+
+if ($installResult.RebootRequired) {
+    Write-Output ""
+    Write-Output "Reboot required - restarting in 60 seconds..."
+    shutdown /r /t 60 /c "UniCentral: Neustart nach Windows Update"
 } else {
+    Write-Output ""
     Write-Output "No reboot required."
 }
-Write-Output "Done."
 `
-		cmd = exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command", script)
+		cmd = exec.Command("powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script)
 	} else {
 		if _, err := exec.LookPath("apt-get"); err == nil {
 			cmd = exec.Command("bash", "-c", "apt-get update && apt-get upgrade -y && [ -f /var/run/reboot-required ] && shutdown -r +1 'UniCentral: Reboot after updates' || echo 'No reboot required'")
