@@ -655,11 +655,11 @@
                         </div>
                     </div>
                     <div class="card" style="padding:0;overflow:hidden">
-                        <div ref="logContainer" style="background:#0d1117;height:620px;overflow-y:auto;font-family:monospace;font-size:0.775rem;padding:0.6rem 0.8rem;line-height:1.55">
-                            <div v-for="(e, i) in filteredLogEntries" :key="i" style="display:flex;gap:0.6rem;padding:0.5px 0" :style="{color: logLineColor(e)}">
+                        <div ref="logContainer" style="background:#0d1117;height:620px;overflow-y:auto;overflow-x:hidden;font-family:monospace;font-size:0.775rem;padding:0.6rem 0.8rem;line-height:1.55">
+                            <div v-for="(e, i) in filteredLogEntries" :key="i" style="display:flex;gap:0.6rem;padding:0.5px 0;min-width:0" :style="{color: logLineColor(e)}">
                                 <span style="color:#475569;flex-shrink:0;user-select:none">{{ formatLogTime(e.ts) }}</span>
                                 <span style="flex-shrink:0;width:2.2rem;text-align:right;font-weight:600;user-select:none" :style="{color: e.level==='error'?'#f87171':e.level==='warn'?'#fbbf24':'#6b7280'}">{{ e.level === 'error' ? 'ERR' : e.level === 'warn' ? 'WRN' : 'INF' }}</span>
-                                <span style="white-space:pre-wrap;word-break:break-all;flex:1">{{ e.text }}</span>
+                                <span style="flex:1;min-width:0;word-break:break-all;overflow-wrap:anywhere">{{ e.text }}</span>
                             </div>
                             <div v-if="!filteredLogEntries.length" style="color:#475569;padding:1rem 0;text-align:center">Keine Log-Eintraege vorhanden.</div>
                         </div>
