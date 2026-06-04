@@ -362,6 +362,24 @@ function handleCommandResult(machineId, payload) {
         console.error('[WS] handleCommandResult DB error:', err.message);
     }
 
+    // Clear the stored pending-update count immediately after a successful update
+    // so the Updates tab shows "Aktuell" without waiting for the next telemetry cycle.
+    if (status === 'completed' && ['trigger_updates', 'trigger_updates_reboot'].includes(commandType)) {
+        try {
+            const latestTel = db.prepare(
+                'SELECT id, data_json FROM machine_telemetry WHERE machine_id = ? ORDER BY collected_at DESC LIMIT 1'
+            ).get(machineId);
+            if (latestTel) {
+                const data = JSON.parse(latestTel.data_json || '{}');
+                data.updates = { available: 0, pending: [], reboot_required: false };
+                db.prepare('UPDATE machine_telemetry SET data_json = ? WHERE id = ?')
+                    .run(JSON.stringify(data), latestTel.id);
+            }
+        } catch (err) {
+            console.error('[WS] Error clearing update count:', err.message);
+        }
+    }
+
     broadcastToDashboards({ type: 'command_result', machineId, data: { ...payload, command_type: commandType } });
 }
 
