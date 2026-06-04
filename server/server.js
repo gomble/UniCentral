@@ -169,7 +169,8 @@ Write-Host "Downloading agent binary..." -ForegroundColor Cyan
 Invoke-WebRequest -Uri "$Server/api/agent/download/windows/amd64" -OutFile "$InstallDir\\unicentral-agent.exe" -UseBasicParsing
 
 $json = '{"server":"' + $Server + '","enrollment_key":"' + $Key + '","category":"' + $Category + '"}'
-Set-Content -Path "$ConfigDir\\config.json" -Value $json -Encoding UTF8
+$utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+[System.IO.File]::WriteAllText("$ConfigDir\\config.json", $json, $utf8NoBom)
 
 Write-Host "Registering and starting service..." -ForegroundColor Cyan
 & "$InstallDir\\unicentral-agent.exe" --install --config "$ConfigDir\\config.json"
