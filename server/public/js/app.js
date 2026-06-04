@@ -302,11 +302,18 @@ createApp({
             view.value = target;
             if (target === 'machine-detail' && id) {
                 loadMachineDetail(id);
+            } else if (target === 'machines' || target === 'dashboard') {
+                disconnectLogStream();
+                loadMachines();
+                loadStats();
             } else if (target === 'command-history') {
+                disconnectLogStream();
                 loadCommandHistory();
             } else if (target === 'updates') {
+                disconnectLogStream();
                 loadUpdatesMachines();
             } else if (target === 'ad-admin') {
+                disconnectLogStream();
                 loadADDomainControllers();
                 loadADTemplates();
             } else if (target === 'logs') {
