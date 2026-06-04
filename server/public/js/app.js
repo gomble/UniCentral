@@ -1,5 +1,15 @@
 const { createApp, ref, reactive, onMounted, onUnmounted, computed } = Vue;
 
+// Wrapper around fetch that redirects to /login.html on 401 (expired session).
+async function apiFetch(url, options) {
+    const res = await fetch(url, options);
+    if (res.status === 401) {
+        window.location.href = '/login.html';
+        return new Response('{}', { status: 401 });
+    }
+    return res;
+}
+
 createApp({
     setup() {
         const view = ref('dashboard');
@@ -116,8 +126,10 @@ createApp({
             ws = new WebSocket(`${protocol}//${window.location.host}/ws/dashboard`);
 
             ws.onmessage = (event) => {
-                const data = JSON.parse(event.data);
-                handleWsEvent(data);
+                try {
+                    const data = JSON.parse(event.data);
+                    handleWsEvent(data);
+                } catch {}
             };
 
             ws.onclose = () => {
@@ -163,13 +175,13 @@ createApp({
         }
 
         async function loadGroups() {
-            const res = await fetch('/api/machines/groups/list');
+            const res = await apiFetch('/api/machines/groups/list');
             if (res.ok) groups.value = await res.json();
         }
 
         async function addGroup() {
             if (!newGroupName.value) return;
-            await fetch('/api/machines/groups', {
+            await apiFetch('/api/machines/groups', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ name: newGroupName.value })
@@ -180,13 +192,13 @@ createApp({
 
         async function deleteGroup(id) {
             if (!await confirmDialog('Gruppe entfernen?')) return;
-            await fetch(`/api/machines/groups/${id}`, { method: 'DELETE' });
+            await apiFetch(`/api/machines/groups/${id}`, { method: 'DELETE' });
             await loadGroups();
             await loadMachines();
         }
 
         async function assignGroup(machineId, groupId) {
-            await fetch(`/api/machines/${machineId}`, {
+            await apiFetch(`/api/machines/${machineId}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ group_id: groupId || null })
@@ -195,7 +207,7 @@ createApp({
         }
 
         async function loadMachines() {
-            const res = await fetch('/api/machines');
+            const res = await apiFetch('/api/machines');
             if (res.ok) {
                 machines.value = await res.json();
                 loadDashboardTelemetry();
@@ -203,7 +215,7 @@ createApp({
         }
 
         async function loadDashboardTelemetry() {
-            const res = await fetch('/api/monitoring/dashboard-telemetry');
+            const res = await apiFetch('/api/monitoring/dashboard-telemetry');
             if (res.ok) {
                 const tel = await res.json();
                 for (const m of machines.value) {
@@ -213,17 +225,17 @@ createApp({
         }
 
         async function loadStats() {
-            const res = await fetch('/api/monitoring/overview');
+            const res = await apiFetch('/api/monitoring/overview');
             if (res.ok) stats.value = await res.json();
         }
 
         async function loadAlerts() {
-            const res = await fetch('/api/monitoring/alerts');
+            const res = await apiFetch('/api/monitoring/alerts');
             if (res.ok) alerts.value = await res.json();
         }
 
         async function loadSettings() {
-            const res = await fetch('/api/settings');
+            const res = await apiFetch('/api/settings');
             if (res.ok) {
                 const data = await res.json();
                 Object.assign(settingsForm, data);
@@ -241,7 +253,7 @@ createApp({
         }
 
         async function loadMachineDetail(id) {
-            const res = await fetch(`/api/machines/${id}`);
+            const res = await apiFetch(`/api/machines/${id}`);
             if (res.ok) {
                 selectedMachine.value = await res.json();
                 const mid = selectedMachine.value.machine_id;
@@ -266,7 +278,7 @@ createApp({
         async function loadTelemetryHistory() {
             if (!selectedMachine.value) return;
             const mid = selectedMachine.value.machine_id;
-            const res = await fetch(`/api/monitoring/machines/${mid}/telemetry?range=${telemetryRange.value}`);
+            const res = await apiFetch(`/api/monitoring/machines/${mid}/telemetry?range=${telemetryRange.value}`);
             if (res.ok) {
                 telemetryHistory.value = await res.json();
                 setTimeout(() => drawChart(), 50);
@@ -343,7 +355,7 @@ createApp({
         }
 
         async function addMachine() {
-            const res = await fetch('/api/machines', {
+            const res = await apiFetch('/api/machines', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(newMachine)
@@ -361,7 +373,7 @@ createApp({
 
         async function deleteMachine(m) {
             if (!await confirmDialog('Maschine "' + m.hostname + '" wirklich entfernen?')) return;
-            await fetch(`/api/machines/${m.id}`, { method: 'DELETE' });
+            await apiFetch(`/api/machines/${m.id}`, { method: 'DELETE' });
             await loadMachines();
             await loadStats();
         }
@@ -375,7 +387,7 @@ createApp({
             if (!selectedMachine.value) return;
             if (!await confirmDialog(type === 'restart' ? 'Neustart ausfuehren?' : 'Herunterfahren ausfuehren?')) return;
 
-            await fetch(`/api/commands/${selectedMachine.value.machine_id}/${type}`, {
+            await apiFetch(`/api/commands/${selectedMachine.value.machine_id}/${type}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({})
@@ -393,7 +405,7 @@ createApp({
 
         async function saveEditMachine() {
             if (!selectedMachine.value) return;
-            await fetch(`/api/machines/${selectedMachine.value.id}`, {
+            await apiFetch(`/api/machines/${selectedMachine.value.id}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(editMachineForm)
@@ -409,7 +421,7 @@ createApp({
             const msg = mode === 'reboot' ? 'Updates installieren und danach neustarten?' : 'Updates installieren (ohne Neustart)?';
             if (!await confirmDialog(msg)) return;
             liveCommand.value = { command_id: null, status: 'sent', result: 'Update-Befehl gesendet, warte auf Agent...', machine_id: selectedMachine.value.machine_id };
-            const res = await fetch(`/api/commands/${selectedMachine.value.machine_id}/${endpoint}`, {
+            const res = await apiFetch(`/api/commands/${selectedMachine.value.machine_id}/${endpoint}`, {
                 method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}'
             });
             try {
@@ -423,7 +435,7 @@ createApp({
         async function scheduleUpdates() {
             if (!selectedMachine.value || !scheduleTime.value) return;
             if (!await confirmDialog('Updates + Neustart fuer ' + scheduleTime.value + ' Uhr planen?')) return;
-            await fetch(`/api/commands/${selectedMachine.value.machine_id}/schedule-updates`, {
+            await apiFetch(`/api/commands/${selectedMachine.value.machine_id}/schedule-updates`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ time: scheduleTime.value })
@@ -434,7 +446,7 @@ createApp({
         async function updateAgent() {
             if (!selectedMachine.value) return;
 
-            const res = await fetch('/api/deploy/update-agent', {
+            const res = await apiFetch('/api/deploy/update-agent', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ machine_id: selectedMachine.value.machine_id })
@@ -445,7 +457,7 @@ createApp({
                 toast('Update-Befehl gesendet. Agent startet neu.', 'success');
             } else if (data.error && data.error.includes('unknown command')) {
                 // Old agent doesn't support update_agent - show manual command
-                const manRes = await fetch('/api/deploy/update-agent-manual', {
+                const manRes = await apiFetch('/api/deploy/update-agent-manual', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ machine_id: selectedMachine.value.machine_id })
@@ -459,7 +471,7 @@ createApp({
         }
 
         async function saveSettings() {
-            const res = await fetch('/api/settings', {
+            const res = await apiFetch('/api/settings', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(settingsForm)
@@ -470,7 +482,7 @@ createApp({
         async function testEmail() {
             const to = prompt('Email-Adresse fuer Testmail:');
             if (!to) return;
-            const res = await fetch('/api/settings/test-email', {
+            const res = await apiFetch('/api/settings/test-email', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ to })
@@ -480,7 +492,7 @@ createApp({
         }
 
         async function loadOnlineAgents() {
-            const res = await fetch('/api/deploy/online-agents');
+            const res = await apiFetch('/api/deploy/online-agents');
             if (res.ok) onlineAgents.value = await res.json();
         }
 
@@ -492,7 +504,7 @@ createApp({
             deployTargets.value = [];
             deployResult.value = null;
 
-            const res = await fetch('/api/deploy/scan-network', {
+            const res = await apiFetch('/api/deploy/scan-network', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ relay_machine_id: deployForm.relay_machine_id })
@@ -504,7 +516,7 @@ createApp({
                 const cmdId = data.command_id;
                 for (let i = 0; i < 30; i++) {
                     await new Promise(r => setTimeout(r, 2000));
-                    const checkRes = await fetch(`/api/commands/${deployForm.relay_machine_id}/history`);
+                    const checkRes = await apiFetch(`/api/commands/${deployForm.relay_machine_id}/history`);
                     if (checkRes.ok) {
                         const cmds = await checkRes.json();
                         const cmd = cmds.find(c => c.id === cmdId);
@@ -550,7 +562,7 @@ createApp({
 
             const targets = scanResults.value.filter(h => deployTargets.value.includes(h.ip));
 
-            const res = await fetch('/api/deploy/batch-deploy', {
+            const res = await apiFetch('/api/deploy/batch-deploy', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -575,7 +587,7 @@ createApp({
                 return;
             }
             deployResult.value = null;
-            const res = await fetch('/api/deploy/deploy', {
+            const res = await apiFetch('/api/deploy/deploy', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(deployForm)
@@ -589,11 +601,11 @@ createApp({
         }
 
         async function loadVeeamInstances() {
-            const res = await fetch('/api/veeam/instances');
+            const res = await apiFetch('/api/veeam/instances');
             if (res.ok) {
                 const instances = await res.json();
                 for (const inst of instances) {
-                    const jobsRes = await fetch(`/api/veeam/instances/${inst.id}/jobs`);
+                    const jobsRes = await apiFetch(`/api/veeam/instances/${inst.id}/jobs`);
                     inst.jobs = jobsRes.ok ? await jobsRes.json() : [];
                 }
                 veeamInstances.value = instances;
@@ -604,7 +616,7 @@ createApp({
             if (!newVeeam.name || !newVeeam.base_url || !newVeeam.username || !newVeeam.password) {
                 toast('Alle Felder ausfuellen', 'error'); return;
             }
-            const res = await fetch('/api/veeam/instances', {
+            const res = await apiFetch('/api/veeam/instances', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(newVeeam)
@@ -621,13 +633,13 @@ createApp({
 
         async function deleteVeeamInstance(id) {
             if (!await confirmDialog('Veeam-Instanz wirklich entfernen?')) return;
-            await fetch(`/api/veeam/instances/${id}`, { method: 'DELETE' });
+            await apiFetch(`/api/veeam/instances/${id}`, { method: 'DELETE' });
             await loadVeeamInstances();
         }
 
         async function regenerateEnrollmentKey() {
             if (!await confirmDialog('Enrollment Key neu generieren? Bestehende Install-Befehle werden ungueltig.')) return;
-            const res = await fetch('/api/settings/regenerate-enrollment-key', { method: 'POST' });
+            const res = await apiFetch('/api/settings/regenerate-enrollment-key', { method: 'POST' });
             const data = await res.json();
             if (data.enrollmentKey) {
                 settingsForm.enrollmentKey = data.enrollmentKey;
@@ -651,7 +663,7 @@ createApp({
             if (!await confirmDialog(type + ' auf ' + online.length + ' Maschine(n) ausfuehren?')) return;
 
             for (const mid of online) {
-                await fetch(`/api/commands/${mid}/${type}`, {
+                await apiFetch(`/api/commands/${mid}/${type}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({})
@@ -669,7 +681,7 @@ createApp({
             if (!online.length) { toast('Keine der ausgewaehlten Maschinen ist online.', 'error'); return; }
 
             for (const mid of online) {
-                await fetch(`/api/commands/${mid}/install-software`, {
+                await apiFetch(`/api/commands/${mid}/install-software`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ package_name: batchInstallPkg.value, method: batchInstallMethod.value })
@@ -681,12 +693,12 @@ createApp({
         }
 
         async function loadCommandHistory() {
-            const res = await fetch('/api/commands/history');
+            const res = await apiFetch('/api/commands/history');
             if (res.ok) commandHistory.value = await res.json();
         }
 
         async function acknowledgeAlert(id) {
-            await fetch(`/api/monitoring/alerts/${id}/acknowledge`, { method: 'POST' });
+            await apiFetch(`/api/monitoring/alerts/${id}/acknowledge`, { method: 'POST' });
             await loadAlerts();
         }
 

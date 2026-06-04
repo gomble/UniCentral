@@ -6,6 +6,7 @@ const path = require('path');
 const { config } = require('./config');
 const { isSetupComplete } = require('./auth');
 const { initAgentWebSocket } = require('./ws/agent-handler');
+const SQLiteStore = require('./session-store');
 
 const app = express();
 const server = http.createServer(app);
@@ -15,6 +16,7 @@ app.use(compression());
 app.use(express.json());
 
 const sessionMiddleware = session({
+    store: new SQLiteStore(),
     secret: config.sessionSecret,
     resave: false,
     saveUninitialized: false,
