@@ -11,7 +11,7 @@ router.get('/dashboard-telemetry', (req, res) => {
     const result = {};
     for (const m of machines) {
         const tel = db.prepare(`
-            SELECT cpu_percent, memory_percent, data_json FROM machine_telemetry
+            SELECT cpu_percent, memory_percent, uptime_seconds, data_json FROM machine_telemetry
             WHERE machine_id = ? ORDER BY collected_at DESC LIMIT 1
         `).get(m.machine_id);
         if (tel) {

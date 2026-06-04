@@ -1167,16 +1167,33 @@
 
                 <div v-if="adUserFormTab === 'groups'">
                     <div v-if="adGroups.length">
-                        <p style="font-size:0.8rem;color:var(--text-muted);margin-bottom:0.6rem">{{ adUserForm.groups.length }} Gruppe(n) ausgewählt</p>
-                        <div style="max-height:320px;overflow-y:auto;display:flex;flex-direction:column;gap:0.15rem">
-                            <label v-for="g in adGroups" :key="g.sam_account_name" style="display:flex;align-items:center;gap:0.6rem;cursor:pointer;padding:0.35rem 0.5rem;border-radius:4px;transition:background 0.1s" :style="{background: adUserForm.groups.includes(g.sam_account_name) ? 'var(--bg-secondary)' : 'transparent'}">
-                                <input type="checkbox" :value="g.sam_account_name" v-model="adUserForm.groups">
-                                <div>
-                                    <div style="font-size:0.85rem">{{ g.name || g.sam_account_name }}</div>
-                                    <div v-if="g.description" style="font-size:0.72rem;color:var(--text-muted)">{{ g.description }}</div>
+                        <!-- Selected groups as removable chips -->
+                        <div style="margin-bottom:0.8rem">
+                            <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:0.35rem">Ausgewählt ({{ adUserForm.groups.length }}):</div>
+                            <div style="display:flex;flex-wrap:wrap;gap:0.3rem;min-height:1.8rem">
+                                <span v-for="g in adUserForm.groups" :key="g" style="display:inline-flex;align-items:center;gap:0.25rem;background:var(--accent);color:#fff;padding:0.18rem 0.5rem 0.18rem 0.7rem;border-radius:12px;font-size:0.8rem">
+                                    {{ g }}
+                                    <span @click="removeFromADGroup(g)" style="cursor:pointer;font-size:1rem;line-height:1;opacity:0.75;padding:0 0.1rem">&times;</span>
+                                </span>
+                                <span v-if="!adUserForm.groups.length" style="font-size:0.8rem;color:var(--text-muted);font-style:italic">Keine Gruppen ausgewählt</span>
+                            </div>
+                        </div>
+                        <!-- Search -->
+                        <input v-model="adGroupSearch" placeholder="Gruppe suchen..." style="width:100%;background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);border-radius:var(--radius);padding:0.4rem 0.7rem;font-size:0.85rem;margin-bottom:0.5rem;box-sizing:border-box">
+                        <!-- Groups list -->
+                        <div style="border:1px solid var(--border);border-radius:var(--radius);max-height:260px;overflow-y:auto">
+                            <label v-for="g in adGroupsFiltered" :key="g.sam_account_name" style="display:flex;align-items:center;gap:0.6rem;padding:0.45rem 0.7rem;cursor:pointer;border-bottom:1px solid var(--border)" :style="{background: adUserForm.groups.includes(g.sam_account_name) ? 'rgba(59,130,246,0.08)' : 'transparent'}">
+                                <input type="checkbox" :value="g.sam_account_name" v-model="adUserForm.groups" style="flex-shrink:0">
+                                <div style="flex:1;min-width:0">
+                                    <div style="font-size:0.85rem;font-weight:500">{{ g.name || g.sam_account_name }}</div>
+                                    <div v-if="g.description" style="font-size:0.72rem;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ g.description }}</div>
                                 </div>
-                                <span style="margin-left:auto;font-size:0.7rem;color:var(--text-muted)">{{ g.scope }}</span>
+                                <div style="display:flex;gap:0.3rem;flex-shrink:0">
+                                    <span style="font-size:0.67rem;padding:1px 5px;border-radius:3px;background:var(--bg-primary);color:var(--text-muted)">{{ g.scope }}</span>
+                                    <span style="font-size:0.67rem;padding:1px 5px;border-radius:3px" :style="{background: g.category === 'Security' ? 'rgba(239,68,68,0.12)' : 'rgba(59,130,246,0.12)', color: g.category === 'Security' ? '#f87171' : '#60a5fa'}">{{ g.category }}</span>
+                                </div>
                             </label>
+                            <div v-if="!adGroupsFiltered.length" style="padding:0.8rem;text-align:center;color:var(--text-muted);font-size:0.85rem">Keine Gruppen gefunden.</div>
                         </div>
                     </div>
                     <p v-else style="color:var(--text-muted)">Keine Gruppen geladen. Bitte "Gruppen laden" im Hauptbereich klicken.</p>

@@ -934,6 +934,22 @@ createApp({
         });
         const adTemplateForm = reactive({ name: '', description: '' });
 
+        const adGroupSearch = ref('');
+
+        const adGroupsFiltered = computed(() => {
+            if (!adGroupSearch.value) return adGroups.value;
+            const q = adGroupSearch.value.toLowerCase();
+            return adGroups.value.filter(g =>
+                (g.sam_account_name || '').toLowerCase().includes(q) ||
+                (g.name || '').toLowerCase().includes(q) ||
+                (g.description || '').toLowerCase().includes(q)
+            );
+        });
+
+        function removeFromADGroup(groupName) {
+            adUserForm.groups = adUserForm.groups.filter(g => g !== groupName);
+        }
+
         const adFilteredUsers = computed(() => {
             if (!adUserSearch.value) return adUsers.value;
             const q = adUserSearch.value.toLowerCase();
@@ -1046,6 +1062,12 @@ createApp({
             adUserFormMode.value = 'duplicate';
             adUserFormTab.value = 'general';
             adEditingUser.value = null;
+            let ou = '';
+            if (user.distinguished_name) {
+                const parts = user.distinguished_name.split(',');
+                const ouStart = parts.findIndex(p => /^(ou|dc)=/i.test(p));
+                if (ouStart > 0) ou = parts.slice(ouStart).join(',');
+            }
             Object.assign(adUserForm, {
                 sam_account_name: '', given_name: '', surname: '', display_name: '',
                 password: '', email: '', upn: '',
@@ -1053,7 +1075,7 @@ createApp({
                 title: user.title || '',
                 company: user.company || '',
                 description: user.description || '',
-                office_phone: '', mobile_phone: '', ou: '',
+                office_phone: '', mobile_phone: '', ou,
                 enabled: user.enabled !== false,
                 password_never_expires: user.password_never_expires || false,
                 change_password_at_logon: true,
@@ -1189,6 +1211,7 @@ createApp({
             adDomainControllers, adSelectedDC, adUsers, adGroups, adUsersLoading, adUsersOutput,
             adTemplates, showADUserModal, showADTemplatesModal, adUserSearch, adUserFormMode,
             adUserFormTab, adEditingUser, adUserForm, adTemplateForm, adFilteredUsers,
+            adGroupSearch, adGroupsFiltered, removeFromADGroup,
             loadADDomainControllers, loadADUsers, loadADGroups,
             openCreateADUser, openEditADUser, openDuplicateADUser, saveADUser, confirmDeleteADUser,
             loadADTemplates, deleteADTemplate, applyADTemplate, saveADTemplateFromForm, adAutoDisplayName,
