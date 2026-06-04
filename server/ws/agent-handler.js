@@ -149,6 +149,7 @@ function handleAgentConnection(ws, request) {
                 .run('online', machineId);
             broadcastToDashboards({ type: 'machine_connected', machineId });
         } else {
+            console.log(`[WS] Legacy reconnect rejected: machine_id=${machineId} not in DB - stale config on agent`);
             ws.send(createMessage(MSG_TYPES.ERROR, { message: 'Unknown machine' }));
             ws.close();
         }
@@ -157,9 +158,17 @@ function handleAgentConnection(ws, request) {
 
 function handleRegister(ws, key, payload) {
     const { hostname, os_type, os_version, agent_version, ip_addresses, category } = payload;
-    console.log(`[WS] Register attempt: hostname=${hostname}, os=${os_type}, key_match=${key === config.enrollmentKey}`);
+    const keyProvided = key ? key.slice(0, 8) + '...' : 'none';
+    const keyMatch = key === config.enrollmentKey;
+    console.log(`[WS] Register attempt: hostname=${hostname}, os=${os_type}, key=${keyProvided}, match=${keyMatch}`);
 
     // Validate enrollment key or legacy token
+    if (!key) {
+        console.log(`[WS] Register rejected: no key provided (hostname=${hostname})`);
+        ws.send(createMessage(MSG_TYPES.ERROR, { message: 'No enrollment key provided' }));
+        ws.close();
+        return;
+    }
     if (key === config.enrollmentKey) {
         try {
         // Self-registration with enrollment key - create machine automatically

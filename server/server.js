@@ -128,18 +128,40 @@ $ConfigDir = "C:\\ProgramData\\UniCentral"
 
 Write-Host "Installing UniCentral Agent..." -ForegroundColor Cyan
 
+# Stop and remove any existing installation first
+$svc = Get-Service -Name UniCentralAgent -ErrorAction SilentlyContinue
+if ($svc) {
+    Write-Host "Stopping existing service..." -ForegroundColor Yellow
+    Stop-Service -Name UniCentralAgent -Force -ErrorAction SilentlyContinue
+    Start-Sleep -Seconds 2
+    if (Test-Path "$InstallDir\\unicentral-agent.exe") {
+        & "$InstallDir\\unicentral-agent.exe" --uninstall 2>$null
+        Start-Sleep -Seconds 1
+    }
+}
+
 New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
 New-Item -ItemType Directory -Force -Path $ConfigDir | Out-Null
 
+Write-Host "Downloading agent binary..." -ForegroundColor Cyan
 Invoke-WebRequest -Uri "$Server/api/agent/download/windows/amd64" -OutFile "$InstallDir\\unicentral-agent.exe" -UseBasicParsing
 
 $json = '{"server":"' + $Server + '","enrollment_key":"' + $Key + '","category":"' + $Category + '"}'
 Set-Content -Path "$ConfigDir\\config.json" -Value $json -Encoding UTF8
 
+Write-Host "Registering and starting service..." -ForegroundColor Cyan
 & "$InstallDir\\unicentral-agent.exe" --install --config "$ConfigDir\\config.json"
+Start-Sleep -Seconds 1
 Start-Service UniCentralAgent
+Start-Sleep -Seconds 3
 
-Write-Host "UniCentral Agent installed and running!" -ForegroundColor Green
+$svc = Get-Service -Name UniCentralAgent -ErrorAction SilentlyContinue
+if ($svc -and $svc.Status -eq 'Running') {
+    Write-Host "UniCentral Agent installed and running!" -ForegroundColor Green
+} else {
+    Write-Host "WARNING: Service may not be running. Status: $($svc.Status)" -ForegroundColor Red
+    Write-Host "Check Event Viewer > Windows Logs > Application for errors." -ForegroundColor Yellow
+}
 `;
 }
 
