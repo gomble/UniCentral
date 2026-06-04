@@ -41,7 +41,7 @@ func main() {
 	server := flag.String("server", "", "Server URL for registration")
 	token := flag.String("token", "", "Registration token (legacy)")
 	enrollmentKey := flag.String("enrollment-key", "", "Enrollment key for auto-registration")
-	category := flag.String("category", "client", "Machine category: server or client")
+	category := flag.String("category", "", "Machine category: server or client")
 	showVersion := flag.Bool("version", false, "Show version")
 	flag.Parse()
 
