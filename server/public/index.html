@@ -937,6 +937,11 @@
             <div class="modal" style="max-width:650px">
                 <h2>Remote Agent Deploy</h2>
 
+                <div style="background:rgba(251,191,36,0.08);border:1px solid rgba(251,191,36,0.3);border-radius:var(--radius);padding:0.5rem 0.8rem;font-size:0.8rem;color:#fde68a;margin-bottom:1rem">
+                    <strong>Voraussetzung:</strong> WinRM muss auf den Zielrechnern aktiv sein.<br>
+                    Als Admin auf dem Ziel ausfuehren: <code style="background:rgba(0,0,0,0.3);padding:1px 4px;border-radius:3px">Enable-PSRemoting -Force</code>
+                </div>
+
                 <!-- Step 1: Select relay and scan -->
                 <div class="form-group">
                     <label>Relay-Agent (fuehrt Scan + Installation aus)</label>
@@ -1014,8 +1019,15 @@
                     </div>
                 </div>
 
-                <div v-if="deployResult" :style="{color: deployResult.success ? 'var(--success)' : 'var(--danger)', marginTop: '0.8rem', fontSize: '0.85rem'}">
-                    {{ deployResult.message }}
+                <div v-if="deployResult" style="margin-top:0.8rem;font-size:0.85rem">
+                    <div :style="{color: deployResult.success ? 'var(--success)' : 'var(--danger)'}">{{ deployResult.message }}</div>
+                    <div v-if="deployResult.details && deployResult.details.length" style="margin-top:0.5rem;max-height:150px;overflow-y:auto;background:var(--bg-primary);border-radius:4px;padding:0.5rem">
+                        <div v-for="r in deployResult.details" :key="r.ip" style="display:flex;gap:0.5rem;padding:0.2rem 0;font-size:0.78rem;font-family:monospace">
+                            <span :style="{color: r.success ? 'var(--success)' : 'var(--danger)'}">{{ r.success ? '✓' : '✗' }}</span>
+                            <span style="color:var(--text-secondary);min-width:110px">{{ r.ip }}</span>
+                            <span style="color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.message }}</span>
+                        </div>
+                    </div>
                 </div>
                 <div class="modal-actions">
                     <button class="btn btn-ghost" @click="showDeployModal = false; scanResults = []; scanDone = false; deployTargets = []">Schliessen</button>

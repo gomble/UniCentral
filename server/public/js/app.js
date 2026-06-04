@@ -49,6 +49,7 @@ createApp({
             username: '', password: '', category: 'client'
         });
         const deployResult = ref(null);
+        const deployCommandMap = ref({});
         const showBatchInstall = ref(false);
         const batchInstallPkg = ref('');
         const batchInstallMethod = ref('auto');
@@ -214,6 +215,20 @@ createApp({
                 loadUpdatesMachines();
                 if (updatesLogMachine.value && updatesLogMachine.value.machine_id === data.machineId) {
                     loadMachineUpdateLogs(data.machineId);
+                }
+            }
+
+            // Update deploy modal results
+            if (p.command_id && deployCommandMap.value[p.command_id] && deployResult.value && deployResult.value.details) {
+                const ip = deployCommandMap.value[p.command_id];
+                const d = deployResult.value.details.find(x => x.ip === ip);
+                if (d && (p.status === 'completed' || p.status === 'failed')) {
+                    d.success = p.status === 'completed';
+                    d.message = p.result || p.status;
+                    const done = deployResult.value.details.filter(x => x.success !== null).length;
+                    const ok = deployResult.value.details.filter(x => x.success === true).length;
+                    deployResult.value.message = `${done}/${deployResult.value.details.length} abgeschlossen, ${ok} erfolgreich`;
+                    if (done === deployResult.value.details.length) loadMachines();
                 }
             }
 
@@ -749,7 +764,12 @@ createApp({
             });
             const data = await res.json();
             if (data.success) {
-                deployResult.value = { success: true, message: `Deploy gestartet fuer ${data.results.length} Maschine(n). Sie erscheinen in Kuerze im Dashboard.` };
+                const details = data.results.map(r => ({ ip: r.ip, command_id: r.command_id, success: null, message: 'Läuft...' }));
+                deployResult.value = { success: true, message: `Deploy läuft auf ${data.results.length} Maschine(n)...`, details };
+                deployCommandMap.value = {};
+                for (const r of data.results) {
+                    if (r.command_id) deployCommandMap.value[r.command_id] = r.ip;
+                }
                 deployTargets.value = [];
             } else {
                 deployResult.value = { success: false, message: data.error || 'Batch-Deploy fehlgeschlagen' };
@@ -1292,7 +1312,7 @@ createApp({
             updatesScheduleMachine, updatesScheduleForm, openScheduleModal, saveSchedule, removeSchedule,
             setBatchSchedule, updatesLiveStreams,
             showDeployModal, onlineAgents, scanning, scanDone, scanResults, deployTargets,
-            deployForm, deployResult, scanNetwork, toggleAllScan, executeBatchDeploy, executeDeploy,
+            deployForm, deployResult, deployCommandMap, scanNetwork, toggleAllScan, executeBatchDeploy, executeDeploy,
             addVeeamInstance, deleteVeeamInstance,
             saveSettings, testEmail, regenerateEnrollmentKey, acknowledgeAlert, logout,
             loadTelemetryHistory, formatTime, formatBytes, diskPercent, formatUptime,
