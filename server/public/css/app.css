@@ -302,6 +302,20 @@ body {
 .status-badge.warning { color: var(--warning); background: rgba(245,158,11,0.1); }
 .status-badge.warning::before { background: var(--warning); }
 
+/* Animated pulse dot for live / running states */
+.pulse-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--accent);
+    animation: pulse 1.4s ease-in-out infinite;
+}
+@keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50%       { opacity: 0.4; transform: scale(0.75); }
+}
+
 /* OS Badge */
 .os-badge {
     font-size: 0.75rem;

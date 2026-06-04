@@ -55,6 +55,19 @@ createApp({
         const selectedMachines = ref([]);
         const commandHistory = ref([]);
         const liveCommand = ref(null);
+
+        // Updates tab state
+        const updatesOsTab = ref('windows');
+        const updatesMachines = ref([]);
+        const updatesSelected = ref([]);
+        const updatesBatchTime = ref('');
+        const updatesBatchReboot = ref(true);
+        const updatesLogMachine = ref(null);
+        const updatesLogs = ref([]);
+        const updatesLogsLoading = ref(false);
+        const updatesScheduleMachine = ref(null);
+        const updatesScheduleForm = reactive({ time: '', reboot: true });
+        const updatesLiveStreams = ref({});
         const tokenMachine = ref({});
         const selectedMachine = ref(null);
         const machineDisks = ref([]);
@@ -151,7 +164,8 @@ createApp({
 
         function handleCommandResultEvent(data) {
             const p = data.data || {};
-            // Live progress for the running command, shown in the machine detail view.
+
+            // Live progress for machine-detail view
             if (selectedMachine.value && selectedMachine.value.machine_id === data.machineId) {
                 if (!liveCommand.value || liveCommand.value.command_id === p.command_id || p.status === 'running') {
                     liveCommand.value = {
@@ -162,7 +176,23 @@ createApp({
                     };
                 }
             }
-            // Keep the command history view in sync without a manual refresh.
+
+            // Track live streams for Updates tab (all command types)
+            updatesLiveStreams.value = {
+                ...updatesLiveStreams.value,
+                [data.machineId]: { command_id: p.command_id, status: p.status, output: p.result || '' }
+            };
+
+            // On terminal status: refresh the updates machine list row + logs if open
+            const isUpdateCmd = ['trigger_updates', 'trigger_updates_reboot'].includes(p.command_type);
+            if (isUpdateCmd && (p.status === 'completed' || p.status === 'failed')) {
+                loadUpdatesMachines();
+                if (updatesLogMachine.value && updatesLogMachine.value.machine_id === data.machineId) {
+                    loadMachineUpdateLogs(data.machineId);
+                }
+            }
+
+            // Keep command history in sync
             const row = commandHistory.value.find(c => c.id === p.command_id);
             if (row) {
                 row.status = p.status;
@@ -249,7 +279,113 @@ createApp({
                 loadMachineDetail(id);
             } else if (target === 'command-history') {
                 loadCommandHistory();
+            } else if (target === 'updates') {
+                loadUpdatesMachines();
             }
+        }
+
+        async function loadUpdatesMachines() {
+            const res = await apiFetch('/api/updates/machines');
+            if (res.ok) updatesMachines.value = await res.json();
+        }
+
+        const updatesFilteredMachines = computed(() =>
+            updatesMachines.value.filter(m => m.os_type === updatesOsTab.value)
+        );
+
+        function updatesToggleAll(e) {
+            const ids = updatesFilteredMachines.value.map(m => m.machine_id);
+            updatesSelected.value = e.target.checked ? ids : [];
+        }
+
+        async function triggerBatchUpdates() {
+            const online = updatesSelected.value.filter(mid => {
+                const m = updatesMachines.value.find(x => x.machine_id === mid);
+                return m && m.status === 'online';
+            });
+            if (!online.length) { toast('Keine der ausgewählten Maschinen ist online.', 'error'); return; }
+            const label = updatesBatchReboot.value ? 'Updates installieren + Neustart bei Bedarf' : 'Updates installieren (ohne Neustart)';
+            if (!await confirmDialog(`${label} auf ${online.length} Maschine(n)?`)) return;
+
+            const res = await apiFetch('/api/updates/trigger-batch', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ machine_ids: online, reboot: updatesBatchReboot.value })
+            });
+            if (res.ok) {
+                const r = await res.json();
+                const ok = r.results.filter(x => x.success).length;
+                toast(`Update-Befehl gesendet an ${ok} Maschine(n).`, 'success');
+                updatesSelected.value = [];
+                await loadUpdatesMachines();
+            }
+        }
+
+        async function triggerSingleUpdate(machineId, reboot) {
+            const res = await apiFetch('/api/updates/trigger-batch', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ machine_ids: [machineId], reboot })
+            });
+            if (res.ok) toast('Update-Befehl gesendet.', 'success');
+        }
+
+        async function openUpdateLog(machine) {
+            updatesLogMachine.value = machine;
+            updatesLogs.value = [];
+            updatesLogsLoading.value = true;
+            await loadMachineUpdateLogs(machine.machine_id);
+        }
+
+        async function loadMachineUpdateLogs(machineId) {
+            updatesLogsLoading.value = true;
+            const res = await apiFetch(`/api/updates/logs/${machineId}`);
+            if (res.ok) updatesLogs.value = await res.json();
+            updatesLogsLoading.value = false;
+        }
+
+        function openScheduleModal(machine) {
+            updatesScheduleMachine.value = machine;
+            updatesScheduleForm.time = machine.schedule_time || '';
+            updatesScheduleForm.reboot = machine.schedule_reboot !== 0;
+        }
+
+        async function saveSchedule() {
+            const m = updatesScheduleMachine.value;
+            if (!m || !updatesScheduleForm.time) return;
+            const res = await apiFetch('/api/updates/schedules', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ machine_id: m.machine_id, schedule_time: updatesScheduleForm.time, reboot: updatesScheduleForm.reboot })
+            });
+            if (res.ok) {
+                toast(`Zeitplan gesetzt: ${updatesScheduleForm.time} Uhr täglich.`, 'success');
+                updatesScheduleMachine.value = null;
+                await loadUpdatesMachines();
+            }
+        }
+
+        async function removeSchedule(machineId) {
+            if (!await confirmDialog('Zeitplan für diese Maschine entfernen?')) return;
+            await apiFetch(`/api/updates/schedules/${machineId}`, { method: 'DELETE' });
+            updatesScheduleMachine.value = null;
+            await loadUpdatesMachines();
+        }
+
+        async function setBatchSchedule() {
+            if (!updatesBatchTime.value) { toast('Bitte eine Uhrzeit eingeben.', 'error'); return; }
+            if (!updatesSelected.value.length) { toast('Keine Maschinen ausgewählt.', 'error'); return; }
+            if (!await confirmDialog(`Zeitplan ${updatesBatchTime.value} Uhr für ${updatesSelected.value.length} Maschine(n) setzen?`)) return;
+            for (const mid of updatesSelected.value) {
+                await apiFetch('/api/updates/schedules', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ machine_id: mid, schedule_time: updatesBatchTime.value, reboot: updatesBatchReboot.value })
+                });
+            }
+            toast(`Zeitplan gesetzt für ${updatesSelected.value.length} Maschine(n).`, 'success');
+            updatesSelected.value = [];
+            await loadUpdatesMachines();
         }
 
         async function loadMachineDetail(id) {
@@ -745,6 +881,11 @@ createApp({
             showEditMachine, editMachineForm, openEditMachine, saveEditMachine,
             triggerUpdates, scheduleUpdates, scheduleTime,
             toggleAllMachines, batchCommand, executeBatchInstall,
+            updatesOsTab, updatesMachines, updatesSelected, updatesBatchTime, updatesBatchReboot,
+            updatesFilteredMachines, updatesToggleAll, triggerBatchUpdates, triggerSingleUpdate,
+            updatesLogMachine, updatesLogs, updatesLogsLoading, openUpdateLog, loadMachineUpdateLogs,
+            updatesScheduleMachine, updatesScheduleForm, openScheduleModal, saveSchedule, removeSchedule,
+            setBatchSchedule, updatesLiveStreams,
             showDeployModal, onlineAgents, scanning, scanDone, scanResults, deployTargets,
             deployForm, deployResult, scanNetwork, toggleAllScan, executeBatchDeploy, executeDeploy,
             addVeeamInstance, deleteVeeamInstance,

@@ -37,6 +37,10 @@
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
                         <span>Maschinen</span>
                     </div>
+                    <div class="nav-item" :class="{active: view === 'updates'}" @click="navigate('updates')">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0115-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 01-15 6.7L3 16"/></svg>
+                        <span>Updates</span>
+                    </div>
                     <div class="nav-item" :class="{active: view === 'veeam'}" @click="navigate('veeam')">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                         <span>Veeam Backup</span>
@@ -215,6 +219,168 @@
                             </tbody>
                         </table>
                         <p v-else style="color: var(--text-muted); padding: 1rem 0;">Keine Maschinen vorhanden.</p>
+                    </div>
+                </div>
+
+                <!-- Updates View -->
+                <div v-if="view === 'updates'">
+                    <div class="page-header">
+                        <h1>Updates</h1>
+                        <button class="btn btn-ghost btn-sm" @click="loadUpdatesMachines()">Aktualisieren</button>
+                    </div>
+
+                    <!-- OS Tab Pills -->
+                    <div style="display:flex;gap:0.5rem;margin-bottom:1rem">
+                        <button class="btn btn-sm" :class="updatesOsTab === 'windows' ? 'btn-primary' : 'btn-ghost'" @click="updatesOsTab = 'windows'; updatesSelected = []">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801"/></svg>
+                            Windows
+                        </button>
+                        <button class="btn btn-sm" :class="updatesOsTab === 'linux' ? 'btn-primary' : 'btn-ghost'" @click="updatesOsTab = 'linux'; updatesSelected = []">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>
+                            Linux
+                        </button>
+                    </div>
+
+                    <!-- Batch Action Bar -->
+                    <div v-if="updatesSelected.length" class="card" style="display:flex;align-items:center;gap:0.8rem;padding:0.8rem 1.2rem;margin-bottom:1rem;border-color:var(--accent);flex-wrap:wrap">
+                        <span style="font-size:0.85rem"><strong>{{ updatesSelected.length }}</strong> ausgewählt</span>
+                        <label style="display:flex;align-items:center;gap:0.4rem;font-size:0.8rem;color:var(--text-secondary);cursor:pointer">
+                            <input type="checkbox" v-model="updatesBatchReboot"> Mit Neustart
+                        </label>
+                        <button class="btn btn-primary btn-sm" @click="triggerBatchUpdates()">Jetzt updaten</button>
+                        <div style="display:flex;align-items:center;gap:0.4rem;margin-left:0.5rem">
+                            <span style="font-size:0.8rem;color:var(--text-muted)">Zeitplan:</span>
+                            <input v-model="updatesBatchTime" type="time" style="background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);border-radius:4px;padding:0.3rem 0.5rem;font-size:0.8rem;width:100px">
+                            <button class="btn btn-ghost btn-sm" @click="setBatchSchedule()" :disabled="!updatesBatchTime">Für Auswahl setzen</button>
+                        </div>
+                        <span style="flex:1"></span>
+                        <button class="btn btn-ghost btn-sm" @click="updatesSelected = []">Auswahl aufheben</button>
+                    </div>
+
+                    <!-- Machine Table -->
+                    <div class="card" style="padding:0;overflow:hidden">
+                        <table class="machine-table" v-if="updatesFilteredMachines.length">
+                            <thead>
+                                <tr>
+                                    <th style="width:36px"><input type="checkbox" @change="updatesToggleAll" :checked="updatesSelected.length === updatesFilteredMachines.length && updatesFilteredMachines.length > 0"></th>
+                                    <th>Status</th>
+                                    <th>Maschine</th>
+                                    <th>Ausstehend</th>
+                                    <th>Letzter Lauf</th>
+                                    <th>Zeitplan</th>
+                                    <th>Aktionen</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <template v-for="m in updatesFilteredMachines" :key="m.machine_id">
+                                    <tr>
+                                        <td><input type="checkbox" :value="m.machine_id" v-model="updatesSelected" @click.stop></td>
+                                        <td><span class="status-badge" :class="m.status">{{ m.status }}</span></td>
+                                        <td>
+                                            <strong>{{ m.display_name || m.hostname }}</strong>
+                                            <div style="font-size:0.72rem;color:var(--text-muted)">{{ m.ip_address || '' }}</div>
+                                        </td>
+                                        <td>
+                                            <span v-if="m.updates_available > 0" style="color:var(--warning);font-weight:600">
+                                                {{ m.updates_available }} Update(s)
+                                                <span v-if="m.updates_reboot_required" style="font-size:0.7rem;margin-left:4px;color:var(--danger)">⚠ Neustart</span>
+                                            </span>
+                                            <span v-else-if="updatesLiveStreams[m.machine_id] && ['sent','running'].includes(updatesLiveStreams[m.machine_id].status)" style="color:var(--accent);font-size:0.8rem">
+                                                <span class="pulse-dot"></span> läuft…
+                                            </span>
+                                            <span v-else style="color:var(--success);font-size:0.8rem">Aktuell</span>
+                                        </td>
+                                        <td style="font-size:0.8rem">
+                                            <span v-if="m.last_run_at">
+                                                <span class="status-badge" :class="m.last_run_status === 'completed' ? 'online' : m.last_run_status === 'failed' ? 'offline' : 'warning'" style="font-size:0.7rem">{{ m.last_run_status }}</span>
+                                                <span style="color:var(--text-muted);margin-left:4px">{{ formatTime(m.last_run_at) }}</span>
+                                            </span>
+                                            <span v-else style="color:var(--text-muted)">–</span>
+                                        </td>
+                                        <td style="font-size:0.8rem">
+                                            <span v-if="m.schedule_time" style="color:var(--text-secondary)">
+                                                {{ m.schedule_time }} täglich
+                                                <span v-if="!m.schedule_enabled" style="color:var(--text-muted)"> (deaktiviert)</span>
+                                            </span>
+                                            <span v-else style="color:var(--text-muted)">–</span>
+                                        </td>
+                                        <td>
+                                            <div style="display:flex;gap:0.4rem;flex-wrap:wrap">
+                                                <button class="btn btn-primary btn-sm" @click.stop="triggerSingleUpdate(m.machine_id, true)" :disabled="m.status !== 'online'" title="Updates installieren (mit Neustart bei Bedarf)">Updaten</button>
+                                                <button class="btn btn-ghost btn-sm" @click.stop="openUpdateLog(m)" title="Update-Logs ansehen">Log</button>
+                                                <button class="btn btn-ghost btn-sm" @click.stop="openScheduleModal(m)" title="Zeitplan bearbeiten">⏱</button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    <!-- Live output inline (shown while an update is running for this machine) -->
+                                    <tr v-if="updatesLiveStreams[m.machine_id] && ['sent','running'].includes(updatesLiveStreams[m.machine_id].status)" style="background:var(--bg-secondary)">
+                                        <td colspan="7" style="padding:0.6rem 1rem">
+                                            <div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:0.3rem">Live-Ausgabe:</div>
+                                            <pre style="background:var(--bg-primary);border:1px solid var(--border);border-radius:4px;padding:0.5rem;max-height:160px;overflow:auto;font-size:0.72rem;white-space:pre-wrap;margin:0">{{ updatesLiveStreams[m.machine_id].output || 'Warte auf Ausgabe…' }}</pre>
+                                        </td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                        <p v-else style="padding:1.5rem;text-align:center;color:var(--text-muted)">Keine {{ updatesOsTab === 'windows' ? 'Windows' : 'Linux' }}-Maschinen vorhanden.</p>
+                    </div>
+                </div>
+
+                <!-- Log Modal -->
+                <div class="confirm-overlay" v-if="updatesLogMachine" @click.self="updatesLogMachine = null">
+                    <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:1.5rem;width:90%;max-width:760px;max-height:85vh;overflow:auto">
+                        <div style="display:flex;align-items:center;margin-bottom:1rem">
+                            <h3 style="flex:1">Update-Logs: {{ updatesLogMachine.display_name || updatesLogMachine.hostname }}</h3>
+                            <button class="btn btn-ghost btn-sm" @click="loadMachineUpdateLogs(updatesLogMachine.machine_id)">↺</button>
+                            <button class="btn btn-ghost btn-sm" style="margin-left:0.5rem" @click="updatesLogMachine = null">✕</button>
+                        </div>
+
+                        <!-- Live banner for currently-running update -->
+                        <div v-if="updatesLiveStreams[updatesLogMachine.machine_id] && ['sent','running'].includes(updatesLiveStreams[updatesLogMachine.machine_id].status)"
+                             style="border:1px solid var(--accent);border-radius:var(--radius);padding:0.8rem;margin-bottom:1rem;background:rgba(59,130,246,0.05)">
+                            <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.5rem">
+                                <span class="pulse-dot"></span>
+                                <strong style="font-size:0.85rem;color:var(--accent)">Update läuft gerade…</strong>
+                            </div>
+                            <pre style="background:var(--bg-primary);border:1px solid var(--border);border-radius:4px;padding:0.5rem;max-height:200px;overflow:auto;font-size:0.72rem;white-space:pre-wrap;margin:0">{{ updatesLiveStreams[updatesLogMachine.machine_id].output || 'Warte auf Ausgabe…' }}</pre>
+                        </div>
+
+                        <div v-if="updatesLogsLoading" style="text-align:center;padding:1rem;color:var(--text-muted)">Lade…</div>
+                        <div v-else-if="!updatesLogs.length" style="color:var(--text-muted)">Noch keine Update-Läufe für diese Maschine.</div>
+                        <div v-else>
+                            <div v-for="log in updatesLogs" :key="log.id" style="border:1px solid var(--border);border-radius:var(--radius);margin-bottom:0.8rem;overflow:hidden">
+                                <div style="display:flex;align-items:center;gap:0.8rem;padding:0.6rem 0.8rem;background:var(--bg-secondary);cursor:pointer" @click="log._open = !log._open">
+                                    <span class="status-badge" :class="log.status === 'completed' ? 'online' : log.status === 'failed' ? 'offline' : 'warning'" style="font-size:0.7rem">{{ log.status }}</span>
+                                    <span style="font-size:0.8rem;color:var(--text-secondary)">{{ formatTime(log.created_at) }}</span>
+                                    <span style="font-size:0.75rem;color:var(--text-muted)">{{ log.command_type === 'trigger_updates_reboot' ? 'mit Neustart' : 'ohne Neustart' }}</span>
+                                    <span v-if="log.completed_at" style="font-size:0.72rem;color:var(--text-muted);margin-left:auto">{{ formatTime(log.completed_at) }}</span>
+                                    <span style="color:var(--text-muted);font-size:0.8rem">{{ log._open ? '▲' : '▼' }}</span>
+                                </div>
+                                <div v-if="log._open" style="padding:0.6rem 0.8rem">
+                                    <pre v-if="log.result" style="background:var(--bg-primary);border:1px solid var(--border);border-radius:4px;padding:0.5rem;max-height:300px;overflow:auto;font-size:0.72rem;white-space:pre-wrap;margin:0">{{ log.result }}</pre>
+                                    <span v-else style="color:var(--text-muted);font-size:0.8rem">Keine Ausgabe.</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Schedule Modal -->
+                <div class="confirm-overlay" v-if="updatesScheduleMachine" @click.self="updatesScheduleMachine = null">
+                    <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:1.5rem;width:90%;max-width:400px">
+                        <h3 style="margin-bottom:1rem">Zeitplan: {{ updatesScheduleMachine.display_name || updatesScheduleMachine.hostname }}</h3>
+                        <div class="form-group">
+                            <label>Täglich um</label>
+                            <input v-model="updatesScheduleForm.time" type="time" placeholder="HH:MM">
+                        </div>
+                        <label style="display:flex;align-items:center;gap:0.5rem;margin-bottom:1.2rem;font-size:0.85rem;cursor:pointer">
+                            <input type="checkbox" v-model="updatesScheduleForm.reboot"> Neustart bei Bedarf
+                        </label>
+                        <div style="display:flex;gap:0.5rem;justify-content:flex-end">
+                            <button v-if="updatesScheduleMachine.schedule_time" class="btn btn-danger btn-sm" @click="removeSchedule(updatesScheduleMachine.machine_id)">Zeitplan entfernen</button>
+                            <button class="btn btn-ghost btn-sm" @click="updatesScheduleMachine = null">Abbrechen</button>
+                            <button class="btn btn-primary btn-sm" @click="saveSchedule()" :disabled="!updatesScheduleForm.time">Speichern</button>
+                        </div>
                     </div>
                 </div>
 

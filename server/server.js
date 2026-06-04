@@ -5,7 +5,7 @@ const http = require('http');
 const path = require('path');
 const { config } = require('./config');
 const { isSetupComplete } = require('./auth');
-const { initAgentWebSocket } = require('./ws/agent-handler');
+const { initAgentWebSocket, getConnectedAgents, sendCommandToAgent } = require('./ws/agent-handler');
 const SQLiteStore = require('./session-store');
 
 const app = express();
@@ -62,6 +62,7 @@ app.use('/api/deploy', require('./routes/deployment'));
 app.use('/api/notifications', require('./routes/notifications'));
 app.use('/api/veeam', require('./routes/veeam'));
 app.use('/api/settings', require('./routes/settings'));
+app.use('/api/updates', require('./routes/updates'));
 
 // Agent version check (used by auto-update)
 app.get('/api/agent/version', (req, res) => {
@@ -205,6 +206,10 @@ notificationEngine.start();
 // Start Veeam poller
 const veeamPoller = require('./services/veeam-poller');
 veeamPoller.start();
+
+// Start update scheduler
+const updateScheduler = require('./services/update-scheduler');
+updateScheduler.start(sendCommandToAgent);
 
 // Start server
 server.listen(config.port, () => {

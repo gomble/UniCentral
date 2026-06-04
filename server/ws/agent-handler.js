@@ -333,25 +333,36 @@ function handleCommandResult(machineId, payload) {
 
     const status = payload.status || 'completed';
 
-    // 'running' is an intermediate progress update for a long-running command
-    // (e.g. installing Windows updates) — keep the row open and only refresh the
-    // live output. Terminal results also stamp completed_at.
-    if (status === 'running') {
-        db.prepare(`
-            UPDATE command_log SET status = 'running', result = ?
-            WHERE id = ? AND machine_id = ?
-        `).run(payload.result || '', payload.command_id, machineId);
-    } else {
-        db.prepare(`
-            UPDATE command_log SET
-                status = ?,
-                result = ?,
-                completed_at = CURRENT_TIMESTAMP
-            WHERE id = ? AND machine_id = ?
-        `).run(status, payload.result || '', payload.command_id, machineId);
+    // Look up the command_type so the frontend can distinguish update commands
+    // from other command results without needing a separate lookup.
+    let commandType = '';
+    try {
+        const row = db.prepare('SELECT command_type FROM command_log WHERE id = ?').get(payload.command_id);
+        if (row) commandType = row.command_type;
+    } catch {}
+
+    try {
+        // 'running' is an intermediate progress update — keep the row open and only
+        // refresh the live output. Terminal results also stamp completed_at.
+        if (status === 'running') {
+            db.prepare(`
+                UPDATE command_log SET status = 'running', result = ?
+                WHERE id = ? AND machine_id = ?
+            `).run(payload.result || '', payload.command_id, machineId);
+        } else {
+            db.prepare(`
+                UPDATE command_log SET
+                    status = ?,
+                    result = ?,
+                    completed_at = CURRENT_TIMESTAMP
+                WHERE id = ? AND machine_id = ?
+            `).run(status, payload.result || '', payload.command_id, machineId);
+        }
+    } catch (err) {
+        console.error('[WS] handleCommandResult DB error:', err.message);
     }
 
-    broadcastToDashboards({ type: 'command_result', machineId, data: payload });
+    broadcastToDashboards({ type: 'command_result', machineId, data: { ...payload, command_type: commandType } });
 }
 
 function checkOfflineMachines() {
