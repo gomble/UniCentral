@@ -31,6 +31,10 @@ func Execute(cmdType string, params map[string]interface{}) Result {
 		return execAddFirewallRule(params)
 	case "trigger_updates":
 		return execTriggerUpdates()
+	case "trigger_updates_reboot":
+		return execTriggerUpdatesReboot()
+	case "schedule_updates":
+		return execScheduleUpdates(params)
 	case "deploy_neighbor":
 		return execDeployNeighbor(params)
 	case "update_agent":
@@ -172,7 +176,7 @@ func execTriggerUpdates() Result {
 	var cmd *exec.Cmd
 	if runtime.GOOS == "windows" {
 		cmd = exec.Command("powershell", "-Command",
-			"Install-Module PSWindowsUpdate -Force -Confirm:$false; Import-Module PSWindowsUpdate; Get-WindowsUpdate -Install -AcceptAll -AutoReboot")
+			"Install-Module PSWindowsUpdate -Force -Confirm:$false -Scope CurrentUser; Import-Module PSWindowsUpdate; Get-WindowsUpdate -Install -AcceptAll -IgnoreReboot")
 	} else {
 		if _, err := exec.LookPath("apt-get"); err == nil {
 			cmd = exec.Command("bash", "-c", "apt-get update && apt-get upgrade -y")
@@ -186,4 +190,55 @@ func execTriggerUpdates() Result {
 		return Result{Status: "failed", Output: string(out) + "\n" + err.Error()}
 	}
 	return Result{Status: "completed", Output: string(out)}
+}
+
+func execTriggerUpdatesReboot() Result {
+	var cmd *exec.Cmd
+	if runtime.GOOS == "windows" {
+		cmd = exec.Command("powershell", "-Command",
+			"Install-Module PSWindowsUpdate -Force -Confirm:$false -Scope CurrentUser; Import-Module PSWindowsUpdate; Get-WindowsUpdate -Install -AcceptAll -AutoReboot")
+	} else {
+		if _, err := exec.LookPath("apt-get"); err == nil {
+			cmd = exec.Command("bash", "-c", "apt-get update && apt-get upgrade -y && reboot")
+		} else {
+			cmd = exec.Command("bash", "-c", "dnf upgrade -y && reboot")
+		}
+	}
+
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return Result{Status: "failed", Output: string(out) + "\n" + err.Error()}
+	}
+	return Result{Status: "completed", Output: string(out)}
+}
+
+func execScheduleUpdates(params map[string]interface{}) Result {
+	scheduleTime, _ := params["time"].(string)
+	if scheduleTime == "" {
+		return Result{Status: "failed", Output: "no time specified (format: HH:MM)"}
+	}
+
+	var cmd *exec.Cmd
+	if runtime.GOOS == "windows" {
+		psScript := fmt.Sprintf(`
+$action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-Command Install-Module PSWindowsUpdate -Force -Confirm:$false -Scope CurrentUser; Import-Module PSWindowsUpdate; Get-WindowsUpdate -Install -AcceptAll -AutoReboot"
+$trigger = New-ScheduledTaskTrigger -Once -At "%s"
+$settings = New-ScheduledTaskSettingsSet -StartWhenAvailable
+Register-ScheduledTask -TaskName "UniCentral-WindowsUpdate" -Action $action -Trigger $trigger -Settings $settings -User "SYSTEM" -RunLevel Highest -Force
+`, scheduleTime)
+		cmd = exec.Command("powershell", "-Command", psScript)
+	} else {
+		// Create a one-time cron via at command
+		script := "apt-get update && apt-get upgrade -y && reboot"
+		if _, err := exec.LookPath("dnf"); err == nil {
+			script = "dnf upgrade -y && reboot"
+		}
+		cmd = exec.Command("bash", "-c", fmt.Sprintf(`echo '%s' | at %s`, script, scheduleTime))
+	}
+
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return Result{Status: "failed", Output: string(out) + "\n" + err.Error()}
+	}
+	return Result{Status: "completed", Output: fmt.Sprintf("Updates scheduled for %s\n%s", scheduleTime, string(out))}
 }

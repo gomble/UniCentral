@@ -112,8 +112,16 @@
                         <div style="display:flex;gap:0.5rem">
                             <button class="btn btn-ghost btn-sm" @click="navigate('command-history')">Befehlshistorie</button>
                             <button class="btn btn-ghost btn-sm" @click="showDeployModal = true">Remote Deploy</button>
-                            <button class="btn btn-primary" @click="showAddMachine = true">+ Maschine hinzufügen</button>
+                            <button class="btn btn-ghost btn-sm" @click="showGroupsModal = true">Gruppen</button>
+                            <button class="btn btn-primary" @click="showAddMachine = true">+ Maschine hinzufuegen</button>
                         </div>
+                    </div>
+
+                    <!-- Filter Bar -->
+                    <div style="display:flex;gap:0.5rem;margin-bottom:1rem;flex-wrap:wrap">
+                        <button class="btn btn-sm" :class="filterGroup === null ? 'btn-primary' : 'btn-ghost'" @click="filterGroup = null">Alle</button>
+                        <button class="btn btn-sm" v-for="g in groups" :key="g.id" :class="filterGroup === g.id ? 'btn-primary' : 'btn-ghost'" @click="filterGroup = g.id">{{ g.name }}</button>
+                        <button class="btn btn-sm btn-ghost" :class="filterGroup === 'ungrouped' ? 'btn-primary' : 'btn-ghost'" @click="filterGroup = 'ungrouped'">Ohne Gruppe</button>
                     </div>
 
                     <!-- Batch Action Bar -->
@@ -143,7 +151,7 @@
                                 </tr>
                             </thead>
                             <tbody>
-                                <tr v-for="m in machines" :key="m.id">
+                                <tr v-for="m in filteredMachines" :key="m.id">
                                     <td><input type="checkbox" :value="m.machine_id" v-model="selectedMachines" @click.stop></td>
                                     <td><span class="status-badge" :class="m.status">{{ m.status }}</span></td>
                                     <td @click="navigate('machine-detail', m.id)" style="cursor:pointer"><strong>{{ m.display_name || m.hostname }}</strong></td>
@@ -281,17 +289,26 @@
 
                     <div class="card">
                         <div class="card-header">
-                            <h3>Windows Updates</h3>
+                            <h3>Updates</h3>
                             <span v-if="machineUpdates.reboot_required" class="status-badge warning">Neustart erforderlich</span>
                         </div>
                         <div v-if="machineUpdates.available > 0">
                             <p style="margin-bottom:0.5rem;color:var(--warning)">{{ machineUpdates.available }} Update(s) verfügbar</p>
-                            <ul style="list-style:none;padding:0">
+                            <ul style="list-style:none;padding:0;max-height:150px;overflow-y:auto">
                                 <li v-for="(u, i) in machineUpdates.pending" :key="i" style="padding:0.3rem 0;border-bottom:1px solid var(--border);font-size:0.85rem">{{ u }}</li>
                             </ul>
-                            <button class="btn btn-primary btn-sm" style="margin-top:0.8rem" @click="sendCommand('trigger_updates')" :disabled="selectedMachine.status !== 'online'">Updates installieren</button>
+                            <div style="display:flex;gap:0.5rem;margin-top:0.8rem;flex-wrap:wrap;align-items:center">
+                                <button class="btn btn-primary btn-sm" @click="triggerUpdates('no-reboot')" :disabled="selectedMachine.status !== 'online'">Updates installieren</button>
+                                <button class="btn btn-warning btn-sm" @click="triggerUpdates('reboot')" :disabled="selectedMachine.status !== 'online'">Updates + Neustart</button>
+                                <span style="color:var(--text-muted);font-size:0.8rem">|</span>
+                                <input v-model="scheduleTime" type="time" style="background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);border-radius:4px;padding:0.3rem 0.5rem;font-size:0.8rem;width:100px">
+                                <button class="btn btn-ghost btn-sm" @click="scheduleUpdates" :disabled="!scheduleTime || selectedMachine.status !== 'online'">Zeitplan setzen</button>
+                            </div>
                         </div>
-                        <p v-else style="color:var(--success)">System ist aktuell</p>
+                        <div v-else>
+                            <p style="color:var(--success);margin-bottom:0.5rem">System ist aktuell</p>
+                            <button class="btn btn-ghost btn-sm" @click="triggerUpdates('no-reboot')" :disabled="selectedMachine.status !== 'online'">Trotzdem nach Updates suchen</button>
+                        </div>
                     </div>
 
                     <div class="card">
@@ -622,6 +639,34 @@
                     <button class="btn btn-ghost" @click="showDeployModal = false; scanResults = []; scanDone = false; deployTargets = []">Schließen</button>
                     <button class="btn btn-primary" v-if="deployTargets.length > 0" @click="executeBatchDeploy">{{ deployTargets.length }} Maschine(n) deployen</button>
                     <button class="btn btn-primary" v-else-if="!scanDone && deployForm.target_ip" @click="executeDeploy">Deploy starten</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Groups Modal -->
+        <div class="modal-overlay" v-if="showGroupsModal" @click.self="showGroupsModal = false">
+            <div class="modal">
+                <h2>Gruppen verwalten</h2>
+                <div v-for="g in groups" :key="g.id" style="display:flex;align-items:center;justify-content:space-between;padding:0.5rem 0;border-bottom:1px solid var(--border)">
+                    <span>{{ g.name }}</span>
+                    <button class="btn btn-danger btn-sm" @click="deleteGroup(g.id)">Entfernen</button>
+                </div>
+                <div style="display:flex;gap:0.5rem;margin-top:1rem">
+                    <input v-model="newGroupName" placeholder="Neue Gruppe..." style="flex:1;background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);border-radius:var(--radius);padding:0.5rem;font-size:0.85rem">
+                    <button class="btn btn-primary btn-sm" @click="addGroup">Hinzufuegen</button>
+                </div>
+                <div style="border-top:1px solid var(--border);margin-top:1rem;padding-top:1rem">
+                    <h3 style="font-size:0.9rem;margin-bottom:0.5rem">Maschinen zuweisen</h3>
+                    <div v-for="m in machines" :key="m.id" style="display:flex;align-items:center;justify-content:space-between;padding:0.3rem 0;font-size:0.85rem">
+                        <span>{{ m.display_name || m.hostname }}</span>
+                        <select @change="assignGroup(m.id, $event.target.value)" :value="m.group_id || ''" style="background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);border-radius:4px;padding:0.2rem 0.4rem;font-size:0.8rem">
+                            <option value="">Keine Gruppe</option>
+                            <option v-for="g in groups" :key="g.id" :value="g.id">{{ g.name }}</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-actions">
+                    <button class="btn btn-ghost" @click="showGroupsModal = false">Schliessen</button>
                 </div>
             </div>
         </div>

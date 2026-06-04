@@ -43,7 +43,13 @@ app.use((req, res, next) => {
     next();
 });
 
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(__dirname, 'public'), {
+    setHeaders: (res, filePath) => {
+        if (filePath.endsWith('.html')) res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        if (filePath.endsWith('.js')) res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+        if (filePath.endsWith('.css')) res.setHeader('Content-Type', 'text/css; charset=utf-8');
+    }
+}));
 
 // API Routes
 app.use('/auth', require('./routes/auth'));
@@ -123,7 +129,8 @@ New-Item -ItemType Directory -Force -Path $ConfigDir | Out-Null
 
 Invoke-WebRequest -Uri "$Server/api/agent/download/windows/amd64" -OutFile "$InstallDir\\unicentral-agent.exe" -UseBasicParsing
 
-@{server=$Server;enrollment_key=$Key;category=$Category} | ConvertTo-Json | Set-Content "$ConfigDir\\config.json"
+$json = '{"server":"' + $Server + '","enrollment_key":"' + $Key + '","category":"' + $Category + '"}'
+Set-Content -Path "$ConfigDir\\config.json" -Value $json -Encoding UTF8
 
 & "$InstallDir\\unicentral-agent.exe" --install --config "$ConfigDir\\config.json"
 Start-Service UniCentralAgent

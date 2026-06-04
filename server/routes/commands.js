@@ -75,6 +75,25 @@ router.post('/:machineId/trigger-updates', requireAdmin, (req, res) => {
     res.json(result);
 });
 
+router.post('/:machineId/trigger-updates-reboot', requireAdmin, (req, res) => {
+    const machine = db.prepare('SELECT * FROM machines WHERE id = ? OR machine_id = ?').get(req.params.machineId, req.params.machineId);
+    if (!machine) return res.status(404).json({ error: 'Machine not found' });
+
+    const result = sendCommandToAgent(machine.machine_id, 'trigger_updates_reboot', {});
+    res.json(result);
+});
+
+router.post('/:machineId/schedule-updates', requireAdmin, (req, res) => {
+    const machine = db.prepare('SELECT * FROM machines WHERE id = ? OR machine_id = ?').get(req.params.machineId, req.params.machineId);
+    if (!machine) return res.status(404).json({ error: 'Machine not found' });
+
+    const { time } = req.body;
+    if (!time) return res.status(400).json({ error: 'time required (HH:MM)' });
+
+    const result = sendCommandToAgent(machine.machine_id, 'schedule_updates', { time });
+    res.json(result);
+});
+
 router.post('/:machineId/update-agent', requireAdmin, (req, res) => {
     const machine = db.prepare('SELECT * FROM machines WHERE id = ? OR machine_id = ?').get(req.params.machineId, req.params.machineId);
     if (!machine) return res.status(404).json({ error: 'Machine not found' });

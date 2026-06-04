@@ -17,6 +17,15 @@ createApp({
             name: '', base_url: '', username: '', password: '',
             poll_interval_seconds: 300, verify_ssl: false
         });
+        const showGroupsModal = ref(false);
+        const groups = ref([]);
+        const newGroupName = ref('');
+        const filterGroup = ref(null);
+        const filteredMachines = computed(() => {
+            if (filterGroup.value === null) return machines.value;
+            if (filterGroup.value === 'ungrouped') return machines.value.filter(m => !m.group_id);
+            return machines.value.filter(m => m.group_id === filterGroup.value);
+        });
         const showDeployModal = ref(false);
         const onlineAgents = ref([]);
         const scanning = ref(false);
@@ -42,6 +51,7 @@ createApp({
         const machineShares = ref([]);
         const telemetryHistory = ref([]);
         const telemetryRange = ref('24h');
+        const scheduleTime = ref('');
         const telemetryCanvas = ref(null);
         const baseUrl = ref(window.location.origin);
 
@@ -108,7 +118,39 @@ createApp({
         }
 
         async function loadDashboard() {
-            await Promise.all([loadMachines(), loadStats(), loadAlerts(), loadSettings(), loadVeeamInstances(), loadOnlineAgents()]);
+            await Promise.all([loadMachines(), loadStats(), loadAlerts(), loadSettings(), loadVeeamInstances(), loadOnlineAgents(), loadGroups()]);
+        }
+
+        async function loadGroups() {
+            const res = await fetch('/api/machines/groups/list');
+            if (res.ok) groups.value = await res.json();
+        }
+
+        async function addGroup() {
+            if (!newGroupName.value) return;
+            await fetch('/api/machines/groups', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: newGroupName.value })
+            });
+            newGroupName.value = '';
+            await loadGroups();
+        }
+
+        async function deleteGroup(id) {
+            if (!confirm('Gruppe entfernen?')) return;
+            await fetch(`/api/machines/groups/${id}`, { method: 'DELETE' });
+            await loadGroups();
+            await loadMachines();
+        }
+
+        async function assignGroup(machineId, groupId) {
+            await fetch(`/api/machines/${machineId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ group_id: groupId || null })
+            });
+            await loadMachines();
         }
 
         async function loadMachines() {
@@ -284,6 +326,28 @@ createApp({
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({})
             });
+        }
+
+        async function triggerUpdates(mode) {
+            if (!selectedMachine.value) return;
+            const endpoint = mode === 'reboot' ? 'trigger-updates-reboot' : 'trigger-updates';
+            const msg = mode === 'reboot' ? 'Updates installieren und danach neustarten?' : 'Updates installieren (ohne Neustart)?';
+            if (!confirm(msg)) return;
+            await fetch(`/api/commands/${selectedMachine.value.machine_id}/${endpoint}`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}'
+            });
+            alert('Update-Befehl gesendet.');
+        }
+
+        async function scheduleUpdates() {
+            if (!selectedMachine.value || !scheduleTime.value) return;
+            if (!confirm(`Updates + Neustart fuer ${scheduleTime.value} Uhr planen?`)) return;
+            await fetch(`/api/commands/${selectedMachine.value.machine_id}/schedule-updates`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ time: scheduleTime.value })
+            });
+            alert(`Update geplant fuer ${scheduleTime.value} Uhr.`);
         }
 
         async function updateAgent() {
@@ -576,13 +640,15 @@ createApp({
 
         return {
             view, username, machines, stats, alerts, alertCount,
-            showAddMachine, showTokenModal, showAddVeeam, showBatchInstall,
+            showAddMachine, showTokenModal, showAddVeeam, showBatchInstall, showGroupsModal,
+            groups, newGroupName, filterGroup, filteredMachines, addGroup, deleteGroup, assignGroup,
             batchInstallPkg, batchInstallMethod, selectedMachines, commandHistory,
             veeamInstances, newVeeam,
             tokenMachine, selectedMachine, machineDisks, machineServices, machineFirewall,
             machineUpdates, machineShares, telemetryHistory, telemetryRange,
             telemetryCanvas, baseUrl, newMachine, settingsForm,
             navigate, addMachine, deleteMachine, showToken, sendCommand, updateAgent,
+            triggerUpdates, scheduleUpdates, scheduleTime,
             toggleAllMachines, batchCommand, executeBatchInstall,
             showDeployModal, onlineAgents, scanning, scanDone, scanResults, deployTargets,
             deployForm, deployResult, scanNetwork, toggleAllScan, executeBatchDeploy, executeDeploy,
