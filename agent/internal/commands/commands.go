@@ -173,35 +173,39 @@ func execUpdateAgent(params map[string]interface{}) Result {
 }
 
 func execTriggerUpdates() Result {
-	var cmd *exec.Cmd
-	if runtime.GOOS == "windows" {
-		cmd = exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command",
-			"[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $ProgressPreference='SilentlyContinue'; $ConfirmPreference='None'; if (!(Get-Module -ListAvailable PSWindowsUpdate)) { Install-Module PSWindowsUpdate -Force -Confirm:$false -Scope AllUsers }; Import-Module PSWindowsUpdate; Get-WindowsUpdate -Install -AcceptAll -AutoReboot -Confirm:$false")
-	} else {
-		if _, err := exec.LookPath("apt-get"); err == nil {
-			cmd = exec.Command("bash", "-c", "apt-get update && apt-get upgrade -y && [ -f /var/run/reboot-required ] && reboot")
-		} else {
-			cmd = exec.Command("bash", "-c", "dnf upgrade -y && needs-restarting -r || reboot")
-		}
-	}
-
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return Result{Status: "failed", Output: string(out) + "\n" + err.Error()}
-	}
-	return Result{Status: "completed", Output: string(out)}
+	return execTriggerUpdatesReboot()
 }
 
 func execTriggerUpdatesReboot() Result {
 	var cmd *exec.Cmd
 	if runtime.GOOS == "windows" {
-		cmd = exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command",
-			"[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $ProgressPreference='SilentlyContinue'; $ConfirmPreference='None'; if (!(Get-Module -ListAvailable PSWindowsUpdate)) { Install-Module PSWindowsUpdate -Force -Confirm:$false -Scope AllUsers }; Import-Module PSWindowsUpdate; Get-WindowsUpdate -Install -AcceptAll -AutoReboot -Confirm:$false")
+		// Use UsoClient + COM API fallback - works non-interactively without PSWindowsUpdate
+		script := `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+Write-Output "Starting Windows Update scan..."
+UsoClient StartScan
+Start-Sleep -Seconds 10
+Write-Output "Downloading updates..."
+UsoClient StartDownload
+Start-Sleep -Seconds 30
+Write-Output "Installing updates..."
+UsoClient StartInstall
+Start-Sleep -Seconds 10
+# Check if reboot is needed
+$reboot = Test-Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired"
+if ($reboot) {
+    Write-Output "Reboot required - restarting in 30 seconds..."
+    shutdown /r /t 30 /c "UniCentral: Neustart nach Windows Update"
+} else {
+    Write-Output "No reboot required."
+}
+Write-Output "Done."
+`
+		cmd = exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command", script)
 	} else {
 		if _, err := exec.LookPath("apt-get"); err == nil {
-			cmd = exec.Command("bash", "-c", "apt-get update && apt-get upgrade -y && reboot")
+			cmd = exec.Command("bash", "-c", "apt-get update && apt-get upgrade -y && [ -f /var/run/reboot-required ] && shutdown -r +1 'UniCentral: Reboot after updates' || echo 'No reboot required'")
 		} else {
-			cmd = exec.Command("bash", "-c", "dnf upgrade -y && reboot")
+			cmd = exec.Command("bash", "-c", "dnf upgrade -y && needs-restarting -r || shutdown -r +1 'UniCentral: Reboot after updates'")
 		}
 	}
 
