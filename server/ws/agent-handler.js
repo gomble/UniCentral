@@ -247,12 +247,22 @@ function handleRegister(ws, key, payload) {
 function handleHeartbeat(machineId, payload) {
     if (!machineId) return;
 
-    db.prepare(`
-        UPDATE machines SET
-            status = 'online',
-            last_seen = CURRENT_TIMESTAMP
-        WHERE machine_id = ?
-    `).run(machineId);
+    if (payload.agent_version) {
+        db.prepare(`
+            UPDATE machines SET
+                status = 'online',
+                last_seen = CURRENT_TIMESTAMP,
+                agent_version = ?
+            WHERE machine_id = ?
+        `).run(payload.agent_version, machineId);
+    } else {
+        db.prepare(`
+            UPDATE machines SET
+                status = 'online',
+                last_seen = CURRENT_TIMESTAMP
+            WHERE machine_id = ?
+        `).run(machineId);
+    }
 
     if (payload.cpu_percent !== undefined) {
         broadcastToDashboards({

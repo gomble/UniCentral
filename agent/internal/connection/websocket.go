@@ -193,6 +193,7 @@ func (c *Client) sendHeartbeat() {
 			"cpu_percent":    cpu,
 			"memory_percent": mem,
 			"uptime_seconds": uptime,
+			"agent_version":  c.cfg.AgentVersion,
 		},
 	}
 	c.send(msg)
