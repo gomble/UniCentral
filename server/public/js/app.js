@@ -117,6 +117,7 @@ createApp({
         }
 
         let ws = null;
+        let popstateHandler = null;
 
         onMounted(async () => {
             const authRes = await fetch('/auth/check');
@@ -127,6 +128,13 @@ createApp({
             }
             username.value = auth.username;
 
+            history.replaceState({ view: 'dashboard', id: null }, '', '#dashboard');
+            popstateHandler = (e) => {
+                if (e.state && e.state.view) navigateInternal(e.state.view, e.state.id);
+                else navigateInternal('dashboard');
+            };
+            window.addEventListener('popstate', popstateHandler);
+
             await loadDashboard();
             connectWebSocket();
         });
@@ -134,6 +142,7 @@ createApp({
         onUnmounted(() => {
             if (ws) ws.close();
             disconnectLogStream();
+            if (popstateHandler) window.removeEventListener('popstate', popstateHandler);
         });
 
         function connectWebSocket() {
@@ -183,12 +192,23 @@ createApp({
                 }
             }
             if (['ad_create_user', 'ad_update_user', 'ad_delete_user'].includes(p.command_type)) {
-                if (p.status === 'completed') {
-                    toast(p.result || 'Operation erfolgreich', 'success');
-                    loadADUsers();
-                } else if (p.status === 'failed') {
-                    toast('Fehler: ' + (p.result || 'Unbekannter Fehler'), 'error');
-                }
+                if (p.status === 'completed') { toast(p.result || 'Operation erfolgreich', 'success'); loadADUsers(); }
+                else if (p.status === 'failed') { toast('Fehler: ' + (p.result || 'Unbekannter Fehler'), 'error'); }
+            }
+            if (p.command_type === 'ad_list_ous') {
+                if (p.status === 'completed') { try { const parsed = JSON.parse(p.result); adOUs.value = Array.isArray(parsed) ? parsed : (parsed ? [parsed] : []); } catch {} }
+            }
+            if (p.command_type === 'ad_move_user') {
+                if (p.status === 'completed') { toast('Benutzer erfolgreich verschoben', 'success'); loadADUsers(); }
+                else if (p.status === 'failed') { toast('Fehler: ' + (p.result || ''), 'error'); }
+            }
+            if (p.command_type === 'local_list_users') {
+                if (p.status === 'completed') { try { const parsed = JSON.parse(p.result); localUsers.value = Array.isArray(parsed) ? parsed : (parsed ? [parsed] : []); } catch {} localUsersLoading.value = false; }
+                else if (p.status === 'failed') { localUsersLoading.value = false; toast('Fehler: ' + (p.result || ''), 'error'); }
+            }
+            if (['local_create_user', 'local_update_user', 'local_delete_user'].includes(p.command_type)) {
+                if (p.status === 'completed') { toast(p.result || 'Operation erfolgreich', 'success'); loadLocalUsers(); }
+                else if (p.status === 'failed') { toast('Fehler: ' + (p.result || ''), 'error'); }
             }
 
             // Live progress for machine-detail view
@@ -313,7 +333,7 @@ createApp({
             }
         }
 
-        function navigate(target, id) {
+        function navigateInternal(target, id) {
             view.value = target;
             if (target === 'machine-detail' && id) {
                 loadMachineDetail(id);
@@ -336,6 +356,11 @@ createApp({
             } else {
                 disconnectLogStream();
             }
+        }
+
+        function navigate(target, id) {
+            history.pushState({ view: target, id: id || null }, '', '#' + target + (id ? '/' + id : ''));
+            navigateInternal(target, id);
         }
 
         async function loadUpdatesMachines() {
@@ -1292,6 +1317,203 @@ createApp({
             adUserForm.display_name = (fn + ' ' + sn).trim();
         }
 
+        // OU tree
+        const adOUs = ref([]);
+        const adSelectedOU = ref(null);
+        const adShowMoveModal = ref(false);
+        const adMoveUser = ref(null);
+        const adMoveTargetOU = ref('');
+
+        const ouTreeFlat = computed(() => {
+            if (!adOUs.value.length) return [];
+            const rootDN = adOUs.value[0].distinguished_name.split(',')
+                .filter(p => /^DC=/i.test(p)).join(',');
+            function getChildren(parentDN) {
+                return adOUs.value.filter(ou => {
+                    const parts = ou.distinguished_name.split(',');
+                    return parts.slice(1).join(',').toLowerCase() === parentDN.toLowerCase();
+                }).sort((a, b) => a.name.localeCompare(b.name, 'de'));
+            }
+            const result = [];
+            function flatten(pDN, level) {
+                for (const ou of getChildren(pDN)) { result.push({ ...ou, level }); flatten(ou.distinguished_name, level + 1); }
+            }
+            flatten(rootDN, 0);
+            return result;
+        });
+
+        const adUsersForOU = computed(() => {
+            let users = adFilteredUsers.value;
+            if (adSelectedOU.value) {
+                users = users.filter(u => u.distinguished_name &&
+                    u.distinguished_name.toLowerCase().endsWith(',' + adSelectedOU.value.toLowerCase()));
+            }
+            return users;
+        });
+
+        async function loadADOUs() {
+            if (!adSelectedDC.value) return;
+            const res = await apiFetch(`/api/ad/${adSelectedDC.value}/command`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ type: 'ad_list_ous', parameters: {} })
+            });
+            if (!res.ok) toast('Fehler beim Laden der OUs', 'error');
+        }
+
+        function openMoveUser(user) {
+            adMoveUser.value = user;
+            adMoveTargetOU.value = '';
+            adShowMoveModal.value = true;
+        }
+
+        async function confirmMoveUser() {
+            if (!adMoveUser.value || !adMoveTargetOU.value) return;
+            await apiFetch(`/api/ad/${adSelectedDC.value}/command`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ type: 'ad_move_user', parameters: { user_dn: adMoveUser.value.distinguished_name, target_ou: adMoveTargetOU.value } })
+            });
+            adShowMoveModal.value = false;
+            toast('Verschieben-Befehl gesendet...', 'info');
+        }
+
+        // AD admin tabs
+        const adAdminTab = ref('ad');
+
+        function openUserAdmin(machine) {
+            adAdminTab.value = machine.is_domain_controller ? 'ad' : 'local';
+            if (!machine.is_domain_controller) {
+                localMachineId.value = machine.machine_id;
+                loadLocalUsers();
+                loadLocalGroups();
+            } else {
+                adSelectedDC.value = machine.machine_id;
+            }
+            navigate('ad-admin');
+        }
+
+        // Local user management
+        const localMachineId = ref('');
+        const localUsers = ref([]);
+        const localGroups = ref([]);
+        const localUsersLoading = ref(false);
+        const showLocalUserModal = ref(false);
+        const localUserFormMode = ref('create');
+        const localUserFormTab = ref('general');
+        const localEditingUser = ref(null);
+        const localUserForm = reactive({
+            name: '', full_name: '', description: '', password: '',
+            enabled: true, password_never_expires: false, groups: []
+        });
+        const localUserSearch = ref('');
+        const localGroupSearch = ref('');
+
+        const localFilteredUsers = computed(() => {
+            if (!localUserSearch.value) return localUsers.value;
+            const q = localUserSearch.value.toLowerCase();
+            return localUsers.value.filter(u =>
+                (u.name || '').toLowerCase().includes(q) ||
+                (u.full_name || '').toLowerCase().includes(q));
+        });
+
+        const localGroupsFiltered = computed(() => {
+            let list = localGroups.value;
+            if (localGroupSearch.value) {
+                const q = localGroupSearch.value.toLowerCase();
+                list = list.filter(g => (g.name || '').toLowerCase().includes(q));
+            }
+            return [...list].sort((a, b) => {
+                const aChk = localUserForm.groups.includes(a.name) ? 0 : 1;
+                const bChk = localUserForm.groups.includes(b.name) ? 0 : 1;
+                if (aChk !== bChk) return aChk - bChk;
+                return (a.name || '').localeCompare(b.name || '', 'de');
+            });
+        });
+
+        async function loadLocalUsers() {
+            if (!localMachineId.value) return;
+            localUsersLoading.value = true;
+            const res = await apiFetch(`/api/ad/${localMachineId.value}/command`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ type: 'local_list_users', parameters: {} })
+            });
+            if (!res.ok) { localUsersLoading.value = false; toast('Fehler', 'error'); }
+        }
+
+        async function loadLocalGroups() {
+            if (!localMachineId.value) return;
+            const res = await apiFetch(`/api/ad/${localMachineId.value}/command`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ type: 'local_list_groups', parameters: {} })
+            });
+            const data = await res.json();
+            if (!data.success) return;
+            const cmdId = data.command_id;
+            for (let i = 0; i < 20; i++) {
+                await new Promise(r => setTimeout(r, 2000));
+                const cr = await apiFetch(`/api/commands/${localMachineId.value}/history`);
+                if (cr.ok) {
+                    const cmds = await cr.json();
+                    const cmd = cmds.find(c => c.id === cmdId);
+                    if (cmd && cmd.status === 'completed') {
+                        try { const p = JSON.parse(cmd.result); localGroups.value = Array.isArray(p) ? p : (p ? [p] : []); } catch {}
+                        break;
+                    } else if (cmd && cmd.status === 'failed') break;
+                }
+            }
+        }
+
+        function openCreateLocalUser() {
+            localUserFormMode.value = 'create'; localUserFormTab.value = 'general';
+            localEditingUser.value = null;
+            Object.assign(localUserForm, { name: '', full_name: '', description: '', password: '', enabled: true, password_never_expires: false, groups: [] });
+            showLocalUserModal.value = true;
+        }
+
+        function openEditLocalUser(user) {
+            localUserFormMode.value = 'edit'; localUserFormTab.value = 'general';
+            localEditingUser.value = user;
+            Object.assign(localUserForm, { name: user.name || '', full_name: user.full_name || '', description: user.description || '', password: '', enabled: user.enabled !== false, password_never_expires: user.password_never_expires || false, groups: Array.isArray(user.groups) ? [...user.groups] : [] });
+            showLocalUserModal.value = true;
+        }
+
+        function openDuplicateLocalUser(user) {
+            localUserFormMode.value = 'create'; localUserFormTab.value = 'general';
+            localEditingUser.value = null;
+            Object.assign(localUserForm, { name: '', full_name: '', description: user.description || '', password: '', enabled: user.enabled !== false, password_never_expires: user.password_never_expires || false, groups: Array.isArray(user.groups) ? [...user.groups] : [] });
+            showLocalUserModal.value = true;
+        }
+
+        async function saveLocalUser() {
+            if (!localUserForm.name) { toast('Benutzername erforderlich', 'error'); return; }
+            if (localUserFormMode.value !== 'edit' && !localUserForm.password) { toast('Passwort erforderlich', 'error'); return; }
+            let type, parameters;
+            if (localUserFormMode.value === 'edit') {
+                const orig = localEditingUser.value?.groups || [];
+                type = 'local_update_user';
+                parameters = { ...localUserForm, add_groups: localUserForm.groups.filter(g => !orig.includes(g)), remove_groups: orig.filter(g => !localUserForm.groups.includes(g)) };
+                delete parameters.groups;
+            } else {
+                type = 'local_create_user'; parameters = { ...localUserForm };
+            }
+            const res = await apiFetch(`/api/ad/${localMachineId.value}/command`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ type, parameters })
+            });
+            showLocalUserModal.value = false;
+            if (res.ok) toast('Befehl gesendet...', 'info'); else toast('Fehler', 'error');
+        }
+
+        async function confirmDeleteLocalUser(user) {
+            if (!await confirmDialog(`Benutzer "${user.name}" wirklich löschen?`)) return;
+            await apiFetch(`/api/ad/${localMachineId.value}/command`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ type: 'local_delete_user', parameters: { name: user.name } })
+            });
+            toast('Löschbefehl gesendet...', 'info');
+        }
+
+        function removeFromLocalGroup(g) { localUserForm.groups = localUserForm.groups.filter(x => x !== g); }
+
         return {
             view, username, machines, stats, alerts, alertCount,
             showAddMachine, showTokenModal, showAddVeeam, showBatchInstall, showGroupsModal,
@@ -1325,6 +1547,13 @@ createApp({
             loadADDomainControllers, loadADUsers, loadADGroups,
             openCreateADUser, openEditADUser, openDuplicateADUser, saveADUser, confirmDeleteADUser,
             loadADTemplates, deleteADTemplate, applyADTemplate, saveADTemplateFromForm, adAutoDisplayName,
+            adOUs, adSelectedOU, adShowMoveModal, adMoveUser, adMoveTargetOU, ouTreeFlat, adUsersForOU,
+            loadADOUs, openMoveUser, confirmMoveUser, adAdminTab, openUserAdmin,
+            localMachineId, localUsers, localGroups, localUsersLoading, showLocalUserModal,
+            localUserFormMode, localUserFormTab, localEditingUser, localUserForm,
+            localUserSearch, localGroupSearch, localFilteredUsers, localGroupsFiltered,
+            loadLocalUsers, loadLocalGroups, openCreateLocalUser, openEditLocalUser,
+            openDuplicateLocalUser, saveLocalUser, confirmDeleteLocalUser, removeFromLocalGroup,
             toasts, confirmData
         };
     }

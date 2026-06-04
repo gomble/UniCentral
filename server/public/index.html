@@ -212,8 +212,8 @@
                                 </tr>
                             </thead>
                             <tbody>
-                                <tr v-for="m in filteredMachines" :key="m.id">
-                                    <td><input type="checkbox" :value="m.machine_id" v-model="selectedMachines" @click.stop></td>
+                                <tr v-for="m in filteredMachines" :key="m.id" @click="navigate('machine-detail', m.id)" style="cursor:pointer">
+                                    <td @click.stop><input type="checkbox" :value="m.machine_id" v-model="selectedMachines"></td>
                                     <td><span class="status-badge" :class="m.status">{{ m.status }}</span></td>
                                     <td @click="navigate('machine-detail', m.id)" style="cursor:pointer">
                                         <span v-if="m.is_domain_controller" style="background:#7c3aed;color:#fff;font-size:0.6rem;padding:1px 4px;border-radius:3px;margin-right:4px;vertical-align:middle">DC</span>
@@ -429,6 +429,7 @@
                         <div style="display:flex;gap:0.5rem">
                             <button class="btn btn-ghost btn-sm" @click="navigate('machines')">&#8592; Zurueck</button>
                             <button class="btn btn-ghost btn-sm" @click="openEditMachine">Bearbeiten</button>
+                            <button class="btn btn-ghost btn-sm" @click="openUserAdmin(selectedMachine)">Benutzer</button>
                             <button class="btn btn-primary btn-sm" @click="updateAgent" :disabled="selectedMachine.status !== 'online'">Agent aktualisieren</button>
                             <button class="btn btn-warning btn-sm" @click="sendCommand('restart')" :disabled="selectedMachine.status !== 'online'">Neustart</button>
                             <button class="btn btn-danger btn-sm" @click="sendCommand('shutdown')" :disabled="selectedMachine.status !== 'online'">Herunterfahren</button>
@@ -775,70 +776,133 @@
                     </div>
                 </div>
 
-                <!-- AD-Verwaltung View -->
+                <!-- Benutzerverwaltung View -->
                 <div v-if="view === 'ad-admin'">
                     <div class="page-header">
-                        <h1>AD-Verwaltung</h1>
-                        <button class="btn btn-ghost btn-sm" @click="showADTemplatesModal = true">Vorlagen</button>
+                        <h1>Benutzerverwaltung</h1>
+                        <button v-if="adAdminTab === 'ad'" class="btn btn-ghost btn-sm" @click="showADTemplatesModal = true">Vorlagen</button>
                     </div>
 
-                    <div class="card" style="margin-bottom:1rem">
-                        <div class="card-header"><h3>Domänen Controller</h3></div>
-                        <div v-if="adDomainControllers.length" style="display:flex;gap:0.8rem;align-items:center;flex-wrap:wrap">
-                            <select v-model="adSelectedDC" @change="adUsers = []; adGroups = []" style="background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);border-radius:var(--radius);padding:0.45rem 0.7rem;font-size:0.9rem;min-width:260px">
-                                <option value="">-- DC auswählen --</option>
-                                <option v-for="dc in adDomainControllers" :key="dc.machine_id" :value="dc.machine_id">
-                                    {{ dc.display_name || dc.hostname }}{{ dc.domain_name ? ' (' + dc.domain_name + ')' : '' }}{{ dc.status !== 'online' ? ' [Offline]' : '' }}
-                                </option>
-                            </select>
-                            <button class="btn btn-primary btn-sm" @click="loadADUsers" :disabled="!adSelectedDC || adUsersLoading">{{ adUsersLoading ? 'Laden...' : 'Benutzer laden' }}</button>
-                            <button class="btn btn-ghost btn-sm" @click="loadADGroups" :disabled="!adSelectedDC">Gruppen laden</button>
-                            <span v-if="adGroups.length" style="font-size:0.8rem;color:var(--text-muted)">{{ adGroups.length }} Gruppen geladen</span>
+                    <!-- Tab bar -->
+                    <div style="display:flex;gap:0.3rem;margin-bottom:1rem">
+                        <button class="btn btn-sm" :class="adAdminTab === 'ad' ? 'btn-primary' : 'btn-ghost'" @click="adAdminTab = 'ad'">Active Directory</button>
+                        <button class="btn btn-sm" :class="adAdminTab === 'local' ? 'btn-primary' : 'btn-ghost'" @click="adAdminTab = 'local'">Lokale Benutzer</button>
+                    </div>
+
+                    <!-- ===== ACTIVE DIRECTORY TAB ===== -->
+                    <div v-if="adAdminTab === 'ad'">
+                        <div class="card" style="margin-bottom:1rem">
+                            <div class="card-header"><h3>Domänen Controller</h3></div>
+                            <div v-if="adDomainControllers.length" style="display:flex;gap:0.8rem;align-items:center;flex-wrap:wrap">
+                                <select v-model="adSelectedDC" @change="adUsers = []; adGroups = []; adOUs = []; adSelectedOU = null" style="background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);border-radius:var(--radius);padding:0.45rem 0.7rem;font-size:0.9rem;min-width:260px">
+                                    <option value="">-- DC auswählen --</option>
+                                    <option v-for="dc in adDomainControllers" :key="dc.machine_id" :value="dc.machine_id">{{ dc.display_name || dc.hostname }}{{ dc.domain_name ? ' (' + dc.domain_name + ')' : '' }}{{ dc.status !== 'online' ? ' [Offline]' : '' }}</option>
+                                </select>
+                                <button class="btn btn-primary btn-sm" @click="loadADUsers(); loadADOUs()" :disabled="!adSelectedDC || adUsersLoading">{{ adUsersLoading ? 'Laden...' : 'Benutzer laden' }}</button>
+                                <button class="btn btn-ghost btn-sm" @click="loadADGroups" :disabled="!adSelectedDC">Gruppen laden</button>
+                                <span v-if="adGroups.length" style="font-size:0.8rem;color:var(--text-muted)">{{ adGroups.length }} Gruppen</span>
+                            </div>
+                            <p v-else style="color:var(--text-muted)">Kein DC erkannt. Sobald ein Agent auf einem DC läuft und Telemetrie sendet, erscheint er hier.</p>
+                            <div v-if="adUsersOutput" style="margin-top:0.6rem;font-size:0.78rem;color:var(--text-muted);font-family:monospace;background:var(--bg-primary);padding:0.4rem;border-radius:4px">{{ adUsersOutput }}</div>
                         </div>
-                        <p v-else style="color:var(--text-muted)">Kein Domänen Controller erkannt. Sobald ein Agent auf einem DC läuft und Telemetrie sendet, erscheint er hier automatisch.</p>
-                        <div v-if="adUsersOutput" style="margin-top:0.8rem;font-size:0.78rem;color:var(--text-muted);font-family:monospace;background:var(--bg-primary);padding:0.4rem 0.6rem;border-radius:4px">{{ adUsersOutput }}</div>
-                    </div>
 
-                    <div class="card" v-if="adSelectedDC">
-                        <div class="card-header">
-                            <h3>Benutzer <span v-if="adUsers.length" style="color:var(--text-muted);font-size:0.8rem;font-weight:normal">({{ adFilteredUsers.length }}{{ adUsers.length !== adFilteredUsers.length ? ' von ' + adUsers.length : '' }})</span></h3>
-                            <div style="display:flex;gap:0.5rem;align-items:center">
-                                <input v-model="adUserSearch" placeholder="Suchen..." style="background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);border-radius:var(--radius);padding:0.35rem 0.7rem;font-size:0.85rem;width:200px">
-                                <button class="btn btn-primary btn-sm" @click="openCreateADUser">+ Benutzer erstellen</button>
+                        <div v-if="adSelectedDC" :style="{'display':'grid','grid-template-columns': ouTreeFlat.length ? '210px 1fr' : '1fr','gap':'1rem'}">
+                            <!-- OU Tree -->
+                            <div v-if="ouTreeFlat.length" class="card" style="padding:0;align-self:start;max-height:70vh;overflow-y:auto">
+                                <div style="padding:0.5rem 0.8rem;border-bottom:1px solid var(--border);font-size:0.75rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em">OU-Baum</div>
+                                <div style="padding:0.45rem 0.8rem;cursor:pointer;font-size:0.83rem;display:flex;align-items:center;gap:0.4rem" :style="{background: !adSelectedOU ? 'rgba(59,130,246,0.1)' : 'transparent'}" @click="adSelectedOU = null">
+                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/></svg>
+                                    <span>Alle Benutzer</span>
+                                    <span style="margin-left:auto;color:var(--text-muted);font-size:0.75rem">{{ adUsers.length }}</span>
+                                </div>
+                                <div v-for="ou in ouTreeFlat" :key="ou.distinguished_name"
+                                     :style="{paddingLeft: (0.8 + ou.level * 1.1) + 'rem', background: adSelectedOU === ou.distinguished_name ? 'rgba(59,130,246,0.1)' : 'transparent'}"
+                                     style="padding-top:0.4rem;padding-bottom:0.4rem;padding-right:0.6rem;cursor:pointer;font-size:0.83rem;display:flex;align-items:center;gap:0.4rem;border-top:1px solid var(--border)"
+                                     @click="adSelectedOU = ou.distinguished_name">
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
+                                    <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ ou.name }}</span>
+                                </div>
+                            </div>
+
+                            <!-- Users -->
+                            <div class="card">
+                                <div class="card-header">
+                                    <h3>
+                                        Benutzer
+                                        <span v-if="adSelectedOU" style="color:var(--accent);font-size:0.75rem;font-weight:normal;margin-left:0.4rem">{{ adSelectedOU.split(',')[0].replace('OU=','') }}</span>
+                                        <span style="color:var(--text-muted);font-size:0.8rem;font-weight:normal;margin-left:0.3rem">({{ adUsersForOU.length }})</span>
+                                    </h3>
+                                    <div style="display:flex;gap:0.5rem;align-items:center">
+                                        <input v-model="adUserSearch" placeholder="Suchen..." style="background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);border-radius:var(--radius);padding:0.35rem 0.7rem;font-size:0.85rem;width:180px">
+                                        <button class="btn btn-primary btn-sm" @click="openCreateADUser">+ Erstellen</button>
+                                    </div>
+                                </div>
+                                <div v-if="adUsersLoading" style="padding:2rem;text-align:center;color:var(--text-muted)">Benutzerliste wird geladen...</div>
+                                <div v-else-if="adUsersForOU.length" style="overflow-x:auto">
+                                    <table class="machine-table">
+                                        <thead><tr><th>Benutzername</th><th>Name</th><th>E-Mail</th><th>Abteilung</th><th>Status</th><th>Aktionen</th></tr></thead>
+                                        <tbody>
+                                            <tr v-for="u in adUsersForOU" :key="u.sam_account_name" @click="openEditADUser(u)" style="cursor:pointer">
+                                                <td><strong>{{ u.sam_account_name }}</strong></td>
+                                                <td>{{ u.display_name || (u.given_name + ' ' + u.surname) }}</td>
+                                                <td>{{ u.email || '–' }}</td>
+                                                <td>{{ u.department || '–' }}</td>
+                                                <td><span class="status-badge" :class="u.enabled ? 'online' : 'offline'">{{ u.enabled ? 'Aktiv' : 'Deakt.' }}</span></td>
+                                                <td @click.stop style="white-space:nowrap">
+                                                    <button class="btn btn-ghost btn-sm" @click="openDuplicateADUser(u)">Dupl.</button>
+                                                    <button class="btn btn-ghost btn-sm" @click="openMoveUser(u)" title="In OU verschieben" :disabled="!ouTreeFlat.length">&#8594;OU</button>
+                                                    <button class="btn btn-danger btn-sm" @click="confirmDeleteADUser(u)">✕</button>
+                                                </td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <p v-else style="padding:1rem;color:var(--text-muted)">{{ adUsers.length ? 'Keine Benutzer in dieser OU.' : 'Noch keine Benutzer geladen.' }}</p>
                             </div>
                         </div>
-                        <div v-if="adUsersLoading" style="padding:2rem;text-align:center;color:var(--text-muted)">Benutzerliste wird geladen...</div>
-                        <div v-else-if="adFilteredUsers.length">
-                            <table class="machine-table">
-                                <thead>
-                                    <tr>
-                                        <th>Benutzername</th>
-                                        <th>Name</th>
-                                        <th>E-Mail</th>
-                                        <th>Abteilung</th>
-                                        <th>Titel</th>
-                                        <th>Status</th>
-                                        <th>Aktionen</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <tr v-for="u in adFilteredUsers" :key="u.sam_account_name">
-                                        <td><strong>{{ u.sam_account_name }}</strong></td>
-                                        <td>{{ u.display_name || (u.given_name + ' ' + u.surname) }}</td>
-                                        <td>{{ u.email || '–' }}</td>
-                                        <td>{{ u.department || '–' }}</td>
-                                        <td>{{ u.title || '–' }}</td>
-                                        <td><span class="status-badge" :class="u.enabled ? 'online' : 'offline'">{{ u.enabled ? 'Aktiv' : 'Deaktiviert' }}</span></td>
-                                        <td>
-                                            <button class="btn btn-ghost btn-sm" @click="openEditADUser(u)">Bearb.</button>
-                                            <button class="btn btn-ghost btn-sm" @click="openDuplicateADUser(u)" title="Duplizieren">Dupl.</button>
-                                            <button class="btn btn-danger btn-sm" @click="confirmDeleteADUser(u)">✕</button>
-                                        </td>
-                                    </tr>
-                                </tbody>
-                            </table>
+                    </div>
+
+                    <!-- ===== LOKALE BENUTZER TAB ===== -->
+                    <div v-if="adAdminTab === 'local'">
+                        <div class="card" style="margin-bottom:1rem">
+                            <div class="card-header"><h3>Maschine auswählen</h3></div>
+                            <div style="display:flex;gap:0.8rem;align-items:center;flex-wrap:wrap">
+                                <select v-model="localMachineId" @change="localUsers = []; localGroups = []" style="background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);border-radius:var(--radius);padding:0.45rem 0.7rem;font-size:0.9rem;min-width:260px">
+                                    <option value="">-- Maschine auswählen --</option>
+                                    <option v-for="m in machines.filter(x => x.status === 'online')" :key="m.machine_id" :value="m.machine_id">{{ m.display_name || m.hostname }} ({{ m.os_type }})</option>
+                                </select>
+                                <button class="btn btn-primary btn-sm" @click="loadLocalUsers(); loadLocalGroups()" :disabled="!localMachineId || localUsersLoading">{{ localUsersLoading ? 'Laden...' : 'Benutzer laden' }}</button>
+                            </div>
                         </div>
-                        <p v-else style="padding:1rem;color:var(--text-muted)">{{ adUsers.length ? 'Keine Benutzer gefunden.' : 'Noch keine Benutzer geladen. Klicke auf "Benutzer laden".' }}</p>
+
+                        <div class="card" v-if="localMachineId">
+                            <div class="card-header">
+                                <h3>Lokale Benutzer <span v-if="localUsers.length" style="color:var(--text-muted);font-size:0.8rem;font-weight:normal">({{ localFilteredUsers.length }})</span></h3>
+                                <div style="display:flex;gap:0.5rem;align-items:center">
+                                    <input v-model="localUserSearch" placeholder="Suchen..." style="background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);border-radius:var(--radius);padding:0.35rem 0.7rem;font-size:0.85rem;width:180px">
+                                    <button class="btn btn-primary btn-sm" @click="openCreateLocalUser">+ Erstellen</button>
+                                </div>
+                            </div>
+                            <div v-if="localUsersLoading" style="padding:2rem;text-align:center;color:var(--text-muted)">Benutzerliste wird geladen...</div>
+                            <div v-else-if="localFilteredUsers.length" style="overflow-x:auto">
+                                <table class="machine-table">
+                                    <thead><tr><th>Benutzername</th><th>Anzeigename</th><th>Beschreibung</th><th>Status</th><th>Aktionen</th></tr></thead>
+                                    <tbody>
+                                        <tr v-for="u in localFilteredUsers" :key="u.name" @click="openEditLocalUser(u)" style="cursor:pointer">
+                                            <td><strong>{{ u.name }}</strong></td>
+                                            <td>{{ u.full_name || '–' }}</td>
+                                            <td style="color:var(--text-muted);font-size:0.82rem">{{ u.description || '–' }}</td>
+                                            <td><span class="status-badge" :class="u.enabled ? 'online' : 'offline'">{{ u.enabled ? 'Aktiv' : 'Deakt.' }}</span></td>
+                                            <td @click.stop style="white-space:nowrap">
+                                                <button class="btn btn-ghost btn-sm" @click="openDuplicateLocalUser(u)">Dupl.</button>
+                                                <button class="btn btn-danger btn-sm" @click="confirmDeleteLocalUser(u)">✕</button>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                            <p v-else style="padding:1rem;color:var(--text-muted)">{{ localUsers.length ? 'Keine Benutzer gefunden.' : 'Klicke auf "Benutzer laden".' }}</p>
+                        </div>
                     </div>
                 </div>
             </main>
@@ -1101,6 +1165,101 @@
                 <div class="modal-actions">
                     <button class="btn btn-ghost" @click="showAddVeeam = false">Abbrechen</button>
                     <button class="btn btn-primary" @click="addVeeamInstance">Hinzufuegen</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- OU Move Modal -->
+        <div class="modal-overlay" v-if="adShowMoveModal" @click.self="adShowMoveModal = false">
+            <div class="modal" style="max-width:500px">
+                <h2>Benutzer verschieben</h2>
+                <p style="color:var(--text-secondary);font-size:0.85rem;margin-bottom:1rem">{{ adMoveUser && adMoveUser.display_name || adMoveUser && adMoveUser.sam_account_name }}</p>
+                <div class="form-group">
+                    <label>Ziel-OU</label>
+                    <select v-model="adMoveTargetOU" style="background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);border-radius:var(--radius);padding:0.45rem 0.7rem;font-size:0.85rem;width:100%">
+                        <option value="">-- OU auswählen --</option>
+                        <option v-for="ou in ouTreeFlat" :key="ou.distinguished_name" :value="ou.distinguished_name" :style="{paddingLeft: (ou.level * 16) + 'px'}">{{ '&nbsp;'.repeat(ou.level * 2) }}{{ ou.name }}</option>
+                    </select>
+                    <div v-if="adMoveTargetOU" style="font-size:0.72rem;color:var(--text-muted);margin-top:0.3rem;font-family:monospace">{{ adMoveTargetOU }}</div>
+                </div>
+                <div class="modal-actions">
+                    <button class="btn btn-ghost" @click="adShowMoveModal = false">Abbrechen</button>
+                    <button class="btn btn-primary" @click="confirmMoveUser" :disabled="!adMoveTargetOU">Verschieben</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Local User Modal -->
+        <div class="modal-overlay" v-if="showLocalUserModal" @click.self="showLocalUserModal = false">
+            <div class="modal" style="max-width:620px">
+                <h2>{{ localUserFormMode === 'edit' ? 'Benutzer bearbeiten' : 'Lokalen Benutzer erstellen' }}</h2>
+
+                <div style="display:flex;gap:0.3rem;border-bottom:1px solid var(--border);margin-bottom:1rem">
+                    <button class="btn btn-sm" :class="localUserFormTab === 'general' ? 'btn-primary' : 'btn-ghost'" @click="localUserFormTab = 'general'">Allgemein</button>
+                    <button class="btn btn-sm" :class="localUserFormTab === 'options' ? 'btn-primary' : 'btn-ghost'" @click="localUserFormTab = 'options'">Optionen</button>
+                    <button class="btn btn-sm" :class="localUserFormTab === 'groups' ? 'btn-primary' : 'btn-ghost'" @click="localUserFormTab = 'groups'">Gruppen<span v-if="localUserForm.groups.length" style="margin-left:3px;color:var(--accent)">({{ localUserForm.groups.length }})</span></button>
+                </div>
+
+                <div v-if="localUserFormTab === 'general'">
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem">
+                        <div class="form-group">
+                            <label>Benutzername *</label>
+                            <input v-model="localUserForm.name" placeholder="mustermann" :disabled="localUserFormMode === 'edit'" :style="localUserFormMode === 'edit' ? 'opacity:0.6' : ''">
+                        </div>
+                        <div class="form-group">
+                            <label>Anzeigename</label>
+                            <input v-model="localUserForm.full_name" placeholder="Max Mustermann">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>{{ localUserFormMode === 'edit' ? 'Neues Passwort (leer = unverändert)' : 'Passwort *' }}</label>
+                        <input v-model="localUserForm.password" type="password" placeholder="Passwort">
+                    </div>
+                    <div class="form-group">
+                        <label>Beschreibung</label>
+                        <input v-model="localUserForm.description" placeholder="Optionale Beschreibung">
+                    </div>
+                </div>
+
+                <div v-if="localUserFormTab === 'options'" style="display:flex;flex-direction:column;gap:1rem;padding:0.5rem 0">
+                    <label style="display:flex;align-items:center;gap:0.7rem;cursor:pointer">
+                        <input type="checkbox" v-model="localUserForm.enabled">
+                        <div><div>Konto aktiviert</div></div>
+                    </label>
+                    <label style="display:flex;align-items:center;gap:0.7rem;cursor:pointer">
+                        <input type="checkbox" v-model="localUserForm.password_never_expires">
+                        <div><div>Passwort läuft nie ab</div></div>
+                    </label>
+                </div>
+
+                <div v-if="localUserFormTab === 'groups'">
+                    <div v-if="localGroups.length">
+                        <div style="margin-bottom:0.8rem">
+                            <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:0.35rem">Ausgewählt ({{ localUserForm.groups.length }}):</div>
+                            <div style="display:flex;flex-wrap:wrap;gap:0.3rem;min-height:1.8rem">
+                                <span v-for="g in localUserForm.groups" :key="g" style="display:inline-flex;align-items:center;gap:0.25rem;background:var(--accent);color:#fff;padding:0.18rem 0.5rem 0.18rem 0.7rem;border-radius:12px;font-size:0.8rem">
+                                    {{ g }}<span @click="removeFromLocalGroup(g)" style="cursor:pointer;font-size:1rem;line-height:1;opacity:0.75;padding:0 0.1rem">&times;</span>
+                                </span>
+                                <span v-if="!localUserForm.groups.length" style="font-size:0.8rem;color:var(--text-muted);font-style:italic">Keine Gruppen ausgewählt</span>
+                            </div>
+                        </div>
+                        <input v-model="localGroupSearch" placeholder="Gruppe suchen..." style="width:100%;background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);border-radius:var(--radius);padding:0.4rem 0.7rem;font-size:0.85rem;margin-bottom:0.5rem;box-sizing:border-box">
+                        <div style="border:1px solid var(--border);border-radius:var(--radius);max-height:260px;overflow-y:auto">
+                            <label v-for="g in localGroupsFiltered" :key="g.name" style="display:flex;align-items:center;gap:0.6rem;padding:0.45rem 0.7rem;cursor:pointer;border-bottom:1px solid var(--border)" :style="{background: localUserForm.groups.includes(g.name) ? 'rgba(59,130,246,0.08)' : 'transparent'}">
+                                <input type="checkbox" :value="g.name" v-model="localUserForm.groups" style="flex-shrink:0">
+                                <div style="flex:1;min-width:0">
+                                    <div style="font-size:0.85rem;font-weight:500">{{ g.name }}</div>
+                                    <div v-if="g.description" style="font-size:0.72rem;color:var(--text-muted)">{{ g.description }}</div>
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+                    <p v-else style="color:var(--text-muted)">Keine Gruppen geladen.</p>
+                </div>
+
+                <div class="modal-actions">
+                    <button class="btn btn-ghost" @click="showLocalUserModal = false">Abbrechen</button>
+                    <button class="btn btn-primary" @click="saveLocalUser">{{ localUserFormMode === 'edit' ? 'Aktualisieren' : 'Erstellen' }}</button>
                 </div>
             </div>
         </div>

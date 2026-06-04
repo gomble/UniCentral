@@ -235,6 +235,46 @@ func execADUpdateUser(params map[string]interface{}) Result {
 	return Result{Status: "completed", Output: out}
 }
 
+func execADListOUs(_ map[string]interface{}) Result {
+	script := `
+try {
+    Import-Module ActiveDirectory -ErrorAction Stop
+    $arr = @(Get-ADOrganizationalUnit -Filter * -Properties Name,Description,DistinguishedName -ErrorAction Stop | ForEach-Object {
+        [PSCustomObject]@{
+            name               = $_.Name
+            description        = [string]$_.Description
+            distinguished_name = $_.DistinguishedName
+        }
+    })
+    if ($arr.Count -eq 1) { @($arr) | ConvertTo-Json -Depth 3 -Compress }
+    else { $arr | ConvertTo-Json -Depth 3 -Compress }
+} catch { Write-Error $_.Exception.Message; exit 1 }`
+	out, err := runPSAD(script)
+	if err != nil {
+		return Result{Status: "failed", Output: out + "\n" + err.Error()}
+	}
+	return Result{Status: "completed", Output: out}
+}
+
+func execADMoveUser(params map[string]interface{}) Result {
+	userDN, _ := params["user_dn"].(string)
+	targetOU, _ := params["target_ou"].(string)
+	if userDN == "" || targetOU == "" {
+		return Result{Status: "failed", Output: "user_dn und target_ou erforderlich"}
+	}
+	script := fmt.Sprintf(`
+try {
+    Import-Module ActiveDirectory -ErrorAction Stop
+    Move-ADObject -Identity '%s' -TargetPath '%s' -Confirm:$false -ErrorAction Stop
+    Write-Output 'Benutzer verschoben'
+} catch { Write-Error $_.Exception.Message; exit 1 }`, escapePS(userDN), escapePS(targetOU))
+	out, err := runPSAD(script)
+	if err != nil {
+		return Result{Status: "failed", Output: out + "\n" + err.Error()}
+	}
+	return Result{Status: "completed", Output: out}
+}
+
 func execADDeleteUser(params map[string]interface{}) Result {
 	sam, _ := params["sam_account_name"].(string)
 	if sam == "" {

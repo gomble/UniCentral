@@ -62,6 +62,20 @@ func Execute(cmdType string, params map[string]interface{}, onProgress ProgressF
 		return execADUpdateUser(params)
 	case "ad_delete_user":
 		return execADDeleteUser(params)
+	case "ad_list_ous":
+		return execADListOUs(params)
+	case "ad_move_user":
+		return execADMoveUser(params)
+	case "local_list_users":
+		return execLocalListUsers(params)
+	case "local_list_groups":
+		return execLocalListGroups(params)
+	case "local_create_user":
+		return execLocalCreateUser(params)
+	case "local_update_user":
+		return execLocalUpdateUser(params)
+	case "local_delete_user":
+		return execLocalDeleteUser(params)
 	default:
 		return Result{Status: "failed", Output: fmt.Sprintf("unknown command: %s", cmdType)}
 	}
