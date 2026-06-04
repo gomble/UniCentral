@@ -23,7 +23,7 @@ func getWindowsShares() []ShareInfo {
 	var shares []ShareInfo
 
 	out, err := exec.Command("powershell", "-Command",
-		"Get-SmbShare | Select-Object Name, Path, Description | ConvertTo-Csv -NoTypeInformation").Output()
+		"[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; Get-SmbShare | Select-Object Name, Path, Description | ConvertTo-Csv -NoTypeInformation").Output()
 	if err != nil {
 		return shares
 	}

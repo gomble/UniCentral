@@ -24,6 +24,7 @@ func getWindowsUpdates() UpdateStatus {
 	status := UpdateStatus{}
 
 	out, err := exec.Command("powershell", "-Command", `
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $Session = New-Object -ComObject Microsoft.Update.Session
 $Searcher = $Session.CreateUpdateSearcher()
 try {

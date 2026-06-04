@@ -24,7 +24,7 @@ func getWindowsServices() []ServiceInfo {
 	var services []ServiceInfo
 
 	out, err := exec.Command("powershell", "-Command",
-		"Get-Service | Select-Object Name, DisplayName, Status, StartType | ConvertTo-Csv -NoTypeInformation").Output()
+		"[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; Get-Service | Select-Object Name, DisplayName, Status, StartType | ConvertTo-Csv -NoTypeInformation").Output()
 	if err != nil {
 		return services
 	}

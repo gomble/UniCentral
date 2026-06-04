@@ -176,12 +176,12 @@ func execTriggerUpdates() Result {
 	var cmd *exec.Cmd
 	if runtime.GOOS == "windows" {
 		cmd = exec.Command("powershell", "-Command",
-			"Install-Module PSWindowsUpdate -Force -Confirm:$false -Scope CurrentUser; Import-Module PSWindowsUpdate; Get-WindowsUpdate -Install -AcceptAll -IgnoreReboot")
+			"[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; Install-Module PSWindowsUpdate -Force -Confirm:$false -Scope CurrentUser; Import-Module PSWindowsUpdate; Get-WindowsUpdate -Install -AcceptAll -AutoReboot")
 	} else {
 		if _, err := exec.LookPath("apt-get"); err == nil {
-			cmd = exec.Command("bash", "-c", "apt-get update && apt-get upgrade -y")
+			cmd = exec.Command("bash", "-c", "apt-get update && apt-get upgrade -y && [ -f /var/run/reboot-required ] && reboot")
 		} else {
-			cmd = exec.Command("dnf", "upgrade", "-y")
+			cmd = exec.Command("bash", "-c", "dnf upgrade -y && needs-restarting -r || reboot")
 		}
 	}
 

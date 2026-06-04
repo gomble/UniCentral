@@ -39,7 +39,7 @@ func getWindowsFirewall() FirewallStatus {
 	}
 
 	rulesOut, err := exec.Command("powershell", "-Command",
-		"Get-NetFirewallRule | Where-Object {$_.Enabled -eq 'True'} | Select-Object -First 100 DisplayName, Direction, Action, Enabled | ConvertTo-Csv -NoTypeInformation").Output()
+		"[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; Get-NetFirewallRule | Where-Object {$_.Enabled -eq 'True'} | Select-Object -First 100 DisplayName, Direction, Action, Enabled | ConvertTo-Csv -NoTypeInformation").Output()
 	if err != nil {
 		return status
 	}

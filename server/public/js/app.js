@@ -76,6 +76,21 @@ createApp({
             offlineThreshold: 90
         });
 
+        const toasts = ref([]);
+        const confirmData = ref(null);
+
+        function toast(message, type = 'info') {
+            const id = Date.now();
+            toasts.value.push({ id, message, type });
+            setTimeout(() => { toasts.value = toasts.value.filter(t => t.id !== id); }, 4000);
+        }
+
+        function confirmDialog(message) {
+            return new Promise(resolve => {
+                confirmData.value = { message, resolve };
+            });
+        }
+
         let ws = null;
 
         onMounted(async () => {
@@ -140,7 +155,7 @@ createApp({
         }
 
         async function deleteGroup(id) {
-            if (!confirm('Gruppe entfernen?')) return;
+            if (!await confirmDialog('Gruppe entfernen?')) return;
             await fetch(`/api/machines/groups/${id}`, { method: 'DELETE' });
             await loadGroups();
             await loadMachines();
@@ -321,7 +336,7 @@ createApp({
         }
 
         async function deleteMachine(m) {
-            if (!confirm(`Maschine "${m.hostname}" wirklich entfernen?`)) return;
+            if (!await confirmDialog('Maschine "' + m.hostname + '" wirklich entfernen?')) return;
             await fetch(`/api/machines/${m.id}`, { method: 'DELETE' });
             await loadMachines();
             await loadStats();
@@ -334,7 +349,7 @@ createApp({
 
         async function sendCommand(type) {
             if (!selectedMachine.value) return;
-            if (!confirm(`${type === 'restart' ? 'Neustart' : 'Herunterfahren'} wirklich ausfuehren?`)) return;
+            if (!await confirmDialog(type === 'restart' ? 'Neustart ausfuehren?' : 'Herunterfahren ausfuehren?')) return;
 
             await fetch(`/api/commands/${selectedMachine.value.machine_id}/${type}`, {
                 method: 'POST',
@@ -368,22 +383,22 @@ createApp({
             if (!selectedMachine.value) return;
             const endpoint = mode === 'reboot' ? 'trigger-updates-reboot' : 'trigger-updates';
             const msg = mode === 'reboot' ? 'Updates installieren und danach neustarten?' : 'Updates installieren (ohne Neustart)?';
-            if (!confirm(msg)) return;
+            if (!await confirmDialog(msg)) return;
             await fetch(`/api/commands/${selectedMachine.value.machine_id}/${endpoint}`, {
                 method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}'
             });
-            alert('Update-Befehl gesendet.');
+            toast('Update-Befehl gesendet.', 'success');
         }
 
         async function scheduleUpdates() {
             if (!selectedMachine.value || !scheduleTime.value) return;
-            if (!confirm(`Updates + Neustart fuer ${scheduleTime.value} Uhr planen?`)) return;
+            if (!await confirmDialog('Updates + Neustart fuer ' + scheduleTime.value + ' Uhr planen?')) return;
             await fetch(`/api/commands/${selectedMachine.value.machine_id}/schedule-updates`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ time: scheduleTime.value })
             });
-            alert(`Update geplant fuer ${scheduleTime.value} Uhr.`);
+            toast(`Update geplant fuer ${scheduleTime.value} Uhr.`, 'success');
         }
 
         async function updateAgent() {
@@ -397,7 +412,7 @@ createApp({
             const data = await res.json();
 
             if (data.success) {
-                alert('Update-Befehl gesendet. Agent startet sich in wenigen Sekunden neu.');
+                toast('Update-Befehl gesendet. Agent startet neu.', 'success');
             } else if (data.error && data.error.includes('unknown command')) {
                 // Old agent doesn't support update_agent - show manual command
                 const manRes = await fetch('/api/deploy/update-agent-manual', {
@@ -406,9 +421,10 @@ createApp({
                     body: JSON.stringify({ machine_id: selectedMachine.value.machine_id })
                 });
                 const manData = await manRes.json();
-                alert(`Agent unterstuetzt Remote-Update noch nicht. Fuehre diesen Befehl auf der Maschine aus:\n\n${manData.command}`);
+                toast('Agent unterstuetzt Remote-Update noch nicht. Manueller Befehl in Konsole kopiert.', 'warning');
+                navigator.clipboard.writeText(manData.command).catch(() => {});
             } else {
-                alert(data.error || 'Update fehlgeschlagen');
+                toast(data.error || 'Update fehlgeschlagen', 'error');
             }
         }
 
@@ -418,7 +434,7 @@ createApp({
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(settingsForm)
             });
-            if (res.ok) alert('Einstellungen gespeichert');
+            if (res.ok) toast('Einstellungen gespeichert', 'success');
         }
 
         async function testEmail() {
@@ -430,7 +446,7 @@ createApp({
                 body: JSON.stringify({ to })
             });
             const data = await res.json();
-            alert(data.success ? 'Test-Email gesendet!' : `Fehler: ${data.error}`);
+            toast(data.success ? 'Test-Email gesendet!' : 'Fehler: ' + data.error, data.success ? 'success' : 'error');
         }
 
         async function loadOnlineAgents() {
@@ -556,7 +572,7 @@ createApp({
 
         async function addVeeamInstance() {
             if (!newVeeam.name || !newVeeam.base_url || !newVeeam.username || !newVeeam.password) {
-                alert('Alle Felder ausfuellen'); return;
+                toast('Alle Felder ausfuellen', 'error'); return;
             }
             const res = await fetch('/api/veeam/instances', {
                 method: 'POST',
@@ -569,18 +585,18 @@ createApp({
                 await loadVeeamInstances();
             } else {
                 const err = await res.json();
-                alert(err.error || 'Fehler beim Hinzufuegen');
+                toast(err.error || 'Fehler beim Hinzufuegen', 'error');
             }
         }
 
         async function deleteVeeamInstance(id) {
-            if (!confirm('Veeam-Instanz wirklich entfernen?')) return;
+            if (!await confirmDialog('Veeam-Instanz wirklich entfernen?')) return;
             await fetch(`/api/veeam/instances/${id}`, { method: 'DELETE' });
             await loadVeeamInstances();
         }
 
         async function regenerateEnrollmentKey() {
-            if (!confirm('Enrollment Key wirklich neu generieren? Bestehende Install-Befehle werden ungueltig.')) return;
+            if (!await confirmDialog('Enrollment Key neu generieren? Bestehende Install-Befehle werden ungueltig.')) return;
             const res = await fetch('/api/settings/regenerate-enrollment-key', { method: 'POST' });
             const data = await res.json();
             if (data.enrollmentKey) {
@@ -601,8 +617,8 @@ createApp({
                 const m = machines.value.find(x => x.machine_id === mid);
                 return m && m.status === 'online';
             });
-            if (!online.length) { alert('Keine der ausgewaehlten Maschinen ist online.'); return; }
-            if (!confirm(`"${type}" auf ${online.length} Maschine(n) ausfuehren?`)) return;
+            if (!online.length) { toast('Keine der ausgewaehlten Maschinen ist online.', 'error'); return; }
+            if (!await confirmDialog(type + ' auf ' + online.length + ' Maschine(n) ausfuehren?')) return;
 
             for (const mid of online) {
                 await fetch(`/api/commands/${mid}/${type}`, {
@@ -615,12 +631,12 @@ createApp({
         }
 
         async function executeBatchInstall() {
-            if (!batchInstallPkg.value) { alert('Paketname eingeben'); return; }
+            if (!batchInstallPkg.value) { toast('Paketname eingeben', 'error'); return; }
             const online = selectedMachines.value.filter(mid => {
                 const m = machines.value.find(x => x.machine_id === mid);
                 return m && m.status === 'online';
             });
-            if (!online.length) { alert('Keine der ausgewaehlten Maschinen ist online.'); return; }
+            if (!online.length) { toast('Keine der ausgewaehlten Maschinen ist online.', 'error'); return; }
 
             for (const mid of online) {
                 await fetch(`/api/commands/${mid}/install-software`, {
@@ -691,7 +707,8 @@ createApp({
             deployForm, deployResult, scanNetwork, toggleAllScan, executeBatchDeploy, executeDeploy,
             addVeeamInstance, deleteVeeamInstance,
             saveSettings, testEmail, regenerateEnrollmentKey, acknowledgeAlert, logout,
-            loadTelemetryHistory, formatTime, formatBytes, diskPercent
+            loadTelemetryHistory, formatTime, formatBytes, diskPercent,
+            toasts, confirmData
         };
     }
 }).mount('#app');

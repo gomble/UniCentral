@@ -8,6 +8,20 @@
 </head>
 <body>
     <div id="app" v-cloak>
+        <!-- Toasts -->
+        <div class="toast-container">
+            <div v-for="t in toasts" :key="t.id" :class="'toast toast-' + t.type">{{ t.message }}</div>
+        </div>
+        <!-- Confirm Dialog -->
+        <div class="confirm-overlay" v-if="confirmData" @click.self="confirmData.resolve(false); confirmData = null">
+            <div class="confirm-box">
+                <p>{{ confirmData.message }}</p>
+                <div class="confirm-actions">
+                    <button class="btn btn-ghost" @click="confirmData.resolve(false); confirmData = null">Abbrechen</button>
+                    <button class="btn btn-primary" @click="confirmData.resolve(true); confirmData = null">Bestaetigen</button>
+                </div>
+            </div>
+        </div>
         <div class="app-layout">
             <aside class="sidebar">
                 <div class="sidebar-header">
@@ -333,9 +347,9 @@
                                 <li v-for="(u, i) in machineUpdates.pending" :key="i" style="padding:0.3rem 0;border-bottom:1px solid var(--border);font-size:0.85rem">{{ u }}</li>
                             </ul>
                             <div style="display:flex;gap:0.5rem;margin-top:0.8rem;flex-wrap:wrap;align-items:center">
-                                <button class="btn btn-primary btn-sm" @click="triggerUpdates('no-reboot')" :disabled="selectedMachine.status !== 'online'">Updates installieren</button>
-                                <button class="btn btn-warning btn-sm" @click="triggerUpdates('reboot')" :disabled="selectedMachine.status !== 'online'">Updates + Neustart</button>
-                                <span style="color:var(--text-muted);font-size:0.8rem">|</span>
+                                <button class="btn btn-primary btn-sm" @click="triggerUpdates('reboot')" :disabled="selectedMachine.status !== 'online'">Jetzt updaten</button>
+                                <span style="color:var(--text-muted);font-size:0.75rem">(Neustart bei Bedarf)</span>
+                                <span style="color:var(--text-muted);font-size:0.8rem;margin:0 0.3rem">|</span>
                                 <input v-model="scheduleTime" type="time" style="background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);border-radius:4px;padding:0.3rem 0.5rem;font-size:0.8rem;width:100px">
                                 <button class="btn btn-ghost btn-sm" @click="scheduleUpdates" :disabled="!scheduleTime || selectedMachine.status !== 'online'">Zeitplan setzen</button>
                             </div>
