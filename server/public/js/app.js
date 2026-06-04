@@ -26,6 +26,8 @@ createApp({
             if (filterGroup.value === 'ungrouped') return machines.value.filter(m => !m.group_id);
             return machines.value.filter(m => m.group_id === filterGroup.value);
         });
+        const showEditMachine = ref(false);
+        const editMachineForm = reactive({ display_name: '', hostname: '', category: '', group_id: '' });
         const showDeployModal = ref(false);
         const onlineAgents = ref([]);
         const scanning = ref(false);
@@ -155,7 +157,20 @@ createApp({
 
         async function loadMachines() {
             const res = await fetch('/api/machines');
-            if (res.ok) machines.value = await res.json();
+            if (res.ok) {
+                machines.value = await res.json();
+                loadDashboardTelemetry();
+            }
+        }
+
+        async function loadDashboardTelemetry() {
+            const res = await fetch('/api/monitoring/dashboard-telemetry');
+            if (res.ok) {
+                const tel = await res.json();
+                for (const m of machines.value) {
+                    m._telemetry = tel[m.machine_id] || null;
+                }
+            }
         }
 
         async function loadStats() {
@@ -319,13 +334,34 @@ createApp({
 
         async function sendCommand(type) {
             if (!selectedMachine.value) return;
-            if (!confirm(`${type === 'restart' ? 'Neustart' : 'Herunterfahren'} wirklich ausführen?`)) return;
+            if (!confirm(`${type === 'restart' ? 'Neustart' : 'Herunterfahren'} wirklich ausfuehren?`)) return;
 
             await fetch(`/api/commands/${selectedMachine.value.machine_id}/${type}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({})
             });
+        }
+
+        function openEditMachine() {
+            if (!selectedMachine.value) return;
+            editMachineForm.display_name = selectedMachine.value.display_name || '';
+            editMachineForm.hostname = selectedMachine.value.hostname || '';
+            editMachineForm.category = selectedMachine.value.category || 'client';
+            editMachineForm.group_id = selectedMachine.value.group_id || '';
+            showEditMachine.value = true;
+        }
+
+        async function saveEditMachine() {
+            if (!selectedMachine.value) return;
+            await fetch(`/api/machines/${selectedMachine.value.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(editMachineForm)
+            });
+            showEditMachine.value = false;
+            await loadMachineDetail(selectedMachine.value.id);
+            await loadMachines();
         }
 
         async function triggerUpdates(mode) {
@@ -370,7 +406,7 @@ createApp({
                     body: JSON.stringify({ machine_id: selectedMachine.value.machine_id })
                 });
                 const manData = await manRes.json();
-                alert(`Agent unterstützt Remote-Update noch nicht. Führe diesen Befehl auf der Maschine aus:\n\n${manData.command}`);
+                alert(`Agent unterstuetzt Remote-Update noch nicht. Fuehre diesen Befehl auf der Maschine aus:\n\n${manData.command}`);
             } else {
                 alert(data.error || 'Update fehlgeschlagen');
             }
@@ -386,7 +422,7 @@ createApp({
         }
 
         async function testEmail() {
-            const to = prompt('Email-Adresse für Testmail:');
+            const to = prompt('Email-Adresse fuer Testmail:');
             if (!to) return;
             const res = await fetch('/api/settings/test-email', {
                 method: 'POST',
@@ -480,7 +516,7 @@ createApp({
             });
             const data = await res.json();
             if (data.success) {
-                deployResult.value = { success: true, message: `Deploy gestartet für ${data.results.length} Maschine(n). Sie erscheinen in Kürze im Dashboard.` };
+                deployResult.value = { success: true, message: `Deploy gestartet fuer ${data.results.length} Maschine(n). Sie erscheinen in Kuerze im Dashboard.` };
                 deployTargets.value = [];
             } else {
                 deployResult.value = { success: false, message: data.error || 'Batch-Deploy fehlgeschlagen' };
@@ -500,7 +536,7 @@ createApp({
             });
             const data = await res.json();
             if (data.success) {
-                deployResult.value = { success: true, message: 'Deploy-Befehl gesendet! Maschine erscheint in Kürze.' };
+                deployResult.value = { success: true, message: 'Deploy-Befehl gesendet! Maschine erscheint in Kuerze.' };
             } else {
                 deployResult.value = { success: false, message: data.error || 'Deploy fehlgeschlagen' };
             }
@@ -520,7 +556,7 @@ createApp({
 
         async function addVeeamInstance() {
             if (!newVeeam.name || !newVeeam.base_url || !newVeeam.username || !newVeeam.password) {
-                alert('Alle Felder ausfüllen'); return;
+                alert('Alle Felder ausfuellen'); return;
             }
             const res = await fetch('/api/veeam/instances', {
                 method: 'POST',
@@ -533,7 +569,7 @@ createApp({
                 await loadVeeamInstances();
             } else {
                 const err = await res.json();
-                alert(err.error || 'Fehler beim Hinzufügen');
+                alert(err.error || 'Fehler beim Hinzufuegen');
             }
         }
 
@@ -544,7 +580,7 @@ createApp({
         }
 
         async function regenerateEnrollmentKey() {
-            if (!confirm('Enrollment Key wirklich neu generieren? Bestehende Install-Befehle werden ungültig.')) return;
+            if (!confirm('Enrollment Key wirklich neu generieren? Bestehende Install-Befehle werden ungueltig.')) return;
             const res = await fetch('/api/settings/regenerate-enrollment-key', { method: 'POST' });
             const data = await res.json();
             if (data.enrollmentKey) {
@@ -565,8 +601,8 @@ createApp({
                 const m = machines.value.find(x => x.machine_id === mid);
                 return m && m.status === 'online';
             });
-            if (!online.length) { alert('Keine der ausgewählten Maschinen ist online.'); return; }
-            if (!confirm(`"${type}" auf ${online.length} Maschine(n) ausführen?`)) return;
+            if (!online.length) { alert('Keine der ausgewaehlten Maschinen ist online.'); return; }
+            if (!confirm(`"${type}" auf ${online.length} Maschine(n) ausfuehren?`)) return;
 
             for (const mid of online) {
                 await fetch(`/api/commands/${mid}/${type}`, {
@@ -584,7 +620,7 @@ createApp({
                 const m = machines.value.find(x => x.machine_id === mid);
                 return m && m.status === 'online';
             });
-            if (!online.length) { alert('Keine der ausgewählten Maschinen ist online.'); return; }
+            if (!online.length) { alert('Keine der ausgewaehlten Maschinen ist online.'); return; }
 
             for (const mid of online) {
                 await fetch(`/api/commands/${mid}/install-software`, {
@@ -648,6 +684,7 @@ createApp({
             machineUpdates, machineShares, telemetryHistory, telemetryRange,
             telemetryCanvas, baseUrl, newMachine, settingsForm,
             navigate, addMachine, deleteMachine, showToken, sendCommand, updateAgent,
+            showEditMachine, editMachineForm, openEditMachine, saveEditMachine,
             triggerUpdates, scheduleUpdates, scheduleTime,
             toggleAllMachines, batchCommand, executeBatchInstall,
             showDeployModal, onlineAgents, scanning, scanDone, scanResults, deployTargets,

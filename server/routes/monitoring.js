@@ -6,6 +6,30 @@ const { getConnectedAgents } = require('../ws/agent-handler');
 
 router.use(requireAuth);
 
+router.get('/dashboard-telemetry', (req, res) => {
+    const machines = db.prepare("SELECT machine_id FROM machines WHERE status = 'online'").all();
+    const result = {};
+    for (const m of machines) {
+        const tel = db.prepare(`
+            SELECT cpu_percent, memory_percent, data_json FROM machine_telemetry
+            WHERE machine_id = ? ORDER BY collected_at DESC LIMIT 1
+        `).get(m.machine_id);
+        if (tel) {
+            let diskPercent = 0;
+            try {
+                const data = JSON.parse(tel.data_json || '{}');
+                if (data.disks && data.disks.length) {
+                    const totalAll = data.disks.reduce((s, d) => s + (d.total_bytes || 0), 0);
+                    const freeAll = data.disks.reduce((s, d) => s + (d.free_bytes || 0), 0);
+                    diskPercent = totalAll > 0 ? ((totalAll - freeAll) / totalAll) * 100 : 0;
+                }
+            } catch {}
+            result[m.machine_id] = { cpu: tel.cpu_percent, mem: tel.memory_percent, disk: diskPercent };
+        }
+    }
+    res.json(result);
+});
+
 router.get('/overview', (req, res) => {
     const total = db.prepare('SELECT COUNT(*) as count FROM machines').get().count;
     const online = db.prepare("SELECT COUNT(*) as count FROM machines WHERE status = 'online'").get().count;

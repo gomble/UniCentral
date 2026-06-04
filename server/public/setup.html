@@ -30,7 +30,7 @@
                     </div>
                     <div v-if="error" class="error-message">{{ error }}</div>
                     <button type="submit" class="btn btn-primary btn-block" :disabled="loading">
-                        {{ loading ? 'Wird eingerichtet...' : 'Einrichtung abschließen' }}
+                        {{ loading ? 'Wird eingerichtet...' : 'Einrichtung abschliessen' }}
                     </button>
                 </form>
             </div>
@@ -50,7 +50,7 @@
                 async function setup() {
                     error.value = '';
                     if (password.value !== password2.value) {
-                        error.value = 'Passwörter stimmen nicht überein';
+                        error.value = 'Passwoerter stimmen nicht ueberein';
                         return;
                     }
                     loading.value = true;
