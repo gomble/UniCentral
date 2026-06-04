@@ -55,6 +55,18 @@ app.use('/api/notifications', require('./routes/notifications'));
 app.use('/api/veeam', require('./routes/veeam'));
 app.use('/api/settings', require('./routes/settings'));
 
+// Agent version check (used by auto-update)
+app.get('/api/agent/version', (req, res) => {
+    const pkg = require(path.join(__dirname, '..', 'package.json'));
+    const baseUrl = getBaseUrl(req);
+    const os = req.query.os || 'windows';
+    const arch = req.query.arch || 'amd64';
+    res.json({
+        version: pkg.version,
+        download_url: `${baseUrl}/api/agent/download/${os}/${arch}`
+    });
+});
+
 // Agent binary download
 app.get('/api/agent/download/:os/:arch', (req, res) => {
     const { os, arch } = req.params;

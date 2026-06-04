@@ -1,8 +1,10 @@
 package updater
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"os/exec"
@@ -10,6 +12,45 @@ import (
 	"runtime"
 	"time"
 )
+
+type VersionInfo struct {
+	Version     string `json:"version"`
+	DownloadURL string `json:"download_url"`
+}
+
+func CheckAndUpdate(serverURL, currentVersion string) {
+	url := serverURL + "/api/agent/version"
+	resp, err := http.Get(url)
+	if err != nil {
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return
+	}
+
+	var info VersionInfo
+	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
+		return
+	}
+
+	if info.Version == "" || info.Version == currentVersion {
+		return
+	}
+
+	log.Printf("New agent version available: %s (current: %s), updating...", info.Version, currentVersion)
+
+	downloadURL := info.DownloadURL
+	if downloadURL == "" {
+		arch := runtime.GOARCH
+		downloadURL = fmt.Sprintf("%s/api/agent/download/%s/%s", serverURL, runtime.GOOS, arch)
+	}
+
+	if err := Update(downloadURL); err != nil {
+		log.Printf("Auto-update failed: %v", err)
+	}
+}
 
 func Update(downloadURL string) error {
 	currentPath, err := os.Executable()

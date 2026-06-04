@@ -3,17 +3,16 @@ FROM golang:1.22-alpine AS agent-builder
 
 WORKDIR /build
 COPY agent/ .
+COPY package.json /tmp/package.json
 
 RUN go mod tidy && go mod download
 
-# Windows amd64
-RUN GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w" -o /out/unicentral-agent-windows-amd64.exe .
-
-# Linux amd64
-RUN GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w" -o /out/unicentral-agent-linux-amd64 .
-
-# Linux arm64
-RUN GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -ldflags="-s -w" -o /out/unicentral-agent-linux-arm64 .
+# Extract version from package.json
+RUN apk add --no-cache jq && \
+    VERSION=$(cat /tmp/package.json | jq -r '.version') && \
+    GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w -X main.version=${VERSION}" -o /out/unicentral-agent-windows-amd64.exe . && \
+    GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w -X main.version=${VERSION}" -o /out/unicentral-agent-linux-amd64 . && \
+    GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -ldflags="-s -w -X main.version=${VERSION}" -o /out/unicentral-agent-linux-arm64 .
 
 # Stage 2: Node.js server
 FROM node:20-alpine

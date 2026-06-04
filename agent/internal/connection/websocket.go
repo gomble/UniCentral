@@ -18,6 +18,7 @@ import (
 	"github.com/unicentral/agent/internal/collectors"
 	"github.com/unicentral/agent/internal/commands"
 	"github.com/unicentral/agent/internal/config"
+	"github.com/unicentral/agent/internal/updater"
 )
 
 type Message struct {
@@ -111,11 +112,16 @@ func (c *Client) connect() error {
 
 	c.heartbeat = time.NewTicker(30 * time.Second)
 	c.telemetry = time.NewTicker(5 * time.Minute)
+	updateCheck := time.NewTicker(5 * time.Minute)
 
-	// Initial telemetry after short delay
+	// Initial telemetry after short delay, and immediate update check
 	go func() {
 		time.Sleep(5 * time.Second)
 		c.sendTelemetry()
+	}()
+	go func() {
+		time.Sleep(10 * time.Second)
+		updater.CheckAndUpdate(c.cfg.Server, c.cfg.AgentVersion)
 	}()
 
 	// Read messages in separate goroutine
@@ -136,15 +142,19 @@ func (c *Client) connect() error {
 		case <-c.done:
 			c.heartbeat.Stop()
 			c.telemetry.Stop()
+			updateCheck.Stop()
 			return nil
 		case err := <-readErr:
 			c.heartbeat.Stop()
 			c.telemetry.Stop()
+			updateCheck.Stop()
 			return err
 		case <-c.heartbeat.C:
 			c.sendHeartbeat()
 		case <-c.telemetry.C:
 			c.sendTelemetry()
+		case <-updateCheck.C:
+			go updater.CheckAndUpdate(c.cfg.Server, c.cfg.AgentVersion)
 		}
 	}
 }
