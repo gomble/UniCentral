@@ -12,6 +12,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -40,6 +41,7 @@ type Client struct {
 	done      chan struct{}
 	heartbeat *time.Ticker
 	telemetry *time.Ticker
+	writeMu   sync.Mutex
 }
 
 func New(cfg *config.Config) *Client {
@@ -243,7 +245,21 @@ func (c *Client) handleMessage(raw []byte) {
 }
 
 func (c *Client) executeCommand(cmd CommandPayload) {
-	result := commands.Execute(cmd.Type, cmd.Parameters)
+	// Stream intermediate progress so the dashboard shows a running command
+	// with live output instead of appearing stuck until completion.
+	onProgress := func(output string) {
+		c.send(Message{
+			Type:      "command_result",
+			Timestamp: time.Now().Unix(),
+			Payload: map[string]interface{}{
+				"command_id": cmd.CommandID,
+				"status":     "running",
+				"result":     output,
+			},
+		})
+	}
+
+	result := commands.Execute(cmd.Type, cmd.Parameters, onProgress)
 
 	response := Message{
 		Type:      "command_result",
@@ -265,6 +281,8 @@ func (c *Client) send(msg Message) {
 	if err != nil {
 		return
 	}
+	c.writeMu.Lock()
+	defer c.writeMu.Unlock()
 	c.conn.WriteMessage(websocket.TextMessage, data)
 }
 

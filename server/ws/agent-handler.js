@@ -331,13 +331,25 @@ function handleTelemetry(machineId, payload) {
 function handleCommandResult(machineId, payload) {
     if (!machineId || !payload.command_id) return;
 
-    db.prepare(`
-        UPDATE command_log SET
-            status = ?,
-            result = ?,
-            completed_at = CURRENT_TIMESTAMP
-        WHERE id = ? AND machine_id = ?
-    `).run(payload.status || 'completed', payload.result || '', payload.command_id, machineId);
+    const status = payload.status || 'completed';
+
+    // 'running' is an intermediate progress update for a long-running command
+    // (e.g. installing Windows updates) — keep the row open and only refresh the
+    // live output. Terminal results also stamp completed_at.
+    if (status === 'running') {
+        db.prepare(`
+            UPDATE command_log SET status = 'running', result = ?
+            WHERE id = ? AND machine_id = ?
+        `).run(payload.result || '', payload.command_id, machineId);
+    } else {
+        db.prepare(`
+            UPDATE command_log SET
+                status = ?,
+                result = ?,
+                completed_at = CURRENT_TIMESTAMP
+            WHERE id = ? AND machine_id = ?
+        `).run(status, payload.result || '', payload.command_id, machineId);
+    }
 
     broadcastToDashboards({ type: 'command_result', machineId, data: payload });
 }

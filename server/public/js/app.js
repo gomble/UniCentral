@@ -44,6 +44,7 @@ createApp({
         const batchInstallMethod = ref('auto');
         const selectedMachines = ref([]);
         const commandHistory = ref([]);
+        const liveCommand = ref(null);
         const tokenMachine = ref({});
         const selectedMachine = ref(null);
         const machineDisks = ref([]);
@@ -131,6 +132,29 @@ createApp({
             } else if (data.type === 'heartbeat') {
                 const m = machines.value.find(x => x.machine_id === data.machineId);
                 if (m) m.status = 'online';
+            } else if (data.type === 'command_result') {
+                handleCommandResultEvent(data);
+            }
+        }
+
+        function handleCommandResultEvent(data) {
+            const p = data.data || {};
+            // Live progress for the running command, shown in the machine detail view.
+            if (selectedMachine.value && selectedMachine.value.machine_id === data.machineId) {
+                if (!liveCommand.value || liveCommand.value.command_id === p.command_id || p.status === 'running') {
+                    liveCommand.value = {
+                        command_id: p.command_id,
+                        status: p.status,
+                        result: p.result || '',
+                        machine_id: data.machineId
+                    };
+                }
+            }
+            // Keep the command history view in sync without a manual refresh.
+            const row = commandHistory.value.find(c => c.id === p.command_id);
+            if (row) {
+                row.status = p.status;
+                row.result = p.result || row.result;
             }
         }
 
@@ -384,9 +408,15 @@ createApp({
             const endpoint = mode === 'reboot' ? 'trigger-updates-reboot' : 'trigger-updates';
             const msg = mode === 'reboot' ? 'Updates installieren und danach neustarten?' : 'Updates installieren (ohne Neustart)?';
             if (!await confirmDialog(msg)) return;
-            await fetch(`/api/commands/${selectedMachine.value.machine_id}/${endpoint}`, {
+            liveCommand.value = { command_id: null, status: 'sent', result: 'Update-Befehl gesendet, warte auf Agent...', machine_id: selectedMachine.value.machine_id };
+            const res = await fetch(`/api/commands/${selectedMachine.value.machine_id}/${endpoint}`, {
                 method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}'
             });
+            try {
+                const r = await res.json();
+                if (r && r.command_id && liveCommand.value) liveCommand.value.command_id = r.command_id;
+                if (r && r.success === false) { liveCommand.value = null; toast('Fehler: ' + (r.error || 'Befehl nicht gesendet'), 'error'); return; }
+            } catch {}
             toast('Update-Befehl gesendet.', 'success');
         }
 
@@ -694,7 +724,7 @@ createApp({
             view, username, machines, stats, alerts, alertCount,
             showAddMachine, showTokenModal, showAddVeeam, showBatchInstall, showGroupsModal,
             groups, newGroupName, filterGroup, filteredMachines, addGroup, deleteGroup, assignGroup,
-            batchInstallPkg, batchInstallMethod, selectedMachines, commandHistory,
+            batchInstallPkg, batchInstallMethod, selectedMachines, commandHistory, liveCommand,
             veeamInstances, newVeeam,
             tokenMachine, selectedMachine, machineDisks, machineServices, machineFirewall,
             machineUpdates, machineShares, telemetryHistory, telemetryRange,

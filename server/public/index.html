@@ -358,6 +358,19 @@
                             <p style="color:var(--success);margin-bottom:0.5rem">System ist aktuell</p>
                             <button class="btn btn-ghost btn-sm" @click="triggerUpdates('no-reboot')" :disabled="selectedMachine.status !== 'online'">Trotzdem nach Updates suchen</button>
                         </div>
+
+                        <!-- Live-Verlauf des laufenden Update-Befehls -->
+                        <div v-if="liveCommand && liveCommand.machine_id === selectedMachine.machine_id" style="margin-top:1rem;border-top:1px solid var(--border);padding-top:0.8rem">
+                            <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.5rem">
+                                <strong style="font-size:0.85rem">Update-Verlauf</strong>
+                                <span class="status-badge" :class="liveCommand.status === 'completed' ? 'online' : liveCommand.status === 'failed' ? 'offline' : 'warning'">
+                                    {{ liveCommand.status === 'running' ? 'läuft…' : liveCommand.status === 'sent' ? 'gesendet' : liveCommand.status }}
+                                </span>
+                                <span style="flex:1"></span>
+                                <button class="btn btn-ghost btn-sm" @click="liveCommand = null">Schließen</button>
+                            </div>
+                            <pre style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:4px;padding:0.6rem;max-height:240px;overflow:auto;font-size:0.75rem;white-space:pre-wrap;margin:0">{{ liveCommand.result || 'Warte auf Ausgabe…' }}</pre>
+                        </div>
                     </div>
 
                     <div class="card">

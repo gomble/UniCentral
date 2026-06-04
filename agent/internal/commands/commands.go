@@ -1,9 +1,16 @@
 package commands
 
 import (
+	"bufio"
+	"context"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
+	"strings"
+	"sync"
+	"time"
 
 	"github.com/unicentral/agent/internal/updater"
 )
@@ -13,7 +20,11 @@ type Result struct {
 	Output string `json:"output"`
 }
 
-func Execute(cmdType string, params map[string]interface{}) Result {
+// ProgressFunc receives the accumulated output of a long-running command so the
+// server/dashboard can show live progress while the command is still executing.
+type ProgressFunc func(output string)
+
+func Execute(cmdType string, params map[string]interface{}, onProgress ProgressFunc) Result {
 	switch cmdType {
 	case "restart":
 		return execRestart()
@@ -30,9 +41,9 @@ func Execute(cmdType string, params map[string]interface{}) Result {
 	case "add_firewall_rule":
 		return execAddFirewallRule(params)
 	case "trigger_updates":
-		return execTriggerUpdates()
+		return runUpdates(false, onProgress)
 	case "trigger_updates_reboot":
-		return execTriggerUpdatesReboot()
+		return runUpdates(true, onProgress)
 	case "schedule_updates":
 		return execScheduleUpdates(params)
 	case "deploy_neighbor":
@@ -172,72 +183,199 @@ func execUpdateAgent(params map[string]interface{}) Result {
 	return Result{Status: "completed", Output: "Agent update initiated, restarting..."}
 }
 
-func execTriggerUpdates() Result {
-	return execTriggerUpdatesReboot()
-}
+// updateTimeout caps how long a single update run may take. Large cumulative
+// Windows updates can legitimately need a long time to download and install.
+const updateTimeout = 90 * time.Minute
 
-func execTriggerUpdatesReboot() Result {
-	var cmd *exec.Cmd
+// updateLogPath returns a persistent on-disk log file for update runs so the
+// full history is available on the machine itself, not only in the dashboard.
+func updateLogPath() string {
+	var dir string
 	if runtime.GOOS == "windows" {
-		script := `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-$ProgressPreference = 'SilentlyContinue'
-Write-Output "Creating Windows Update session..."
-$session = New-Object -ComObject Microsoft.Update.Session
-$searcher = $session.CreateUpdateSearcher()
-
-Write-Output "Searching for updates..."
-$result = $searcher.Search("IsInstalled=0 AND Type='Software'")
-$updates = $result.Updates
-
-if ($updates.Count -eq 0) {
-    Write-Output "No updates available."
-    exit 0
-}
-
-Write-Output "$($updates.Count) update(s) found:"
-foreach ($u in $updates) { Write-Output "  - $($u.Title)" }
-
-Write-Output ""
-Write-Output "Downloading..."
-$downloader = $session.CreateUpdateDownloader()
-$downloader.Updates = $updates
-$downloader.Download() | Out-Null
-
-Write-Output "Installing..."
-$installer = $session.CreateUpdateInstaller()
-$installer.Updates = $updates
-$installResult = $installer.Install()
-
-Write-Output ""
-Write-Output "Result: $($installResult.ResultCode)"
-for ($i = 0; $i -lt $updates.Count; $i++) {
-    $r = $installResult.GetUpdateResult($i)
-    Write-Output "  [$($r.ResultCode)] $($updates.Item($i).Title)"
-}
-
-if ($installResult.RebootRequired) {
-    Write-Output ""
-    Write-Output "Reboot required - restarting in 60 seconds..."
-    shutdown /r /t 60 /c "UniCentral: Neustart nach Windows Update"
-} else {
-    Write-Output ""
-    Write-Output "No reboot required."
-}
-`
-		cmd = exec.Command("powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script)
+		base := os.Getenv("ProgramData")
+		if base == "" {
+			base = `C:\ProgramData`
+		}
+		dir = filepath.Join(base, "UniCentral", "logs")
 	} else {
-		if _, err := exec.LookPath("apt-get"); err == nil {
-			cmd = exec.Command("bash", "-c", "apt-get update && apt-get upgrade -y && [ -f /var/run/reboot-required ] && shutdown -r +1 'UniCentral: Reboot after updates' || echo 'No reboot required'")
-		} else {
-			cmd = exec.Command("bash", "-c", "dnf upgrade -y && needs-restarting -r || shutdown -r +1 'UniCentral: Reboot after updates'")
+		dir = "/var/log/unicentral"
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		// Fall back to the temp dir if the preferred location is not writable.
+		dir = os.TempDir()
+	}
+	return filepath.Join(dir, "windows-update.log")
+}
+
+// runStreaming runs a command, merging stdout and stderr and reading the output
+// line by line. Each line is appended to the returned buffer, written to logPath
+// (if set), and passed to onLine for live progress reporting. The full
+// accumulated output is returned once the command exits.
+func runStreaming(ctx context.Context, logPath, name string, args []string, onLine func(string)) (string, error) {
+	var logF *os.File
+	if logPath != "" {
+		if f, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644); err == nil {
+			logF = f
+			defer logF.Close()
+			fmt.Fprintf(logF, "\n===== %s | %s %s =====\n", time.Now().Format("2006-01-02 15:04:05"), name, strings.Join(args, " "))
 		}
 	}
 
-	out, err := cmd.CombinedOutput()
+	cmd := exec.CommandContext(ctx, name, args...)
+	pr, pw, err := os.Pipe()
 	if err != nil {
-		return Result{Status: "failed", Output: string(out) + "\n" + err.Error()}
+		return "", err
 	}
-	return Result{Status: "completed", Output: string(out)}
+	cmd.Stdout = pw
+	cmd.Stderr = pw
+
+	if err := cmd.Start(); err != nil {
+		pw.Close()
+		pr.Close()
+		return "", err
+	}
+	// Close the parent's copy of the write end so the reader sees EOF when the
+	// child process exits.
+	pw.Close()
+
+	var buf strings.Builder
+	done := make(chan struct{})
+	go func() {
+		scanner := bufio.NewScanner(pr)
+		scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+		for scanner.Scan() {
+			line := scanner.Text()
+			buf.WriteString(line)
+			buf.WriteByte('\n')
+			if logF != nil {
+				logF.WriteString(line + "\n")
+			}
+			if onLine != nil {
+				onLine(line)
+			}
+		}
+		close(done)
+	}()
+
+	err = cmd.Wait()
+	<-done
+	pr.Close()
+	return buf.String(), err
+}
+
+// runUpdates installs pending OS updates, streaming progress to onProgress.
+func runUpdates(reboot bool, onProgress ProgressFunc) Result {
+	logPath := updateLogPath()
+
+	// Throttle progress notifications so a verbose run doesn't flood the
+	// WebSocket; at most one update every ~1.5s, plus a final flush.
+	var mu sync.Mutex
+	var acc strings.Builder
+	var lastSend time.Time
+	emit := func(force bool) {
+		if onProgress == nil {
+			return
+		}
+		mu.Lock()
+		now := time.Now()
+		if !force && now.Sub(lastSend) < 1500*time.Millisecond {
+			mu.Unlock()
+			return
+		}
+		lastSend = now
+		out := acc.String()
+		mu.Unlock()
+		onProgress(out)
+	}
+	onLine := func(line string) {
+		mu.Lock()
+		acc.WriteString(line)
+		acc.WriteByte('\n')
+		mu.Unlock()
+		emit(false)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), updateTimeout)
+	defer cancel()
+
+	var name string
+	var args []string
+	if runtime.GOOS == "windows" {
+		name = "powershell"
+		args = []string{"-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", windowsUpdateScript(reboot)}
+	} else {
+		name = "bash"
+		args = []string{"-c", linuxUpdateScript(reboot)}
+	}
+
+	out, err := runStreaming(ctx, logPath, name, args, onLine)
+	emit(true) // flush the final accumulated output before the terminal result
+
+	if ctx.Err() == context.DeadlineExceeded {
+		return Result{Status: "failed", Output: out + fmt.Sprintf("\n[Timeout nach %s - Vorgang abgebrochen]", updateTimeout)}
+	}
+	if err != nil {
+		return Result{Status: "failed", Output: out + "\n" + err.Error()}
+	}
+	return Result{Status: "completed", Output: out}
+}
+
+// windowsUpdateScript builds a PowerShell script that installs pending Windows
+// updates via the PSWindowsUpdate module (installing it on first use). This is
+// far more reliable from a service context than the raw WUA COM Install() call,
+// and emits line-by-line progress that the agent streams to the dashboard.
+func windowsUpdateScript(reboot bool) string {
+	rebootFlag := "-IgnoreReboot"
+	if reboot {
+		rebootFlag = "-AutoReboot"
+	}
+	return `$ErrorActionPreference = 'Continue'
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$ProgressPreference = 'SilentlyContinue'
+function Log($m) { Write-Output ("[{0}] {1}" -f (Get-Date -Format 'HH:mm:ss'), $m) }
+
+Log "Pruefe PSWindowsUpdate-Modul..."
+if (-not (Get-Module -ListAvailable -Name PSWindowsUpdate)) {
+    Log "Modul nicht vorhanden - installiere PSWindowsUpdate (einmalig)..."
+    try { Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force -Scope AllUsers -ErrorAction Stop | Out-Null }
+    catch { Log ("Hinweis NuGet-Provider: " + $_.Exception.Message) }
+    try { Set-PSRepository -Name PSGallery -InstallationPolicy Trusted -ErrorAction SilentlyContinue } catch {}
+    try { Install-Module PSWindowsUpdate -Force -Confirm:$false -Scope AllUsers -ErrorAction Stop }
+    catch { Log ("FEHLER: PSWindowsUpdate konnte nicht installiert werden: " + $_.Exception.Message); exit 1 }
+}
+try { Import-Module PSWindowsUpdate -ErrorAction Stop } catch { Log ("FEHLER beim Laden des Moduls: " + $_.Exception.Message); exit 1 }
+
+Log "Suche nach verfuegbaren Updates..."
+$updates = @(Get-WindowsUpdate -ErrorAction SilentlyContinue)
+if ($updates.Count -eq 0) {
+    Log "Keine Updates verfuegbar."
+    exit 0
+}
+Log ("{0} Update(s) gefunden:" -f $updates.Count)
+foreach ($u in $updates) { Log ("  - " + $u.Title) }
+
+Log "Starte Download und Installation..."
+Get-WindowsUpdate -Install -AcceptAll ` + rebootFlag + ` -Confirm:$false -Verbose 4>&1 | Out-String -Stream | ForEach-Object { if ($_ -and $_.Trim()) { Log $_ } }
+Log "Windows-Update abgeschlossen."
+`
+}
+
+// linuxUpdateScript builds a shell script that upgrades all packages, optionally
+// rebooting afterwards if the distro signals it is required.
+func linuxUpdateScript(reboot bool) string {
+	var script string
+	if _, err := exec.LookPath("apt-get"); err == nil {
+		script = "export DEBIAN_FRONTEND=noninteractive; echo 'Aktualisiere Paketlisten...'; apt-get update && echo 'Installiere Upgrades...' && apt-get -y upgrade"
+		if reboot {
+			script += " && { if [ -f /var/run/reboot-required ]; then echo 'Neustart erforderlich...'; shutdown -r +1 'UniCentral: Reboot after updates'; else echo 'Kein Neustart erforderlich.'; fi; }"
+		}
+	} else {
+		script = "echo 'Installiere Upgrades...'; dnf -y upgrade"
+		if reboot {
+			script += " && { if needs-restarting -r >/dev/null 2>&1; then echo 'Kein Neustart erforderlich.'; else echo 'Neustart erforderlich...'; shutdown -r +1 'UniCentral: Reboot after updates'; fi; }"
+		}
+	}
+	return script
 }
 
 func execScheduleUpdates(params map[string]interface{}) Result {
