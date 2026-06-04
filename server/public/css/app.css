@@ -323,6 +323,17 @@ body {
     border-radius: 4px;
     background: var(--bg-hover);
     color: var(--text-secondary);
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+}
+.os-badge.windows {
+    background: rgba(59,130,246,0.12);
+    color: #3b82f6;
+}
+.os-badge.linux {
+    background: rgba(245,158,11,0.12);
+    color: #f59e0b;
 }
 
 /* Category Badge */
