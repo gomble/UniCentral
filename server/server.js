@@ -1,3 +1,6 @@
+const logBuffer = require('./services/log-buffer');
+logBuffer.intercept();
+
 const express = require('express');
 const session = require('express-session');
 const compression = require('compression');
@@ -64,6 +67,25 @@ app.use('/api/veeam', require('./routes/veeam'));
 app.use('/api/settings', require('./routes/settings'));
 app.use('/api/updates', require('./routes/updates'));
 app.use('/api/ad', require('./routes/active-directory'));
+
+// Live log stream (SSE)
+app.get('/api/logs/stream', (req, res) => {
+    if (!req.session || !req.session.authenticated) return res.status(401).end();
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders();
+    for (const e of logBuffer.entries.slice(-300)) {
+        res.write(`data: ${JSON.stringify(e)}\n\n`);
+    }
+    const unsub = logBuffer.subscribe(e => res.write(`data: ${JSON.stringify(e)}\n\n`));
+    req.on('close', unsub);
+});
+
+app.get('/api/logs', (req, res) => {
+    if (!req.session || !req.session.authenticated) return res.status(401).end();
+    res.json(logBuffer.entries.slice(-300));
+});
 
 // Agent version check (used by auto-update)
 app.get('/api/agent/version', (req, res) => {

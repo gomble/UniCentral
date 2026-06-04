@@ -1,4 +1,4 @@
-const { createApp, ref, reactive, onMounted, onUnmounted, computed } = Vue;
+const { createApp, ref, reactive, onMounted, onUnmounted, computed, nextTick } = Vue;
 
 // Wrapper around fetch that redirects to /login.html on 401 (expired session).
 async function apiFetch(url, options) {
@@ -132,6 +132,7 @@ createApp({
 
         onUnmounted(() => {
             if (ws) ws.close();
+            disconnectLogStream();
         });
 
         function connectWebSocket() {
@@ -308,6 +309,10 @@ createApp({
             } else if (target === 'ad-admin') {
                 loadADDomainControllers();
                 loadADTemplates();
+            } else if (target === 'logs') {
+                connectLogStream();
+            } else {
+                disconnectLogStream();
             }
         }
 
@@ -1186,6 +1191,74 @@ createApp({
             toast(`Vorlage "${name}" gespeichert.`, 'success');
         }
 
+        // Live log viewer
+        const logEntries = ref([]);
+        const logFilter = ref('');
+        const logSearch = ref('');
+        const logAutoScroll = ref(true);
+        const logContainer = ref(null);
+        let logEventSource = null;
+
+        const filteredLogEntries = computed(() => {
+            let list = logEntries.value;
+            if (logFilter.value === 'ws') {
+                list = list.filter(e => e.text.includes('[WS]'));
+            } else if (logFilter.value === 'warn' || logFilter.value === 'error') {
+                list = list.filter(e => e.level === logFilter.value);
+            }
+            if (logSearch.value) {
+                const q = logSearch.value.toLowerCase();
+                list = list.filter(e => e.text.toLowerCase().includes(q));
+            }
+            return list;
+        });
+
+        function connectLogStream() {
+            if (logEventSource) { logEventSource.close(); logEventSource = null; }
+            const res = fetch('/api/logs').then(r => r.ok ? r.json() : []).then(data => {
+                logEntries.value = data;
+                scrollLogsToBottom();
+            }).catch(() => {});
+
+            logEventSource = new EventSource('/api/logs/stream');
+            logEventSource.onmessage = (event) => {
+                try {
+                    const e = JSON.parse(event.data);
+                    // Deduplicate: skip if already loaded via /api/logs
+                    if (logEntries.value.length && logEntries.value[logEntries.value.length - 1].ts >= e.ts && logEntries.value.some(x => x.ts === e.ts && x.text === e.text)) return;
+                    logEntries.value.push(e);
+                    if (logEntries.value.length > 1200) logEntries.value.splice(0, 200);
+                    if (logAutoScroll.value) scrollLogsToBottom();
+                } catch {}
+            };
+        }
+
+        function scrollLogsToBottom() {
+            nextTick(() => {
+                const el = logContainer.value;
+                if (el) el.scrollTop = el.scrollHeight;
+            });
+        }
+
+        function disconnectLogStream() {
+            if (logEventSource) { logEventSource.close(); logEventSource = null; }
+        }
+
+        function formatLogTime(ts) {
+            const d = new Date(ts);
+            return d.toLocaleTimeString('de-DE', { hour12: false }) + '.' + String(d.getMilliseconds()).padStart(3, '0');
+        }
+
+        function logLineColor(e) {
+            const t = e.text;
+            if (e.level === 'error' || t.includes('rejected') || t.includes('Failed') || t.includes('failed') || t.includes('Invalid')) return '#fca5a5';
+            if (e.level === 'warn') return '#fde68a';
+            if (t.includes('registered') || t.includes('Connected') || t.includes('installed')) return '#86efac';
+            if (t.includes('[WS]')) return '#93c5fd';
+            if (t.includes('[DB]')) return '#c4b5fd';
+            return '#cbd5e1';
+        }
+
         function adAutoDisplayName() {
             const fn = adUserForm.given_name || '';
             const sn = adUserForm.surname || '';
@@ -1216,6 +1289,8 @@ createApp({
             addVeeamInstance, deleteVeeamInstance,
             saveSettings, testEmail, regenerateEnrollmentKey, acknowledgeAlert, logout,
             loadTelemetryHistory, formatTime, formatBytes, diskPercent, formatUptime,
+            logEntries, logFilter, logSearch, logAutoScroll, logContainer, filteredLogEntries,
+            connectLogStream, formatLogTime, logLineColor, scrollLogsToBottom,
             adDomainControllers, adSelectedDC, adUsers, adGroups, adUsersLoading, adUsersOutput,
             adTemplates, showADUserModal, showADTemplatesModal, adUserSearch, adUserFormMode,
             adUserFormTab, adEditingUser, adUserForm, adTemplateForm, adFilteredUsers,
