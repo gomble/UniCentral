@@ -167,6 +167,10 @@ body {
     border: 1px solid var(--border);
     padding: 1.2rem;
     margin-bottom: 1rem;
+    transition: border-color 0.2s;
+}
+.card:hover {
+    border-color: #3a4a5e;
 }
 
 .card-header {
@@ -190,8 +194,8 @@ body {
     background: var(--bg-card);
     border: 1px solid var(--border);
     border-radius: var(--radius);
-    padding: 1rem;
-    text-align: center;
+    padding: 0.8rem 1rem;
+    text-align: left;
 }
 .stat-card .stat-value {
     font-size: 2rem;
@@ -199,9 +203,11 @@ body {
     line-height: 1.2;
 }
 .stat-card .stat-label {
-    font-size: 0.8rem;
+    font-size: 0.75rem;
     color: var(--text-secondary);
-    margin-top: 0.3rem;
+    margin-top: 0.2rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
 }
 .stat-card.online .stat-value { color: var(--success); }
 .stat-card.offline .stat-value { color: var(--danger); }
