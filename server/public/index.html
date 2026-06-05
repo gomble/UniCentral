@@ -292,8 +292,11 @@
                                 <strong>{{ m.display_name || m.hostname }}</strong>
                                 <div style="font-size:0.72rem;color:var(--text-muted)">{{ m.ip_address || '' }}</div>
                             </template>
+                            <template #cell-name="{ row: m }">
+                                <span style="cursor:pointer;color:var(--accent)" @click.stop="navigate('machine-detail', m.id)">{{ m.display_name || m.hostname }}</span>
+                            </template>
                             <template #cell-updates_available="{ row: m }">
-                                <span v-if="m.updates_available > 0" style="color:var(--warning);font-weight:600">
+                                <span v-if="m.updates_available > 0" style="color:var(--warning);font-weight:600;cursor:pointer;text-decoration:underline dotted" @click.stop="updatesPendingModal = m" :title="'Ausstehende Updates anzeigen'">
                                     {{ m.updates_available }} Update(s)
                                     <span v-if="m.updates_reboot_required" style="font-size:0.7rem;margin-left:4px;color:var(--danger)">⚠ Neustart</span>
                                 </span>
@@ -393,6 +396,32 @@
                     </div>
                 </div>
 
+                <!-- Pending Updates Modal -->
+                <div class="confirm-overlay" v-if="updatesPendingModal" @click.self="updatesPendingModal = null">
+                    <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:1.5rem;width:90%;max-width:560px;max-height:80vh;display:flex;flex-direction:column">
+                        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+                            <h3>Ausstehende Updates: {{ updatesPendingModal.display_name || updatesPendingModal.hostname }}</h3>
+                            <button class="btn btn-ghost btn-sm" @click="updatesPendingModal = null">✕</button>
+                        </div>
+                        <div v-if="updatesPendingModal.updates_reboot_required" style="margin-bottom:0.8rem">
+                            <span class="status-badge warning">⚠ Neustart nach Update erforderlich</span>
+                        </div>
+                        <div style="overflow-y:auto;flex:1">
+                            <div v-if="updatesPendingModal.updates_pending && updatesPendingModal.updates_pending.length" style="display:flex;flex-direction:column;gap:0.3rem">
+                                <div v-for="(u, i) in updatesPendingModal.updates_pending" :key="i"
+                                    style="padding:0.4rem 0.6rem;background:var(--bg-secondary);border-radius:4px;font-size:0.84rem;font-family:monospace">
+                                    {{ u }}
+                                </div>
+                            </div>
+                            <p v-else style="color:var(--text-muted)">Keine Update-Details verfügbar.</p>
+                        </div>
+                        <div style="display:flex;justify-content:flex-end;margin-top:1rem;gap:0.5rem">
+                            <button class="btn btn-ghost btn-sm" @click="updatesPendingModal = null">Schließen</button>
+                            <button class="btn btn-primary btn-sm" @click="triggerSingleUpdate(updatesPendingModal.machine_id, true); updatesPendingModal = null" :disabled="updatesPendingModal.status !== 'online'">Jetzt updaten</button>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Command History View -->
                 <div v-if="view === 'command-history'">
                     <div class="page-header">
@@ -453,58 +482,18 @@
                             <div class="stat-value" style="font-size:1.2rem">{{ machineUptime ? formatUptime(machineUptime) : '–' }}</div>
                             <div class="stat-label">Laufzeit</div>
                         </div>
+                        <div class="stat-card" v-if="machineLatestMetrics">
+                            <div class="stat-value" :style="{color: machineLatestMetrics.cpu_percent > 85 ? 'var(--danger)' : machineLatestMetrics.cpu_percent > 60 ? 'var(--warning)' : 'var(--success)'}">{{ machineLatestMetrics.cpu_percent != null ? machineLatestMetrics.cpu_percent.toFixed(0) + '%' : '–' }}</div>
+                            <div class="stat-label">CPU</div>
+                        </div>
+                        <div class="stat-card" v-if="machineLatestMetrics">
+                            <div class="stat-value" :style="{color: machineLatestMetrics.memory_percent > 90 ? 'var(--danger)' : machineLatestMetrics.memory_percent > 75 ? 'var(--warning)' : 'var(--success)'}">{{ machineLatestMetrics.memory_percent != null ? machineLatestMetrics.memory_percent.toFixed(0) + '%' : '–' }}</div>
+                            <div class="stat-label">Speicher</div>
+                        </div>
                         <div class="stat-card" v-if="selectedMachine.is_domain_controller">
                             <div class="stat-value" style="font-size:0.95rem;color:#a78bfa">DC</div>
                             <div class="stat-label">{{ selectedMachine.domain_name || 'Domäne' }}</div>
                         </div>
-                    </div>
-
-                    <div class="card">
-                        <div class="card-header"><h3>Laufwerke</h3></div>
-                        <div v-if="machineDisks.length">
-                            <div v-for="d in machineDisks" :key="d.id" style="margin-bottom:0.8rem">
-                                <div style="display:flex;justify-content:space-between;margin-bottom:0.3rem">
-                                    <span>{{ d.drive_letter || d.mount_point }}</span>
-                                    <span>{{ formatBytes(d.free_bytes) }} frei / {{ formatBytes(d.total_bytes) }}</span>
-                                </div>
-                                <div style="background:var(--bg-primary);border-radius:4px;height:8px;overflow:hidden">
-                                    <div :style="{width: diskPercent(d) + '%', background: diskPercent(d) > 90 ? 'var(--danger)' : diskPercent(d) > 75 ? 'var(--warning)' : 'var(--success)', height: '100%'}"></div>
-                                </div>
-                            </div>
-                        </div>
-                        <p v-else style="color:var(--text-muted)">Keine Laufwerksdaten verfuegbar</p>
-                    </div>
-
-                    <div class="card">
-                        <div class="card-header"><h3>Dienste</h3></div>
-                        <data-table :rows="machineServices" :columns="servicesColumns" row-key="id"
-                            search-placeholder="Dienste durchsuchen..." empty-text="Keine Dienstdaten verfuegbar"
-                            table-style="max-height:none">
-                            <template #cell-status="{ row: s }">
-                                <span class="status-badge" :class="s.status === 'running' ? 'online' : 'offline'">{{ s.status }}</span>
-                            </template>
-                        </data-table>
-                    </div>
-
-                    <div class="card">
-                        <div class="card-header">
-                            <h3>Firewall</h3>
-                            <div style="display:flex;gap:0.5rem">
-                                <span class="status-badge" :class="machineFirewall.enabled ? 'online' : 'offline'">
-                                    {{ machineFirewall.enabled ? 'Aktiv' : 'Inaktiv' }}
-                                </span>
-                                <button class="btn btn-sm" :class="machineFirewall.enabled ? 'btn-danger' : 'btn-success'" @click="sendCommand(machineFirewall.enabled ? 'disable_firewall' : 'enable_firewall')" :disabled="selectedMachine.status !== 'online'">
-                                    {{ machineFirewall.enabled ? 'Deaktivieren' : 'Aktivieren' }}
-                                </button>
-                            </div>
-                        </div>
-                        <data-table :rows="machineFirewall.rules || []" :columns="firewallColumns" row-key="rule_name"
-                            search-placeholder="Regeln durchsuchen..." empty-text="Keine Firewall-Regeln vorhanden">
-                            <template #cell-name="{ row: r }">{{ r.rule_name || r.name }}</template>
-                            <template #cell-action="{ row: r }">
-                                <span :style="{color: r.action === 'allow' ? 'var(--success)' : 'var(--danger)'}">{{ r.action }}</span>
-                            </template>
-                        </data-table>
                     </div>
 
                     <div class="card">
@@ -529,8 +518,6 @@
                             <p style="color:var(--success);margin-bottom:0.5rem">System ist aktuell</p>
                             <button class="btn btn-ghost btn-sm" @click="triggerUpdates('no-reboot')" :disabled="selectedMachine.status !== 'online'">Trotzdem nach Updates suchen</button>
                         </div>
-
-                        <!-- Live-Verlauf des laufenden Update-Befehls -->
                         <div v-if="liveCommand && liveCommand.machine_id === selectedMachine.machine_id" style="margin-top:1rem;border-top:1px solid var(--border);padding-top:0.8rem">
                             <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.5rem">
                                 <strong style="font-size:0.85rem">Update-Verlauf</strong>
@@ -542,6 +529,22 @@
                             </div>
                             <pre style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:4px;padding:0.6rem;max-height:240px;overflow:auto;font-size:0.75rem;white-space:pre-wrap;margin:0">{{ liveCommand.result || 'Warte auf Ausgabe…' }}</pre>
                         </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header"><h3>Laufwerke</h3></div>
+                        <div v-if="machineDisks.length">
+                            <div v-for="d in machineDisks" :key="d.id" style="margin-bottom:0.8rem">
+                                <div style="display:flex;justify-content:space-between;margin-bottom:0.3rem">
+                                    <span>{{ d.drive_letter || d.mount_point }}</span>
+                                    <span>{{ formatBytes(d.free_bytes) }} frei / {{ formatBytes(d.total_bytes) }}</span>
+                                </div>
+                                <div style="background:var(--bg-primary);border-radius:4px;height:8px;overflow:hidden">
+                                    <div :style="{width: diskPercent(d) + '%', background: diskPercent(d) > 90 ? 'var(--danger)' : diskPercent(d) > 75 ? 'var(--warning)' : 'var(--success)', height: '100%'}"></div>
+                                </div>
+                            </div>
+                        </div>
+                        <p v-else style="color:var(--text-muted)">Keine Laufwerksdaten verfuegbar</p>
                     </div>
 
                     <div class="card">
@@ -566,6 +569,46 @@
                             <canvas ref="telemetryCanvas"></canvas>
                         </div>
                         <p v-else style="color:var(--text-muted)">Keine Verlaufsdaten verfuegbar</p>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header" style="cursor:pointer" @click="detailServicesClosed = !detailServicesClosed">
+                            <h3>Dienste <span style="font-size:0.8rem;color:var(--text-muted)">({{ machineServices.length }})</span></h3>
+                            <span style="color:var(--text-muted);font-size:0.9rem">{{ detailServicesClosed ? '▶' : '▼' }}</span>
+                        </div>
+                        <div v-show="!detailServicesClosed">
+                            <data-table :rows="machineServices" :columns="servicesColumns" row-key="id"
+                                search-placeholder="Dienste durchsuchen..." empty-text="Keine Dienstdaten verfuegbar"
+                                table-style="max-height:none">
+                                <template #cell-status="{ row: s }">
+                                    <span class="status-badge" :class="s.status === 'running' ? 'online' : 'offline'">{{ s.status }}</span>
+                                </template>
+                            </data-table>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header" style="cursor:pointer" @click="detailFirewallClosed = !detailFirewallClosed">
+                            <h3>Firewall</h3>
+                            <div style="display:flex;gap:0.5rem;align-items:center">
+                                <span class="status-badge" :class="machineFirewall.enabled ? 'online' : 'offline'">
+                                    {{ machineFirewall.enabled ? 'Aktiv' : 'Inaktiv' }}
+                                </span>
+                                <button class="btn btn-sm" :class="machineFirewall.enabled ? 'btn-danger' : 'btn-success'" @click.stop="sendCommand(machineFirewall.enabled ? 'disable_firewall' : 'enable_firewall')" :disabled="selectedMachine.status !== 'online'">
+                                    {{ machineFirewall.enabled ? 'Deaktivieren' : 'Aktivieren' }}
+                                </button>
+                                <span style="color:var(--text-muted);font-size:0.9rem;margin-left:0.3rem">{{ detailFirewallClosed ? '▶' : '▼' }}</span>
+                            </div>
+                        </div>
+                        <div v-show="!detailFirewallClosed">
+                            <data-table :rows="machineFirewall.rules || []" :columns="firewallColumns" row-key="rule_name"
+                                search-placeholder="Regeln durchsuchen..." empty-text="Keine Firewall-Regeln vorhanden">
+                                <template #cell-name="{ row: r }">{{ r.rule_name || r.name }}</template>
+                                <template #cell-action="{ row: r }">
+                                    <span :style="{color: r.action === 'allow' ? 'var(--success)' : 'var(--danger)'}">{{ r.action }}</span>
+                                </template>
+                            </data-table>
+                        </div>
                     </div>
                 </div>
 

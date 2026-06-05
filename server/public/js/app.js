@@ -202,6 +202,7 @@ const app = createApp({
         const updatesLogs = ref([]);
         const updatesLogsLoading = ref(false);
         const updatesScheduleMachine = ref(null);
+        const updatesPendingModal = ref(null);
         const updatesScheduleForm = reactive({ time: '', reboot: true });
         const updatesLiveStreams = ref({});
         const tokenMachine = ref({});
@@ -1104,6 +1105,14 @@ const app = createApp({
             return m && m._telemetry ? m._telemetry.uptime || 0 : 0;
         });
 
+        const machineLatestMetrics = computed(() => {
+            if (!telemetryHistory.value.length) return null;
+            return telemetryHistory.value[telemetryHistory.value.length - 1];
+        });
+
+        const detailServicesClosed = ref(true);
+        const detailFirewallClosed = ref(true);
+
         // AD-Verwaltung state
         const adDomainControllers = ref([]);
         const adSelectedDC = ref('');
@@ -1792,7 +1801,8 @@ const app = createApp({
             tokenMachine, selectedMachine, machineDisks, machineServices, machineFirewall,
             machineUpdates, machineShares, telemetryHistory, telemetryRange,
             telemetryCanvas, baseUrl, newMachine, settingsForm,
-            machineUptime,
+            machineUptime, machineLatestMetrics, detailServicesClosed, detailFirewallClosed,
+            updatesPendingModal,
             navigate, addMachine, deleteMachine, showToken, sendCommand, updateAgent,
             showEditMachine, editMachineForm, openEditMachine, saveEditMachine,
             triggerUpdates, scheduleUpdates, scheduleTime,
