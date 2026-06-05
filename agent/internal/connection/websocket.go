@@ -248,10 +248,16 @@ func (c *Client) handleMessage(raw []byte) {
 			c.cfg.MachineSecret = ""
 			config.SetMachineSecret("")
 		} else if errMsg.Message == "Unknown machine" {
-			log.Println("Machine not recognised by server, clearing identity for re-registration")
-			c.cfg.MachineID = ""
-			c.cfg.MachineSecret = ""
-			config.ClearIdentity()
+			if c.cfg.EnrollmentKey != "" {
+				// Fall back to enrollment key for next connect attempt.
+				// Only clear from memory; config file is untouched until
+				// a new registration succeeds and SetMachineID is called.
+				log.Println("Machine not recognised by server, will re-register with enrollment key")
+				c.cfg.MachineID = ""
+				c.cfg.MachineSecret = ""
+			} else {
+				log.Println("Machine not recognised by server and no enrollment key in config - run install script to re-enroll")
+			}
 		}
 
 	case "command":

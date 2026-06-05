@@ -89,6 +89,7 @@ Type=simple
 ExecStart=/usr/local/bin/unicentral-agent --config /etc/unicentral/config.json
 Restart=always
 RestartSec=5
+StartLimitIntervalSec=0
 StandardOutput=journal
 StandardError=journal
 
