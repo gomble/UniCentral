@@ -185,10 +185,46 @@ function handleRegister(ws, key, payload) {
     }
     if (key === config.enrollmentKey) {
         try {
-        // Self-registration with enrollment key - create machine automatically
+        const ipStr = Array.isArray(ip_addresses) ? ip_addresses.join(', ') : (ip_addresses || '');
+        const machineSecret = generateMachineSecret();
+
+        // Reinstall guard: if a machine with this hostname already exists, reuse it
+        // instead of creating a duplicate (handles lost config.json on agent reinstall).
+        const existing = hostname
+            ? db.prepare('SELECT * FROM machines WHERE hostname = ? ORDER BY id ASC LIMIT 1').get(hostname)
+            : null;
+
+        if (existing) {
+            db.prepare(`
+                UPDATE machines SET
+                    os_type = COALESCE(?, os_type),
+                    agent_version = ?,
+                    ip_address = ?,
+                    category = COALESCE(?, category),
+                    machine_secret = ?,
+                    status = 'online',
+                    last_seen = CURRENT_TIMESTAMP
+                WHERE machine_id = ?
+            `).run(os_type || null, agent_version || '', ipStr, category || null, machineSecret, existing.machine_id);
+
+            ws._machineId = existing.machine_id;
+            connectedAgents.set(existing.machine_id, ws);
+
+            ws.send(createMessage(MSG_TYPES.REGISTERED, {
+                machine_id: existing.machine_id,
+                machine_secret: machineSecret,
+                heartbeat_interval: config.heartbeatInterval,
+                telemetry_interval: config.telemetryInterval
+            }));
+
+            console.log(`[WS] Reinstalled agent matched by hostname to existing machine: ${existing.machine_id} (${hostname})`);
+            broadcastToDashboards({ type: 'machine_connected', machineId: existing.machine_id });
+            return;
+        }
+
+        // New machine — create entry
         const { v4: uuidv4 } = require('uuid');
         const machineId = uuidv4();
-        const machineSecret = generateMachineSecret();
 
         db.prepare(`
             INSERT INTO machines (machine_id, hostname, os_type, category, agent_version, ip_address, status, last_seen, machine_secret)
@@ -199,7 +235,7 @@ function handleRegister(ws, key, payload) {
             os_type || 'windows',
             category || 'client',
             agent_version || '',
-            Array.isArray(ip_addresses) ? ip_addresses.join(', ') : (ip_addresses || ''),
+            ipStr,
             machineSecret
         );
 
