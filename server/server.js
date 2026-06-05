@@ -193,32 +193,54 @@ function generateLinuxScript(req) {
     const key = req.query.key || '';
     const category = req.query.category || 'client';
     return `#!/bin/bash
-set -e
+set -euo pipefail
 SERVER="${baseUrl}"
 KEY="${key}"
 CATEGORY="${category}"
 if [ -z "$KEY" ]; then read -p "Enter enrollment key: " KEY; fi
 
-echo "Installing UniCentral Agent..."
-
+echo "[1/5] Detecting architecture..."
 ARCH=$(uname -m)
 case $ARCH in
     x86_64) ARCH="amd64" ;;
     aarch64|arm64) ARCH="arm64" ;;
     *) echo "Unsupported architecture: $ARCH"; exit 1 ;;
 esac
+echo "       Architecture: $ARCH"
 
-curl -sL "$SERVER/api/agent/download/linux/$ARCH" -o /usr/local/bin/unicentral-agent
+echo "[2/5] Stopping existing service (if any)..."
+systemctl stop unicentral-agent 2>/dev/null || true
+sleep 1
+
+echo "[3/5] Downloading agent binary..."
+if ! curl -fsSL "$SERVER/api/agent/download/linux/$ARCH" -o /usr/local/bin/unicentral-agent; then
+    echo "ERROR: Download failed. Check server URL and network connectivity."
+    exit 1
+fi
 chmod +x /usr/local/bin/unicentral-agent
+echo "       Binary installed."
 
+echo "[4/5] Writing configuration..."
 mkdir -p /etc/unicentral
-cat > /etc/unicentral/config.json <<EOF
-{"server": "$SERVER", "enrollment_key": "$KEY", "category": "$CATEGORY"}
-EOF
+
+EXISTING_ID=""
+EXISTING_SECRET=""
+if [ -f /etc/unicentral/config.json ]; then
+    EXISTING_ID=$(grep -o '"machine_id"[[:space:]]*:[[:space:]]*"[^"]*"' /etc/unicentral/config.json 2>/dev/null | sed 's/.*"\\([^"]*\\)"$/\\1/' || true)
+    EXISTING_SECRET=$(grep -o '"machine_secret"[[:space:]]*:[[:space:]]*"[^"]*"' /etc/unicentral/config.json 2>/dev/null | sed 's/.*"\\([^"]*\\)"$/\\1/' || true)
+fi
+
+if [ -n "$EXISTING_ID" ]; then
+    echo "       Preserving existing machine identity (\${EXISTING_ID:0:8}...)."
+    printf '{"server":"%s","machine_id":"%s","machine_secret":"%s","category":"%s"}' \\
+        "$SERVER" "$EXISTING_ID" "$EXISTING_SECRET" "$CATEGORY" > /etc/unicentral/config.json
+else
+    printf '{"server":"%s","enrollment_key":"%s","category":"%s"}' \\
+        "$SERVER" "$KEY" "$CATEGORY" > /etc/unicentral/config.json
+fi
 chmod 600 /etc/unicentral/config.json
 
-# Create systemd service
-cat > /etc/systemd/system/unicentral-agent.service <<EOF
+cat > /etc/systemd/system/unicentral-agent.service <<'SVCEOF'
 [Unit]
 Description=UniCentral Agent
 After=network-online.target
@@ -229,16 +251,29 @@ Type=simple
 ExecStart=/usr/local/bin/unicentral-agent --config /etc/unicentral/config.json
 Restart=always
 RestartSec=5
+StandardOutput=journal
+StandardError=journal
 
 [Install]
 WantedBy=multi-user.target
-EOF
+SVCEOF
 
+echo "[5/5] Starting service..."
 systemctl daemon-reload
 systemctl enable unicentral-agent
 systemctl start unicentral-agent
+sleep 2
 
-echo "UniCentral Agent installed and running!"
+if systemctl is-active --quiet unicentral-agent; then
+    echo ""
+    echo "UniCentral Agent installed and running!"
+    echo "Logs: journalctl -u unicentral-agent -f"
+else
+    echo ""
+    echo "ERROR: Service failed to start. Last log lines:"
+    journalctl -u unicentral-agent -n 20 --no-pager || true
+    exit 1
+fi
 `;
 }
 
