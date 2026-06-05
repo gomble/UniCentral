@@ -202,47 +202,40 @@
                     </div>
 
                     <div class="card">
-                        <table class="machine-table" v-if="machines.length">
-                            <thead>
-                                <tr>
-                                    <th><input type="checkbox" @change="toggleAllMachines" :checked="selectedMachines.length === machines.length"></th>
-                                    <th>Status</th>
-                                    <th>Hostname</th>
-                                    <th>OS</th>
-                                    <th>Typ</th>
-                                    <th>Gruppe</th>
-                                    <th>Agent</th>
-                                    <th>Laufzeit</th>
-                                    <th>Aktionen</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr v-for="m in filteredMachines" :key="m.id" @click="navigate('machine-detail', m.id)" style="cursor:pointer">
-                                    <td @click.stop><input type="checkbox" :value="m.machine_id" v-model="selectedMachines"></td>
-                                    <td><span class="status-badge" :class="m.status">{{ m.status }}</span></td>
-                                    <td @click="navigate('machine-detail', m.id)" style="cursor:pointer">
-                                        <span v-if="m.is_domain_controller" style="background:#7c3aed;color:#fff;font-size:0.6rem;padding:1px 4px;border-radius:3px;margin-right:4px;vertical-align:middle">DC</span>
-                                        <strong>{{ m.display_name || m.hostname }}</strong>
-                                    </td>
-                                    <td>
-                                        <span class="os-badge" :class="m.os_type">
-                                            <svg v-if="m.os_type === 'windows'" width="11" height="11" viewBox="0 0 24 24" fill="currentColor" style="flex-shrink:0"><path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801"/></svg>
-                                            <svg v-else-if="m.os_type === 'linux'" width="11" height="11" viewBox="0 0 24 24" fill="currentColor" style="flex-shrink:0"><path d="M12.504 0c-.155 0-.315.008-.48.021-4.226.333-3.105 4.807-3.17 6.298-.076 1.092-.3 1.953-1.05 3.02-.885 1.051-2.127 2.75-2.716 4.521-.278.832-.41 1.684-.287 2.489.117.779.567 1.563 1.182 2.114.267.235.537.458.816.67.302.221.607.435.917.642.61.407 1.222.786 1.834 1.153 1.247.728 2.495 1.431 3.742 2.134.248.142.497.283.746.425.249.141.497.283.745.424.248.14.496.283.744.424l.049.028c.154.087.308.174.462.262.155.087.31.175.464.262l.06.034c.31.175.618.35.927.524l.463.262a.065.065 0 0 0 .061 0l.463-.262c.309-.174.617-.349.926-.524l.06-.034c.155-.087.31-.175.464-.262.155-.088.309-.175.463-.262l.049-.028c.248-.141.496-.284.744-.424.248-.141.496-.283.745-.424.249-.142.498-.283.746-.425 1.247-.703 2.495-1.406 3.742-2.134.612-.367 1.224-.746 1.834-1.153.31-.207.615-.421.917-.642.279-.212.549-.435.816-.67.615-.551 1.065-1.335 1.182-2.114.123-.805-.009-1.657-.287-2.489-.589-1.771-1.831-3.47-2.716-4.521-.75-1.067-.974-1.928-1.05-3.02-.065-1.491 1.056-5.965-3.17-6.298-.165-.013-.325-.021-.48-.021zm-.982 6.008c.316 0 .604.111.822.296.213.183.349.44.349.725v.018c0 .283-.136.541-.35.724-.217.185-.505.296-.82.296s-.604-.111-.822-.296c-.213-.183-.349-.44-.349-.725v-.018c0-.283.136-.541.35-.724.217-.185.505-.296.82-.296zm1.963 0c.316 0 .604.111.822.296.213.183.349.44.349.725v.018c0 .283-.136.541-.35.724-.217.185-.505.296-.82.296s-.604-.111-.822-.296c-.213-.183-.349-.44-.349-.725v-.018c0-.283.136-.541.35-.724.217-.185.505-.296.82-.296z"/></svg>
-                                            {{ m.os_type }}
-                                        </span>
-                                    </td>
-                                    <td><span class="category-badge" :class="m.category">{{ m.category }}</span></td>
-                                    <td>{{ m.group_name || '–' }}</td>
-                                    <td>{{ m.agent_version || '–' }}</td>
-                                    <td style="color:var(--text-muted);font-size:0.82rem">{{ m._telemetry && m._telemetry.uptime ? formatUptime(m._telemetry.uptime) : '–' }}</td>
-                                    <td>
-                                        <button class="btn btn-ghost btn-sm" @click.stop="showToken(m)" title="Install-Befehl">Token</button>
-                                        <button class="btn btn-danger btn-sm" @click.stop="deleteMachine(m)" title="Entfernen">✕</button>
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
-                        <p v-else style="color: var(--text-muted); padding: 1rem 0;">Keine Maschinen vorhanden.</p>
+                        <data-table :rows="filteredMachines" :columns="machineColumns" row-key="id" row-clickable
+                            search-placeholder="Maschinen durchsuchen..." empty-text="Keine Maschinen vorhanden."
+                            @row-click="m => navigate('machine-detail', m.id)">
+                            <template #header-_select>
+                                <input type="checkbox" @change="toggleAllMachines" :checked="selectedMachines.length === machines.length && machines.length > 0">
+                            </template>
+                            <template #cell-_select="{ row: m }">
+                                <input type="checkbox" :value="m.machine_id" v-model="selectedMachines">
+                            </template>
+                            <template #cell-status="{ row: m }">
+                                <span class="status-badge" :class="m.status">{{ m.status }}</span>
+                            </template>
+                            <template #cell-name="{ row: m }">
+                                <span v-if="m.is_domain_controller" style="background:#7c3aed;color:#fff;font-size:0.6rem;padding:1px 4px;border-radius:3px;margin-right:4px;vertical-align:middle">DC</span>
+                                <strong>{{ m.display_name || m.hostname }}</strong>
+                            </template>
+                            <template #cell-os_type="{ row: m }">
+                                <span class="os-badge" :class="m.os_type">
+                                    <svg v-if="m.os_type === 'windows'" width="11" height="11" viewBox="0 0 24 24" fill="currentColor" style="flex-shrink:0"><path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801"/></svg>
+                                    <svg v-else-if="m.os_type === 'linux'" width="11" height="11" viewBox="0 0 24 24" fill="currentColor" style="flex-shrink:0"><path d="M12.504 0c-.155 0-.315.008-.48.021-4.226.333-3.105 4.807-3.17 6.298-.076 1.092-.3 1.953-1.05 3.02-.885 1.051-2.127 2.75-2.716 4.521-.278.832-.41 1.684-.287 2.489.117.779.567 1.563 1.182 2.114.267.235.537.458.816.67.302.221.607.435.917.642.61.407 1.222.786 1.834 1.153 1.247.728 2.495 1.431 3.742 2.134.248.142.497.283.746.425.249.141.497.283.745.424.248.14.496.283.744.424l.049.028c.154.087.308.174.462.262.155.087.31.175.464.262l.06.034c.31.175.618.35.927.524l.463.262a.065.065 0 0 0 .061 0l.463-.262c.309-.174.617-.349.926-.524l.06-.034c.155-.087.31-.175.464-.262.155-.088.309-.175.463-.262l.049-.028c.248-.141.496-.284.744-.424.248-.141.496-.283.745-.424.249-.142.498-.283.746-.425 1.247-.703 2.495-1.406 3.742-2.134.612-.367 1.224-.746 1.834-1.153.31-.207.615-.421.917-.642.279-.212.549-.435.816-.67.615-.551 1.065-1.335 1.182-2.114.123-.805-.009-1.657-.287-2.489-.589-1.771-1.831-3.47-2.716-4.521-.75-1.067-.974-1.928-1.05-3.02-.065-1.491 1.056-5.965-3.17-6.298-.165-.013-.325-.021-.48-.021zm-.982 6.008c.316 0 .604.111.822.296.213.183.349.44.349.725v.018c0 .283-.136.541-.35.724-.217.185-.505.296-.82.296s-.604-.111-.822-.296c-.213-.183-.349-.44-.349-.725v-.018c0-.283.136-.541.35-.724.217-.185.505-.296.82-.296zm1.963 0c.316 0 .604.111.822.296.213.183.349.44.349.725v.018c0 .283-.136.541-.35.724-.217.185-.505.296-.82.296s-.604-.111-.822-.296c-.213-.183-.349-.44-.349-.725v-.018c0-.283.136-.541.35-.724.217-.185.505-.296.82-.296z"/></svg>
+                                    {{ m.os_type }}
+                                </span>
+                            </template>
+                            <template #cell-category="{ row: m }">
+                                <span class="category-badge" :class="m.category">{{ m.category }}</span>
+                            </template>
+                            <template #cell-uptime="{ row: m }">
+                                <span style="color:var(--text-muted);font-size:0.82rem">{{ m._telemetry && m._telemetry.uptime ? formatUptime(m._telemetry.uptime) : '–' }}</span>
+                            </template>
+                            <template #cell-_actions="{ row: m }">
+                                <button class="btn btn-ghost btn-sm" @click.stop="showToken(m)" title="Install-Befehl">Token</button>
+                                <button class="btn btn-danger btn-sm" @click.stop="deleteMachine(m)" title="Entfernen">✕</button>
+                            </template>
+                        </data-table>
                     </div>
                 </div>
 
@@ -282,71 +275,63 @@
                     </div>
 
                     <!-- Machine Table -->
-                    <div class="card" style="padding:0;overflow:hidden">
-                        <table class="machine-table" v-if="updatesFilteredMachines.length">
-                            <thead>
-                                <tr>
-                                    <th style="width:36px"><input type="checkbox" @change="updatesToggleAll" :checked="updatesSelected.length === updatesFilteredMachines.length && updatesFilteredMachines.length > 0"></th>
-                                    <th>Status</th>
-                                    <th>Maschine</th>
-                                    <th>Ausstehend</th>
-                                    <th>Letzter Lauf</th>
-                                    <th>Zeitplan</th>
-                                    <th>Aktionen</th>
+                    <div class="card">
+                        <data-table :rows="updatesFilteredMachines" :columns="updatesColumns" row-key="machine_id"
+                            search-placeholder="Maschinen durchsuchen..."
+                            :empty-text="'Keine ' + (updatesOsTab === 'windows' ? 'Windows' : 'Linux') + '-Maschinen vorhanden.'">
+                            <template #header-_select>
+                                <input type="checkbox" @change="updatesToggleAll" :checked="updatesSelected.length === updatesFilteredMachines.length && updatesFilteredMachines.length > 0">
+                            </template>
+                            <template #cell-_select="{ row: m }">
+                                <input type="checkbox" :value="m.machine_id" v-model="updatesSelected" @click.stop>
+                            </template>
+                            <template #cell-status="{ row: m }">
+                                <span class="status-badge" :class="m.status">{{ m.status }}</span>
+                            </template>
+                            <template #cell-name="{ row: m }">
+                                <strong>{{ m.display_name || m.hostname }}</strong>
+                                <div style="font-size:0.72rem;color:var(--text-muted)">{{ m.ip_address || '' }}</div>
+                            </template>
+                            <template #cell-updates_available="{ row: m }">
+                                <span v-if="m.updates_available > 0" style="color:var(--warning);font-weight:600">
+                                    {{ m.updates_available }} Update(s)
+                                    <span v-if="m.updates_reboot_required" style="font-size:0.7rem;margin-left:4px;color:var(--danger)">⚠ Neustart</span>
+                                </span>
+                                <span v-else-if="updatesLiveStreams[m.machine_id] && ['sent','running'].includes(updatesLiveStreams[m.machine_id].status)" style="color:var(--accent);font-size:0.8rem">
+                                    <span class="pulse-dot"></span> läuft…
+                                </span>
+                                <span v-else style="color:var(--success);font-size:0.8rem">Aktuell</span>
+                            </template>
+                            <template #cell-last_run_at="{ row: m }">
+                                <span v-if="m.last_run_at" style="font-size:0.8rem">
+                                    <span class="status-badge" :class="m.last_run_status === 'completed' ? 'online' : m.last_run_status === 'failed' ? 'offline' : 'warning'" style="font-size:0.7rem">{{ m.last_run_status }}</span>
+                                    <span style="color:var(--text-muted);margin-left:4px">{{ formatTime(m.last_run_at) }}</span>
+                                </span>
+                                <span v-else style="color:var(--text-muted)">–</span>
+                            </template>
+                            <template #cell-schedule_time="{ row: m }">
+                                <span v-if="m.schedule_time" style="color:var(--text-secondary);font-size:0.8rem">
+                                    {{ m.schedule_time }} täglich
+                                    <span v-if="!m.schedule_enabled" style="color:var(--text-muted)"> (deaktiviert)</span>
+                                </span>
+                                <span v-else style="color:var(--text-muted)">–</span>
+                            </template>
+                            <template #cell-_actions="{ row: m }">
+                                <div style="display:flex;gap:0.4rem;flex-wrap:wrap">
+                                    <button class="btn btn-primary btn-sm" @click.stop="triggerSingleUpdate(m.machine_id, true)" :disabled="m.status !== 'online'" title="Updates installieren (mit Neustart bei Bedarf)">Updaten</button>
+                                    <button class="btn btn-ghost btn-sm" @click.stop="openUpdateLog(m)" title="Update-Logs ansehen">Log</button>
+                                    <button class="btn btn-ghost btn-sm" @click.stop="openScheduleModal(m)" title="Zeitplan bearbeiten">⏱</button>
+                                </div>
+                            </template>
+                            <template #row-extra="{ row: m }">
+                                <tr v-if="updatesLiveStreams[m.machine_id] && ['sent','running'].includes(updatesLiveStreams[m.machine_id].status)" style="background:var(--bg-secondary)">
+                                    <td colspan="7" style="padding:0.6rem 1rem">
+                                        <div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:0.3rem">Live-Ausgabe:</div>
+                                        <pre style="background:var(--bg-primary);border:1px solid var(--border);border-radius:4px;padding:0.5rem;max-height:160px;overflow:auto;font-size:0.72rem;white-space:pre-wrap;margin:0">{{ updatesLiveStreams[m.machine_id].output || 'Warte auf Ausgabe…' }}</pre>
+                                    </td>
                                 </tr>
-                            </thead>
-                            <tbody>
-                                <template v-for="m in updatesFilteredMachines" :key="m.machine_id">
-                                    <tr>
-                                        <td><input type="checkbox" :value="m.machine_id" v-model="updatesSelected" @click.stop></td>
-                                        <td><span class="status-badge" :class="m.status">{{ m.status }}</span></td>
-                                        <td>
-                                            <strong>{{ m.display_name || m.hostname }}</strong>
-                                            <div style="font-size:0.72rem;color:var(--text-muted)">{{ m.ip_address || '' }}</div>
-                                        </td>
-                                        <td>
-                                            <span v-if="m.updates_available > 0" style="color:var(--warning);font-weight:600">
-                                                {{ m.updates_available }} Update(s)
-                                                <span v-if="m.updates_reboot_required" style="font-size:0.7rem;margin-left:4px;color:var(--danger)">⚠ Neustart</span>
-                                            </span>
-                                            <span v-else-if="updatesLiveStreams[m.machine_id] && ['sent','running'].includes(updatesLiveStreams[m.machine_id].status)" style="color:var(--accent);font-size:0.8rem">
-                                                <span class="pulse-dot"></span> läuft…
-                                            </span>
-                                            <span v-else style="color:var(--success);font-size:0.8rem">Aktuell</span>
-                                        </td>
-                                        <td style="font-size:0.8rem">
-                                            <span v-if="m.last_run_at">
-                                                <span class="status-badge" :class="m.last_run_status === 'completed' ? 'online' : m.last_run_status === 'failed' ? 'offline' : 'warning'" style="font-size:0.7rem">{{ m.last_run_status }}</span>
-                                                <span style="color:var(--text-muted);margin-left:4px">{{ formatTime(m.last_run_at) }}</span>
-                                            </span>
-                                            <span v-else style="color:var(--text-muted)">–</span>
-                                        </td>
-                                        <td style="font-size:0.8rem">
-                                            <span v-if="m.schedule_time" style="color:var(--text-secondary)">
-                                                {{ m.schedule_time }} täglich
-                                                <span v-if="!m.schedule_enabled" style="color:var(--text-muted)"> (deaktiviert)</span>
-                                            </span>
-                                            <span v-else style="color:var(--text-muted)">–</span>
-                                        </td>
-                                        <td>
-                                            <div style="display:flex;gap:0.4rem;flex-wrap:wrap">
-                                                <button class="btn btn-primary btn-sm" @click.stop="triggerSingleUpdate(m.machine_id, true)" :disabled="m.status !== 'online'" title="Updates installieren (mit Neustart bei Bedarf)">Updaten</button>
-                                                <button class="btn btn-ghost btn-sm" @click.stop="openUpdateLog(m)" title="Update-Logs ansehen">Log</button>
-                                                <button class="btn btn-ghost btn-sm" @click.stop="openScheduleModal(m)" title="Zeitplan bearbeiten">⏱</button>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                    <!-- Live output inline (shown while an update is running for this machine) -->
-                                    <tr v-if="updatesLiveStreams[m.machine_id] && ['sent','running'].includes(updatesLiveStreams[m.machine_id].status)" style="background:var(--bg-secondary)">
-                                        <td colspan="7" style="padding:0.6rem 1rem">
-                                            <div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:0.3rem">Live-Ausgabe:</div>
-                                            <pre style="background:var(--bg-primary);border:1px solid var(--border);border-radius:4px;padding:0.5rem;max-height:160px;overflow:auto;font-size:0.72rem;white-space:pre-wrap;margin:0">{{ updatesLiveStreams[m.machine_id].output || 'Warte auf Ausgabe…' }}</pre>
-                                        </td>
-                                    </tr>
-                                </template>
-                            </tbody>
-                        </table>
-                        <p v-else style="padding:1.5rem;text-align:center;color:var(--text-muted)">Keine {{ updatesOsTab === 'windows' ? 'Windows' : 'Linux' }}-Maschinen vorhanden.</p>
+                            </template>
+                        </data-table>
                     </div>
                 </div>
 
@@ -415,21 +400,17 @@
                         <button class="btn btn-ghost btn-sm" @click="navigate('machines')">← Zurueck</button>
                     </div>
                     <div class="card">
-                        <table class="machine-table" v-if="commandHistory.length">
-                            <thead><tr><th>Zeitpunkt</th><th>Maschine</th><th>Befehl</th><th>Status</th><th>Ergebnis</th></tr></thead>
-                            <tbody>
-                                <tr v-for="c in commandHistory" :key="c.id">
-                                    <td style="font-size:0.8rem">{{ formatTime(c.created_at) }}</td>
-                                    <td>{{ c.machine_id.slice(0,8) }}</td>
-                                    <td><span class="os-badge">{{ c.command_type }}</span></td>
-                                    <td>
-                                        <span class="status-badge" :class="c.status === 'completed' ? 'online' : c.status === 'failed' ? 'offline' : 'warning'">{{ c.status }}</span>
-                                    </td>
-                                    <td style="font-size:0.8rem;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ c.result || '–' }}</td>
-                                </tr>
-                            </tbody>
-                        </table>
-                        <p v-else style="color:var(--text-muted)">Keine Befehle ausgefuehrt.</p>
+                        <data-table :rows="commandHistory" :columns="commandLogColumns" row-key="id" row-clickable
+                            search-placeholder="Befehle durchsuchen..." empty-text="Keine Befehle ausgefuehrt."
+                            @row-click="openCmdDetail">
+                            <template #cell-command_type="{ row: c }"><span class="os-badge">{{ c.command_type }}</span></template>
+                            <template #cell-status="{ row: c }">
+                                <span class="status-badge" :class="c.status === 'completed' ? 'online' : c.status === 'failed' ? 'offline' : 'warning'">{{ c.status }}</span>
+                            </template>
+                            <template #cell-result="{ row: c }">
+                                <span style="display:inline-block;font-size:0.8rem;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom" :title="c.result || ''">{{ c.result || '–' }}</span>
+                            </template>
+                        </data-table>
                     </div>
                 </div>
 
@@ -496,19 +477,13 @@
 
                     <div class="card">
                         <div class="card-header"><h3>Dienste</h3></div>
-                        <div v-if="machineServices.length" style="max-height:300px;overflow-y:auto">
-                            <table class="machine-table">
-                                <thead><tr><th>Dienst</th><th>Status</th><th>Starttyp</th></tr></thead>
-                                <tbody>
-                                    <tr v-for="s in machineServices" :key="s.id">
-                                        <td>{{ s.display_name || s.service_name }}</td>
-                                        <td><span class="status-badge" :class="s.status === 'running' ? 'online' : 'offline'">{{ s.status }}</span></td>
-                                        <td>{{ s.start_type }}</td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-                        <p v-else style="color:var(--text-muted)">Keine Dienstdaten verfuegbar</p>
+                        <data-table :rows="machineServices" :columns="servicesColumns" row-key="id"
+                            search-placeholder="Dienste durchsuchen..." empty-text="Keine Dienstdaten verfuegbar"
+                            table-style="max-height:none">
+                            <template #cell-status="{ row: s }">
+                                <span class="status-badge" :class="s.status === 'running' ? 'online' : 'offline'">{{ s.status }}</span>
+                            </template>
+                        </data-table>
                     </div>
 
                     <div class="card">
@@ -523,20 +498,13 @@
                                 </button>
                             </div>
                         </div>
-                        <div v-if="machineFirewall.rules && machineFirewall.rules.length" style="max-height:250px;overflow-y:auto">
-                            <table class="machine-table">
-                                <thead><tr><th>Regel</th><th>Richtung</th><th>Aktion</th><th>Port</th></tr></thead>
-                                <tbody>
-                                    <tr v-for="(r, i) in machineFirewall.rules" :key="i">
-                                        <td>{{ r.rule_name || r.name }}</td>
-                                        <td>{{ r.direction }}</td>
-                                        <td><span :style="{color: r.action === 'allow' ? 'var(--success)' : 'var(--danger)'}">{{ r.action }}</span></td>
-                                        <td>{{ r.port || '–' }}</td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-                        <p v-else style="color:var(--text-muted)">Keine Firewall-Regeln vorhanden</p>
+                        <data-table :rows="machineFirewall.rules || []" :columns="firewallColumns" row-key="rule_name"
+                            search-placeholder="Regeln durchsuchen..." empty-text="Keine Firewall-Regeln vorhanden">
+                            <template #cell-name="{ row: r }">{{ r.rule_name || r.name }}</template>
+                            <template #cell-action="{ row: r }">
+                                <span :style="{color: r.action === 'allow' ? 'var(--success)' : 'var(--danger)'}">{{ r.action }}</span>
+                            </template>
+                        </data-table>
                     </div>
 
                     <div class="card">
@@ -578,19 +546,10 @@
 
                     <div class="card">
                         <div class="card-header"><h3>Netzwerkfreigaben</h3></div>
-                        <div v-if="machineShares.length">
-                            <table class="machine-table">
-                                <thead><tr><th>Freigabe</th><th>Pfad</th><th>Beschreibung</th></tr></thead>
-                                <tbody>
-                                    <tr v-for="s in machineShares" :key="s.id">
-                                        <td><strong>{{ s.share_name }}</strong></td>
-                                        <td>{{ s.path }}</td>
-                                        <td>{{ s.description || '–' }}</td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-                        <p v-else style="color:var(--text-muted)">Keine Freigaben gefunden</p>
+                        <data-table :rows="machineShares" :columns="sharesColumns" row-key="id"
+                            search-placeholder="Freigaben durchsuchen..." empty-text="Keine Freigaben gefunden">
+                            <template #cell-share_name="{ row: s }"><strong>{{ s.share_name }}</strong></template>
+                        </data-table>
                     </div>
 
                     <div class="card">
@@ -629,23 +588,16 @@
                                 <button class="btn btn-danger btn-sm" @click="deleteVeeamInstance(inst.id)">Entfernen</button>
                             </div>
                         </div>
-                        <table class="machine-table" v-if="inst.jobs && inst.jobs.length">
-                            <thead><tr><th>Job</th><th>Typ</th><th>Letzter Status</th><th>Letzte Ausfuehrung</th><th>Naechster Lauf</th></tr></thead>
-                            <tbody>
-                                <tr v-for="j in inst.jobs" :key="j.id">
-                                    <td><strong>{{ j.job_name }}</strong></td>
-                                    <td><span class="os-badge">{{ j.job_type || '–' }}</span></td>
-                                    <td>
-                                        <span class="status-badge" :class="j.last_run_status === 'Success' ? 'online' : j.last_run_status === 'Failed' ? 'offline' : 'warning'">
-                                            {{ j.last_run_status || 'Unbekannt' }}
-                                        </span>
-                                    </td>
-                                    <td>{{ formatTime(j.last_run_time) }}</td>
-                                    <td>{{ formatTime(j.next_run_time) }}</td>
-                                </tr>
-                            </tbody>
-                        </table>
-                        <p v-else style="color:var(--text-muted)">Keine Jobs gefunden oder noch nicht gepollt.</p>
+                        <data-table :rows="inst.jobs || []" :columns="veeamJobColumns" row-key="id"
+                            search-placeholder="Jobs durchsuchen..." empty-text="Keine Jobs gefunden oder noch nicht gepollt.">
+                            <template #cell-job_name="{ row: j }"><strong>{{ j.job_name }}</strong></template>
+                            <template #cell-job_type="{ row: j }"><span class="os-badge">{{ j.job_type || '–' }}</span></template>
+                            <template #cell-last_run_status="{ row: j }">
+                                <span class="status-badge" :class="j.last_run_status === 'Success' ? 'online' : j.last_run_status === 'Failed' ? 'offline' : 'warning'">
+                                    {{ j.last_run_status || 'Unbekannt' }}
+                                </span>
+                            </template>
+                        </data-table>
                     </div>
 
                     <p v-if="!veeamInstances.length" style="color:var(--text-muted)">Keine Veeam-Instanzen konfiguriert. Klicke auf "+ Veeam Instanz" um eine hinzuzufuegen.</p>
@@ -666,38 +618,21 @@
 
                     <!-- Command log -->
                     <div v-if="logTab === 'command'">
-                        <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;margin-bottom:0.8rem">
-                            <select v-model="cmdLogStatus" style="background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);border-radius:var(--radius);padding:0.35rem 0.6rem;font-size:0.82rem">
-                                <option value="">Alle Status</option>
-                                <option value="completed">Erfolgreich</option>
-                                <option value="failed">Fehlgeschlagen</option>
-                                <option value="running">Laeuft</option>
-                                <option value="sent">Gesendet</option>
-                                <option value="pending">Ausstehend</option>
-                            </select>
-                            <select v-model="cmdLogType" style="background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);border-radius:var(--radius);padding:0.35rem 0.6rem;font-size:0.82rem">
-                                <option value="">Alle Befehlstypen</option>
-                                <option v-for="t in commandTypes" :key="t" :value="t">{{ t }}</option>
-                            </select>
-                            <input v-model="cmdLogSearch" placeholder="Suchen (Maschine, Ergebnis...)" style="background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);border-radius:var(--radius);padding:0.35rem 0.7rem;font-size:0.82rem;width:220px">
-                            <button class="btn btn-ghost btn-sm" @click="loadCommandHistory">Aktualisieren</button>
-                            <span style="font-size:0.78rem;color:var(--text-muted)">{{ filteredCommandHistory.length }} Eintraege</span>
-                        </div>
                         <div class="card">
-                            <table class="machine-table" v-if="filteredCommandHistory.length">
-                                <thead><tr><th>Zeitpunkt</th><th>Maschine</th><th>Befehl</th><th>Status</th><th>Ergebnis</th><th></th></tr></thead>
-                                <tbody>
-                                    <tr v-for="c in filteredCommandHistory" :key="c.id" @click="openCmdDetail(c)" style="cursor:pointer">
-                                        <td style="font-size:0.8rem;white-space:nowrap">{{ formatTime(c.created_at) }}</td>
-                                        <td style="font-size:0.82rem">{{ c.display_name || c.hostname || (c.machine_id || '').slice(0,8) }}</td>
-                                        <td><span class="os-badge">{{ c.command_type }}</span></td>
-                                        <td><span class="status-badge" :class="c.status === 'completed' ? 'online' : c.status === 'failed' ? 'offline' : 'warning'">{{ c.status }}</span></td>
-                                        <td style="font-size:0.8rem;max-width:380px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" :title="c.result || ''">{{ c.result || '–' }}</td>
-                                        <td style="text-align:right"><button class="btn btn-ghost btn-sm" @click.stop="openCmdDetail(c)">Details</button></td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                            <p v-else style="color:var(--text-muted)">Keine Befehle gefunden.</p>
+                            <data-table :rows="commandHistory" :columns="commandLogColumns" row-key="id" row-clickable
+                                search-placeholder="Befehle durchsuchen (Maschine, Ergebnis...)" empty-text="Keine Befehle gefunden."
+                                @row-click="openCmdDetail">
+                                <template #toolbar>
+                                    <button class="btn btn-ghost btn-sm" @click="loadCommandHistory">Aktualisieren</button>
+                                </template>
+                                <template #cell-command_type="{ row: c }"><span class="os-badge">{{ c.command_type }}</span></template>
+                                <template #cell-status="{ row: c }">
+                                    <span class="status-badge" :class="c.status === 'completed' ? 'online' : c.status === 'failed' ? 'offline' : 'warning'">{{ c.status }}</span>
+                                </template>
+                                <template #cell-result="{ row: c }">
+                                    <span style="display:inline-block;font-size:0.8rem;max-width:380px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom" :title="c.result || ''">{{ c.result || '–' }}</span>
+                                </template>
+                            </data-table>
                         </div>
                     </div>
 
@@ -901,26 +836,19 @@
                                     </div>
                                 </div>
                                 <div v-if="adUsersLoading" style="padding:2rem;text-align:center;color:var(--text-muted)">Benutzerliste wird geladen...</div>
-                                <div v-else-if="adUsersForOU.length" style="overflow-x:auto">
-                                    <table class="machine-table">
-                                        <thead><tr><th>Benutzername</th><th>Name</th><th>E-Mail</th><th>Abteilung</th><th>Status</th><th>Aktionen</th></tr></thead>
-                                        <tbody>
-                                            <tr v-for="u in adUsersForOU" :key="u.sam_account_name" @click="openEditADUser(u)" style="cursor:pointer">
-                                                <td><strong>{{ u.sam_account_name }}</strong></td>
-                                                <td>{{ u.display_name || (u.given_name + ' ' + u.surname) }}</td>
-                                                <td>{{ u.email || '–' }}</td>
-                                                <td>{{ u.department || '–' }}</td>
-                                                <td><span class="status-badge" :class="u.enabled ? 'online' : 'offline'">{{ u.enabled ? 'Aktiv' : 'Deakt.' }}</span></td>
-                                                <td @click.stop style="white-space:nowrap">
-                                                    <button class="btn btn-ghost btn-sm" @click="openDuplicateADUser(u)">Dupl.</button>
-                                                    <button class="btn btn-ghost btn-sm" @click="openMoveUser(u)" title="In OU verschieben" :disabled="!ouTreeFlat.length">&#8594;OU</button>
-                                                    <button class="btn btn-danger btn-sm" @click="confirmDeleteADUser(u)">✕</button>
-                                                </td>
-                                            </tr>
-                                        </tbody>
-                                    </table>
+                                <div v-else style="overflow-x:auto">
+                                    <data-table :rows="adUsersForOU" :columns="adUserColumns" row-key="sam_account_name" row-clickable :search="false"
+                                        :empty-text="adUsers.length ? 'Keine Benutzer in dieser OU.' : 'Noch keine Benutzer geladen.'"
+                                        @row-click="openEditADUser">
+                                        <template #cell-sam_account_name="{ row: u }"><strong>{{ u.sam_account_name }}</strong></template>
+                                        <template #cell-status="{ row: u }"><span class="status-badge" :class="u.enabled ? 'online' : 'offline'">{{ u.enabled ? 'Aktiv' : 'Deakt.' }}</span></template>
+                                        <template #cell-_actions="{ row: u }">
+                                            <button class="btn btn-ghost btn-sm" @click.stop="openDuplicateADUser(u)">Dupl.</button>
+                                            <button class="btn btn-ghost btn-sm" @click.stop="openMoveUser(u)" title="In OU verschieben" :disabled="!ouTreeFlat.length">&#8594;OU</button>
+                                            <button class="btn btn-danger btn-sm" @click.stop="confirmDeleteADUser(u)">✕</button>
+                                        </template>
+                                    </data-table>
                                 </div>
-                                <p v-else style="padding:1rem;color:var(--text-muted)">{{ adUsers.length ? 'Keine Benutzer in dieser OU.' : 'Noch keine Benutzer geladen.' }}</p>
                             </div>
                         </div>
                     </div>
@@ -947,24 +875,19 @@
                                 </div>
                             </div>
                             <div v-if="localUsersLoading" style="padding:2rem;text-align:center;color:var(--text-muted)">Benutzerliste wird geladen...</div>
-                            <div v-else-if="localFilteredUsers.length" style="overflow-x:auto">
-                                <table class="machine-table">
-                                    <thead><tr><th>Benutzername</th><th>Anzeigename</th><th>Beschreibung</th><th>Status</th><th>Aktionen</th></tr></thead>
-                                    <tbody>
-                                        <tr v-for="u in localFilteredUsers" :key="u.name" @click="openEditLocalUser(u)" style="cursor:pointer">
-                                            <td><strong>{{ u.name }}</strong></td>
-                                            <td>{{ u.full_name || '–' }}</td>
-                                            <td style="color:var(--text-muted);font-size:0.82rem">{{ u.description || '–' }}</td>
-                                            <td><span class="status-badge" :class="u.enabled ? 'online' : 'offline'">{{ u.enabled ? 'Aktiv' : 'Deakt.' }}</span></td>
-                                            <td @click.stop style="white-space:nowrap">
-                                                <button class="btn btn-ghost btn-sm" @click="openDuplicateLocalUser(u)">Dupl.</button>
-                                                <button class="btn btn-danger btn-sm" @click="confirmDeleteLocalUser(u)">✕</button>
-                                            </td>
-                                        </tr>
-                                    </tbody>
-                                </table>
+                            <div v-else style="overflow-x:auto">
+                                <data-table :rows="localFilteredUsers" :columns="localUserColumns" row-key="name" row-clickable :search="false"
+                                    :empty-text="localUsers.length ? 'Keine Benutzer gefunden.' : 'Klicke auf &quot;Benutzer laden&quot;.'"
+                                    @row-click="openEditLocalUser">
+                                    <template #cell-name="{ row: u }"><strong>{{ u.name }}</strong></template>
+                                    <template #cell-description="{ row: u }"><span style="color:var(--text-muted);font-size:0.82rem">{{ u.description || '–' }}</span></template>
+                                    <template #cell-status="{ row: u }"><span class="status-badge" :class="u.enabled ? 'online' : 'offline'">{{ u.enabled ? 'Aktiv' : 'Deakt.' }}</span></template>
+                                    <template #cell-_actions="{ row: u }">
+                                        <button class="btn btn-ghost btn-sm" @click.stop="openDuplicateLocalUser(u)">Dupl.</button>
+                                        <button class="btn btn-danger btn-sm" @click.stop="confirmDeleteLocalUser(u)">✕</button>
+                                    </template>
+                                </data-table>
                             </div>
-                            <p v-else style="padding:1rem;color:var(--text-muted)">{{ localUsers.length ? 'Keine Benutzer gefunden.' : 'Klicke auf "Benutzer laden".' }}</p>
                         </div>
                     </div>
                 </div>
@@ -1115,30 +1038,26 @@
                 </div>
 
                 <!-- Step 2: Scan results with checkboxes -->
-                <div v-if="scanDone && scanResults.length" class="card" style="max-height:250px;overflow-y:auto;margin-bottom:1rem;padding:0.8rem">
-                    <table class="machine-table" style="margin:0">
-                        <thead><tr><th><input type="checkbox" @change="toggleAllScan" :checked="deployTargets.length === scanResults.length"></th><th>IP</th><th>Hostname</th><th>OS</th><th>Kategorie</th></tr></thead>
-                        <tbody>
-                            <tr v-for="h in scanResults" :key="h.ip">
-                                <td><input type="checkbox" :value="h.ip" v-model="deployTargets"></td>
-                                <td>{{ h.ip }}</td>
-                                <td>{{ h.hostname || '–' }}</td>
-                                <td>
-                                    <select v-model="h.os_guess" style="background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);border-radius:4px;padding:0.2rem;font-size:0.8rem">
-                                        <option value="windows">Windows</option>
-                                        <option value="linux">Linux</option>
-                                        <option value="unknown">Unbekannt</option>
-                                    </select>
-                                </td>
-                                <td>
-                                    <select v-model="h.category" style="background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);border-radius:4px;padding:0.2rem;font-size:0.8rem">
-                                        <option value="server">Server</option>
-                                        <option value="client">Client</option>
-                                    </select>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
+                <div v-if="scanDone && scanResults.length" class="card" style="max-height:280px;overflow-y:auto;margin-bottom:1rem;padding:0.8rem">
+                    <data-table :rows="scanResults" :columns="scanResultColumns" row-key="ip" search-placeholder="Hosts durchsuchen...">
+                        <template #header-_select>
+                            <input type="checkbox" @change="toggleAllScan" :checked="deployTargets.length === scanResults.length && scanResults.length > 0">
+                        </template>
+                        <template #cell-_select="{ row: h }"><input type="checkbox" :value="h.ip" v-model="deployTargets"></template>
+                        <template #cell-os_guess="{ row: h }">
+                            <select v-model="h.os_guess" @click.stop style="background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);border-radius:4px;padding:0.2rem;font-size:0.8rem">
+                                <option value="windows">Windows</option>
+                                <option value="linux">Linux</option>
+                                <option value="unknown">Unbekannt</option>
+                            </select>
+                        </template>
+                        <template #cell-category="{ row: h }">
+                            <select v-model="h.category" @click.stop style="background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);border-radius:4px;padding:0.2rem;font-size:0.8rem">
+                                <option value="server">Server</option>
+                                <option value="client">Client</option>
+                            </select>
+                        </template>
+                    </data-table>
                 </div>
                 <p v-if="scanDone && !scanResults.length" style="color:var(--text-muted);margin-bottom:1rem;font-size:0.85rem">Keine erreichbaren Hosts im Netzwerk gefunden.</p>
 

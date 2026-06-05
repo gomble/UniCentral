@@ -10,7 +10,142 @@ async function apiFetch(url, options) {
     return res;
 }
 
-createApp({
+// Reusable table component: global search, click-to-sort headers and optional
+// per-column value filters. Cells are rendered through scoped slots named
+// "cell-<key>" so each table keeps full control over its markup.
+// Column shape: { key, label, sortable?, searchable?, filter?, value?(row),
+//   sortValue?(row), thStyle?, tdStyle?, tdClass?, stopClick?, placeholder? }
+const DataTable = {
+    name: 'DataTable',
+    props: {
+        rows: { type: Array, default: () => [] },
+        columns: { type: Array, required: true },
+        rowKey: { type: String, default: 'id' },
+        rowClickable: { type: Boolean, default: false },
+        search: { type: Boolean, default: true },
+        searchPlaceholder: { type: String, default: 'Suchen...' },
+        initialSortKey: { type: String, default: '' },
+        initialSortDir: { type: String, default: 'asc' },
+        emptyText: { type: String, default: 'Keine Eintraege vorhanden.' },
+        tableClass: { type: String, default: 'machine-table' },
+        tableStyle: { type: [String, Object], default: '' }
+    },
+    emits: ['row-click'],
+    setup(props, { emit }) {
+        const q = ref('');
+        const sortKey = ref(props.initialSortKey);
+        const sortDir = ref(props.initialSortDir === 'desc' ? 'desc' : 'asc');
+        const colFilters = reactive({});
+
+        const toStr = (v) => (v === null || v === undefined ? '' : String(v));
+        const cellValue = (row, col) => (typeof col.value === 'function' ? col.value(row) : row[col.key]);
+        const sortBase = (row, col) => (typeof col.sortValue === 'function' ? col.sortValue(row) : cellValue(row, col));
+        const isSortable = (col) => col.sortable !== false && !!col.key;
+
+        function toggleSort(col) {
+            if (!isSortable(col)) return;
+            if (sortKey.value === col.key) {
+                sortDir.value = sortDir.value === 'asc' ? 'desc' : 'asc';
+            } else {
+                sortKey.value = col.key;
+                sortDir.value = 'asc';
+            }
+        }
+        function onCellClick(e, col) { if (col.stopClick) e.stopPropagation(); }
+        function onRowClick(row) { if (props.rowClickable) emit('row-click', row); }
+        function rowKeyOf(row, i) {
+            const k = row[props.rowKey];
+            return k !== undefined && k !== null ? k : i;
+        }
+        function display(row, col) {
+            const v = cellValue(row, col);
+            return v === null || v === undefined || v === '' ? (col.placeholder || '') : v;
+        }
+        function distinctValues(col) {
+            const set = new Set();
+            props.rows.forEach(r => {
+                const v = cellValue(r, col);
+                if (v !== null && v !== undefined && v !== '') set.add(String(v));
+            });
+            return [...set].sort((a, b) => a.localeCompare(b, 'de', { numeric: true }));
+        }
+
+        const searchCols = computed(() =>
+            props.columns.filter(c => c.searchable !== false && (c.key || typeof c.value === 'function'))
+        );
+
+        const viewRows = computed(() => {
+            let list = props.rows.slice();
+            const term = q.value.trim().toLowerCase();
+            if (term) {
+                list = list.filter(r => searchCols.value.some(c => toStr(cellValue(r, c)).toLowerCase().includes(term)));
+            }
+            for (const key of Object.keys(colFilters)) {
+                const fv = colFilters[key];
+                if (!fv) continue;
+                const col = props.columns.find(c => c.key === key);
+                if (col) list = list.filter(r => toStr(cellValue(r, col)) === fv);
+            }
+            if (sortKey.value) {
+                const col = props.columns.find(c => c.key === sortKey.value);
+                if (col) {
+                    const dir = sortDir.value === 'desc' ? -1 : 1;
+                    list.sort((a, b) => {
+                        const av = sortBase(a, col), bv = sortBase(b, col);
+                        const ae = av === null || av === undefined || av === '';
+                        const be = bv === null || bv === undefined || bv === '';
+                        if (ae && be) return 0;
+                        if (ae) return 1;
+                        if (be) return -1;
+                        if (typeof av === 'number' && typeof bv === 'number') return (av - bv) * dir;
+                        return toStr(av).localeCompare(toStr(bv), 'de', { numeric: true }) * dir;
+                    });
+                }
+            }
+            return list;
+        });
+
+        return { q, sortKey, sortDir, colFilters, cellValue, isSortable, toggleSort,
+            onCellClick, onRowClick, rowKeyOf, display, distinctValues, viewRows };
+    },
+    template: `
+    <div class="data-table">
+        <div class="dt-toolbar" v-if="search || $slots.toolbar">
+            <input v-if="search" class="dt-search" type="text" v-model="q" :placeholder="searchPlaceholder">
+            <slot name="toolbar"></slot>
+            <span class="dt-count">{{ viewRows.length }}<template v-if="viewRows.length !== rows.length"> / {{ rows.length }}</template></span>
+        </div>
+        <table :class="tableClass" :style="tableStyle">
+            <thead>
+                <tr>
+                    <th v-for="col in columns" :key="col.key || col.label" :style="col.thStyle" :class="[{ 'dt-sortable': isSortable(col) }, col.thClass]">
+                        <span class="dt-th-label" @click="toggleSort(col)">
+                            <slot :name="'header-' + col.key" :col="col">{{ col.label }}</slot>
+                            <span v-if="col.key && sortKey === col.key" class="dt-sort">{{ sortDir === 'asc' ? '▲' : '▼' }}</span>
+                        </span>
+                        <select v-if="col.filter" class="dt-col-filter" v-model="colFilters[col.key]" @click.stop>
+                            <option value="">Alle</option>
+                            <option v-for="v in distinctValues(col)" :key="v" :value="v">{{ v }}</option>
+                        </select>
+                    </th>
+                </tr>
+            </thead>
+            <tbody>
+                <template v-for="(row, i) in viewRows" :key="rowKeyOf(row, i)">
+                    <tr :class="{ 'dt-row-clickable': rowClickable }" @click="onRowClick(row)">
+                        <td v-for="col in columns" :key="col.key || col.label" :style="col.tdStyle" :class="col.tdClass" @click="onCellClick($event, col)">
+                            <slot :name="'cell-' + col.key" :row="row" :value="cellValue(row, col)">{{ display(row, col) }}</slot>
+                        </td>
+                    </tr>
+                    <slot name="row-extra" :row="row"></slot>
+                </template>
+            </tbody>
+        </table>
+        <p v-if="!viewRows.length" class="dt-empty">{{ emptyText }}</p>
+    </div>`
+};
+
+const app = createApp({
     setup() {
         const view = ref('dashboard');
         const username = ref('');
@@ -1574,6 +1709,80 @@ createApp({
 
         function removeFromLocalGroup(g) { localUserForm.groups = localUserForm.groups.filter(x => x !== g); }
 
+        // ---- Table column definitions (used with <data-table>) ----
+        const machineColumns = [
+            { key: '_select', label: '', sortable: false, searchable: false, stopClick: true, thStyle: 'width:36px' },
+            { key: 'status', label: 'Status', filter: true },
+            { key: 'name', label: 'Hostname', value: m => m.display_name || m.hostname },
+            { key: 'os_type', label: 'OS', filter: true },
+            { key: 'category', label: 'Typ', filter: true },
+            { key: 'group_name', label: 'Gruppe', filter: true, placeholder: '–' },
+            { key: 'agent_version', label: 'Agent', placeholder: '–' },
+            { key: 'uptime', label: 'Laufzeit', value: m => (m._telemetry && m._telemetry.uptime ? formatUptime(m._telemetry.uptime) : '–'), sortValue: m => (m._telemetry && m._telemetry.uptime) || 0 },
+            { key: '_actions', label: 'Aktionen', sortable: false, searchable: false, stopClick: true }
+        ];
+        const updatesColumns = [
+            { key: '_select', label: '', sortable: false, searchable: false, stopClick: true, thStyle: 'width:36px' },
+            { key: 'status', label: 'Status', filter: true },
+            { key: 'name', label: 'Maschine', value: m => m.display_name || m.hostname },
+            { key: 'updates_available', label: 'Ausstehend', sortValue: m => m.updates_available || 0 },
+            { key: 'last_run_at', label: 'Letzter Lauf', sortValue: m => m.last_run_at || '', searchable: false },
+            { key: 'schedule_time', label: 'Zeitplan', placeholder: '–' },
+            { key: '_actions', label: 'Aktionen', sortable: false, searchable: false, stopClick: true }
+        ];
+        const commandLogColumns = [
+            { key: 'created_at', label: 'Zeitpunkt', value: c => formatTime(c.created_at), sortValue: c => c.created_at || '', thStyle: 'white-space:nowrap' },
+            { key: 'machine', label: 'Maschine', value: c => c.display_name || c.hostname || (c.machine_id || '').slice(0, 8) },
+            { key: 'command_type', label: 'Befehl', filter: true },
+            { key: 'status', label: 'Status', filter: true },
+            { key: 'result', label: 'Ergebnis', placeholder: '–' }
+        ];
+        const servicesColumns = [
+            { key: 'name', label: 'Dienst', value: s => s.display_name || s.service_name },
+            { key: 'status', label: 'Status', filter: true },
+            { key: 'start_type', label: 'Starttyp', filter: true }
+        ];
+        const firewallColumns = [
+            { key: 'name', label: 'Regel', value: r => r.rule_name || r.name },
+            { key: 'direction', label: 'Richtung', filter: true },
+            { key: 'action', label: 'Aktion', filter: true },
+            { key: 'port', label: 'Port', placeholder: '–' }
+        ];
+        const sharesColumns = [
+            { key: 'share_name', label: 'Freigabe' },
+            { key: 'path', label: 'Pfad' },
+            { key: 'description', label: 'Beschreibung', placeholder: '–' }
+        ];
+        const veeamJobColumns = [
+            { key: 'job_name', label: 'Job' },
+            { key: 'job_type', label: 'Typ', filter: true, placeholder: '–' },
+            { key: 'last_run_status', label: 'Letzter Status', filter: true, placeholder: 'Unbekannt' },
+            { key: 'last_run_time', label: 'Letzte Ausfuehrung', value: j => formatTime(j.last_run_time), sortValue: j => j.last_run_time || '' },
+            { key: 'next_run_time', label: 'Naechster Lauf', value: j => formatTime(j.next_run_time), sortValue: j => j.next_run_time || '' }
+        ];
+        const adUserColumns = [
+            { key: 'sam_account_name', label: 'Benutzername' },
+            { key: 'name', label: 'Name', value: u => u.display_name || ((u.given_name || '') + ' ' + (u.surname || '')).trim() },
+            { key: 'email', label: 'E-Mail', placeholder: '–' },
+            { key: 'department', label: 'Abteilung', filter: true, placeholder: '–' },
+            { key: 'status', label: 'Status', filter: true, value: u => (u.enabled ? 'Aktiv' : 'Deakt.'), sortValue: u => (u.enabled ? 1 : 0) },
+            { key: '_actions', label: 'Aktionen', sortable: false, searchable: false, stopClick: true }
+        ];
+        const localUserColumns = [
+            { key: 'name', label: 'Benutzername' },
+            { key: 'full_name', label: 'Anzeigename', placeholder: '–' },
+            { key: 'description', label: 'Beschreibung', placeholder: '–' },
+            { key: 'status', label: 'Status', filter: true, value: u => (u.enabled ? 'Aktiv' : 'Deakt.'), sortValue: u => (u.enabled ? 1 : 0) },
+            { key: '_actions', label: 'Aktionen', sortable: false, searchable: false, stopClick: true }
+        ];
+        const scanResultColumns = [
+            { key: '_select', label: '', sortable: false, searchable: false, stopClick: true, thStyle: 'width:36px' },
+            { key: 'ip', label: 'IP' },
+            { key: 'hostname', label: 'Hostname', placeholder: '–' },
+            { key: 'os_guess', label: 'OS', filter: true },
+            { key: 'category', label: 'Kategorie', filter: true }
+        ];
+
         return {
             view, username, machines, stats, alerts, alertCount,
             showAddMachine, showTokenModal, showAddVeeam, showBatchInstall, showGroupsModal,
@@ -1616,7 +1825,13 @@ createApp({
             localUserSearch, localGroupSearch, localFilteredUsers, localGroupsFiltered,
             loadLocalUsers, loadLocalGroups, openCreateLocalUser, openEditLocalUser,
             openDuplicateLocalUser, saveLocalUser, confirmDeleteLocalUser, removeFromLocalGroup,
-            toasts, confirmData
+            toasts, confirmData,
+            machineColumns, updatesColumns, commandLogColumns, servicesColumns,
+            firewallColumns, sharesColumns, veeamJobColumns, adUserColumns,
+            localUserColumns, scanResultColumns
         };
     }
-}).mount('#app');
+});
+
+app.component('data-table', DataTable);
+app.mount('#app');
