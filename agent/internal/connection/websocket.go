@@ -236,6 +236,19 @@ func (c *Client) handleMessage(raw []byte) {
 			log.Println("Machine secret stored for HMAC authentication")
 		}
 
+	case "error":
+		payload, _ := json.Marshal(msg.Payload)
+		var errMsg struct {
+			Message string `json:"message"`
+		}
+		json.Unmarshal(payload, &errMsg)
+		log.Printf("Server error: %s", errMsg.Message)
+		if errMsg.Message == "Invalid signature" {
+			log.Println("HMAC mismatch detected, clearing machine secret for re-authentication")
+			c.cfg.MachineSecret = ""
+			config.SetMachineSecret("")
+		}
+
 	case "command":
 		payload, _ := json.Marshal(msg.Payload)
 		var cmd CommandPayload

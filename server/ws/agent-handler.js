@@ -118,23 +118,37 @@ function handleAgentConnection(ws, request) {
             ws.close();
             return;
         }
-        if (!verifyHmac(machineId, timestamp, signature)) {
-            ws.send(createMessage(MSG_TYPES.ERROR, { message: 'Invalid signature' }));
+        const machine = db.prepare('SELECT * FROM machines WHERE machine_id = ?').get(machineId);
+        if (!machine) {
+            ws.send(createMessage(MSG_TYPES.ERROR, { message: 'Unknown machine' }));
             ws.close();
             return;
         }
-        const machine = db.prepare('SELECT * FROM machines WHERE machine_id = ?').get(machineId);
-        if (machine) {
+        if (!verifyHmac(machineId, timestamp, signature)) {
+            // HMAC mismatch: issue a new secret so the agent can re-authenticate on next connect
+            console.log(`[WS] HMAC mismatch for machine ${machineId} (${machine.hostname}), issuing new secret`);
+            const newSecret = generateMachineSecret();
+            db.prepare('UPDATE machines SET machine_secret = ? WHERE machine_id = ?').run(newSecret, machineId);
             currentMachineId = machineId;
             connectedAgents.set(machineId, ws);
             ws._machineId = machineId;
             db.prepare('UPDATE machines SET status = ?, last_seen = CURRENT_TIMESTAMP WHERE machine_id = ?')
                 .run('online', machineId);
+            ws.send(createMessage(MSG_TYPES.REGISTERED, {
+                machine_id: machineId,
+                machine_secret: newSecret,
+                heartbeat_interval: config.heartbeatInterval,
+                telemetry_interval: config.telemetryInterval
+            }));
             broadcastToDashboards({ type: 'machine_connected', machineId });
-        } else {
-            ws.send(createMessage(MSG_TYPES.ERROR, { message: 'Unknown machine' }));
-            ws.close();
+            return;
         }
+        currentMachineId = machineId;
+        connectedAgents.set(machineId, ws);
+        ws._machineId = machineId;
+        db.prepare('UPDATE machines SET status = ?, last_seen = CURRENT_TIMESTAMP WHERE machine_id = ?')
+            .run('online', machineId);
+        broadcastToDashboards({ type: 'machine_connected', machineId });
         return;
     }
 
