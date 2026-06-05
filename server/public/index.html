@@ -289,11 +289,8 @@
                                 <span class="status-badge" :class="m.status">{{ m.status }}</span>
                             </template>
                             <template #cell-name="{ row: m }">
-                                <strong>{{ m.display_name || m.hostname }}</strong>
-                                <div style="font-size:0.72rem;color:var(--text-muted)">{{ m.ip_address || '' }}</div>
-                            </template>
-                            <template #cell-name="{ row: m }">
                                 <span style="cursor:pointer;color:var(--accent)" @click.stop="navigate('machine-detail', m.id)">{{ m.display_name || m.hostname }}</span>
+                                <div style="font-size:0.72rem;color:var(--text-muted)">{{ m.ip_address || '' }}</div>
                             </template>
                             <template #cell-updates_available="{ row: m }">
                                 <span v-if="m.updates_available > 0" style="color:var(--warning);font-weight:600;cursor:pointer;text-decoration:underline dotted" @click.stop="updatesPendingModal = m" :title="'Ausstehende Updates anzeigen'">
