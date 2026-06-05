@@ -685,14 +685,15 @@
                         </div>
                         <div class="card">
                             <table class="machine-table" v-if="filteredCommandHistory.length">
-                                <thead><tr><th>Zeitpunkt</th><th>Maschine</th><th>Befehl</th><th>Status</th><th>Ergebnis</th></tr></thead>
+                                <thead><tr><th>Zeitpunkt</th><th>Maschine</th><th>Befehl</th><th>Status</th><th>Ergebnis</th><th></th></tr></thead>
                                 <tbody>
-                                    <tr v-for="c in filteredCommandHistory" :key="c.id">
+                                    <tr v-for="c in filteredCommandHistory" :key="c.id" @click="openCmdDetail(c)" style="cursor:pointer">
                                         <td style="font-size:0.8rem;white-space:nowrap">{{ formatTime(c.created_at) }}</td>
                                         <td style="font-size:0.82rem">{{ c.display_name || c.hostname || (c.machine_id || '').slice(0,8) }}</td>
                                         <td><span class="os-badge">{{ c.command_type }}</span></td>
                                         <td><span class="status-badge" :class="c.status === 'completed' ? 'online' : c.status === 'failed' ? 'offline' : 'warning'">{{ c.status }}</span></td>
                                         <td style="font-size:0.8rem;max-width:380px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" :title="c.result || ''">{{ c.result || '–' }}</td>
+                                        <td style="text-align:right"><button class="btn btn-ghost btn-sm" @click.stop="openCmdDetail(c)">Details</button></td>
                                     </tr>
                                 </tbody>
                             </table>
@@ -1055,6 +1056,37 @@
                 </div>
                 <div class="modal-actions">
                     <button class="btn btn-ghost" @click="showTokenModal = false">Schliessen</button>
+                </div>
+            </div>
+        </div>
+        <!-- Command Log Detail Modal -->
+        <div class="modal-overlay" v-if="cmdLogDetail" @click.self="cmdLogDetail = null">
+            <div class="modal" style="max-width:760px">
+                <h2>Befehlsdetails</h2>
+                <div style="display:grid;grid-template-columns:auto 1fr;gap:0.4rem 1rem;font-size:0.85rem;margin-bottom:1rem">
+                    <span style="color:var(--text-muted)">Befehl</span><span><span class="os-badge">{{ cmdLogDetail.command_type }}</span></span>
+                    <span style="color:var(--text-muted)">Maschine</span><span>{{ cmdLogDetail.display_name || cmdLogDetail.hostname || cmdLogDetail.machine_id }}</span>
+                    <span style="color:var(--text-muted)">Status</span><span><span class="status-badge" :class="cmdLogDetail.status === 'completed' ? 'online' : cmdLogDetail.status === 'failed' ? 'offline' : 'warning'">{{ cmdLogDetail.status }}</span></span>
+                    <span style="color:var(--text-muted)">Gestartet</span><span>{{ formatTime(cmdLogDetail.created_at) }}</span>
+                    <span style="color:var(--text-muted)">Abgeschlossen</span><span>{{ cmdLogDetail.completed_at ? formatTime(cmdLogDetail.completed_at) : '–' }}</span>
+                    <span v-if="cmdLogDetail.issued_by" style="color:var(--text-muted)">Ausgefuehrt von</span><span v-if="cmdLogDetail.issued_by">{{ cmdLogDetail.issued_by }}</span>
+                </div>
+
+                <div v-if="cmdLogDetail.parameters && cmdLogDetail.parameters !== '{}'" style="margin-bottom:1rem">
+                    <label style="font-size:0.8rem;color:var(--text-muted)">Parameter</label>
+                    <pre style="background:#0d1117;color:#cbd5e1;border:1px solid var(--border);border-radius:var(--radius);padding:0.6rem 0.8rem;font-size:0.78rem;max-height:160px;overflow:auto;white-space:pre-wrap;word-break:break-word;margin:0.3rem 0 0">{{ formatCmdParams(cmdLogDetail.parameters) }}</pre>
+                </div>
+
+                <div>
+                    <div style="display:flex;justify-content:space-between;align-items:center">
+                        <label style="font-size:0.8rem;color:var(--text-muted)">Ergebnis</label>
+                        <button class="btn btn-ghost btn-sm" @click="copyText(cmdLogDetail.result || '')">Kopieren</button>
+                    </div>
+                    <pre style="background:#0d1117;color:#cbd5e1;border:1px solid var(--border);border-radius:var(--radius);padding:0.6rem 0.8rem;font-size:0.78rem;max-height:340px;overflow:auto;white-space:pre-wrap;word-break:break-word;margin:0.3rem 0 0">{{ cmdLogDetail.result || '(kein Ergebnis)' }}</pre>
+                </div>
+
+                <div class="modal-actions">
+                    <button class="btn btn-ghost" @click="cmdLogDetail = null">Schliessen</button>
                 </div>
             </div>
         </div>

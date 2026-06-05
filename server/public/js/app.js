@@ -1304,6 +1304,27 @@ createApp({
             }
         }
 
+        const cmdLogDetail = ref(null);
+
+        function openCmdDetail(c) {
+            cmdLogDetail.value = c;
+        }
+
+        function formatCmdParams(raw) {
+            try {
+                return JSON.stringify(JSON.parse(raw), null, 2);
+            } catch {
+                return raw;
+            }
+        }
+
+        function copyText(text) {
+            navigator.clipboard.writeText(text).then(
+                () => toast('In Zwischenablage kopiert.', 'success'),
+                () => toast('Kopieren fehlgeschlagen.', 'error')
+            );
+        }
+
         function connectLogStream() {
             if (logEventSource) { logEventSource.close(); logEventSource = null; }
             const res = fetch('/api/logs').then(r => r.ok ? r.json() : []).then(data => {
@@ -1580,6 +1601,7 @@ createApp({
             logTab, setLogTab, logEntries, logFilter, logSearch, logAutoScroll, logContainer, filteredLogEntries,
             connectLogStream, formatLogTime, logLineColor, scrollLogsToBottom,
             cmdLogSearch, cmdLogStatus, cmdLogType, commandTypes, filteredCommandHistory,
+            cmdLogDetail, openCmdDetail, formatCmdParams, copyText,
             adDomainControllers, adSelectedDC, adUsers, adGroups, adUsersLoading, adUsersOutput,
             adTemplates, showADUserModal, showADTemplatesModal, adUserSearch, adUserFormMode,
             adUserFormTab, adEditingUser, adUserForm, adTemplateForm, adFilteredUsers,
