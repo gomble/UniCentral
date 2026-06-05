@@ -61,6 +61,7 @@ if [ -n "$EXISTING_MACHINE_ID" ]; then
   "server": "$SERVER",
   "machine_id": "$EXISTING_MACHINE_ID",
   "machine_secret": "$EXISTING_SECRET",
+  "enrollment_key": "$ENROLLMENT_KEY",
   "category": "$CATEGORY"
 }
 EOF

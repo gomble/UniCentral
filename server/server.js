@@ -232,10 +232,10 @@ fi
 
 if [ -n "$EXISTING_ID" ]; then
     echo "       Preserving existing machine identity (\${EXISTING_ID:0:8}...)."
-    printf '{"server":"%s","machine_id":"%s","machine_secret":"%s","category":"%s"}' \\
-        "$SERVER" "$EXISTING_ID" "$EXISTING_SECRET" "$CATEGORY" > /etc/unicentral/config.json
+    printf '{"server":"%s","machine_id":"%s","machine_secret":"%s","enrollment_key":"%s","category":"%s"}' \
+        "$SERVER" "$EXISTING_ID" "$EXISTING_SECRET" "$KEY" "$CATEGORY" > /etc/unicentral/config.json
 else
-    printf '{"server":"%s","enrollment_key":"%s","category":"%s"}' \\
+    printf '{"server":"%s","enrollment_key":"%s","category":"%s"}' \
         "$SERVER" "$KEY" "$CATEGORY" > /etc/unicentral/config.json
 fi
 chmod 600 /etc/unicentral/config.json

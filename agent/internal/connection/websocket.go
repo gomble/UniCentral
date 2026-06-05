@@ -247,6 +247,11 @@ func (c *Client) handleMessage(raw []byte) {
 			log.Println("HMAC mismatch detected, clearing machine secret for re-authentication")
 			c.cfg.MachineSecret = ""
 			config.SetMachineSecret("")
+		} else if errMsg.Message == "Unknown machine" {
+			log.Println("Machine not recognised by server, clearing identity for re-registration")
+			c.cfg.MachineID = ""
+			c.cfg.MachineSecret = ""
+			config.ClearIdentity()
 		}
 
 	case "command":

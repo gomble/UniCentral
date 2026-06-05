@@ -68,7 +68,12 @@ func Save() error {
 func SetMachineID(id string) {
 	Get().MachineID = id
 	Get().Token = ""
-	Get().EnrollmentKey = ""
+	Save()
+}
+
+func ClearIdentity() {
+	Get().MachineID = ""
+	Get().MachineSecret = ""
 	Save()
 }
 
