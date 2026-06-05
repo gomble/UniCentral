@@ -56,8 +56,8 @@
                         <span v-if="alertCount" class="nav-badge">{{ alertCount }}</span>
                     </div>
                     <div class="nav-item" :class="{active: view === 'logs'}" @click="navigate('logs')">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
-                        <span>Agent-Logs</span>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/><line x1="8" y1="9" x2="10" y2="9"/></svg>
+                        <span>Logs</span>
                     </div>
                     <div class="nav-item" :class="{active: view === 'settings'}" @click="navigate('settings')">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15 1.65 1.65 0 003 14.08V14a2 2 0 014 0v.09c0 .67.44 1.26 1.09 1.49"/></svg>
@@ -654,11 +654,58 @@
                 <!-- Logs View -->
                 <div v-if="view === 'logs'">
                     <div class="page-header">
-                        <h1>Agent-Logs</h1>
-                        <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap">
+                        <h1>Logs</h1>
+                    </div>
+
+                    <!-- Log source selector -->
+                    <div style="display:flex;gap:0.5rem;margin-bottom:1rem;flex-wrap:wrap">
+                        <button class="btn btn-sm" :class="logTab === 'command' ? 'btn-primary' : 'btn-ghost'" @click="setLogTab('command')">Befehls-Log</button>
+                        <button class="btn btn-sm" :class="logTab === 'agent' ? 'btn-primary' : 'btn-ghost'" @click="setLogTab('agent')">Agenten-Log</button>
+                        <button class="btn btn-sm" :class="logTab === 'container' ? 'btn-primary' : 'btn-ghost'" @click="setLogTab('container')">Container-Log</button>
+                    </div>
+
+                    <!-- Command log -->
+                    <div v-if="logTab === 'command'">
+                        <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;margin-bottom:0.8rem">
+                            <select v-model="cmdLogStatus" style="background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);border-radius:var(--radius);padding:0.35rem 0.6rem;font-size:0.82rem">
+                                <option value="">Alle Status</option>
+                                <option value="completed">Erfolgreich</option>
+                                <option value="failed">Fehlgeschlagen</option>
+                                <option value="running">Laeuft</option>
+                                <option value="sent">Gesendet</option>
+                                <option value="pending">Ausstehend</option>
+                            </select>
+                            <select v-model="cmdLogType" style="background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);border-radius:var(--radius);padding:0.35rem 0.6rem;font-size:0.82rem">
+                                <option value="">Alle Befehlstypen</option>
+                                <option v-for="t in commandTypes" :key="t" :value="t">{{ t }}</option>
+                            </select>
+                            <input v-model="cmdLogSearch" placeholder="Suchen (Maschine, Ergebnis...)" style="background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);border-radius:var(--radius);padding:0.35rem 0.7rem;font-size:0.82rem;width:220px">
+                            <button class="btn btn-ghost btn-sm" @click="loadCommandHistory">Aktualisieren</button>
+                            <span style="font-size:0.78rem;color:var(--text-muted)">{{ filteredCommandHistory.length }} Eintraege</span>
+                        </div>
+                        <div class="card">
+                            <table class="machine-table" v-if="filteredCommandHistory.length">
+                                <thead><tr><th>Zeitpunkt</th><th>Maschine</th><th>Befehl</th><th>Status</th><th>Ergebnis</th></tr></thead>
+                                <tbody>
+                                    <tr v-for="c in filteredCommandHistory" :key="c.id">
+                                        <td style="font-size:0.8rem;white-space:nowrap">{{ formatTime(c.created_at) }}</td>
+                                        <td style="font-size:0.82rem">{{ c.display_name || c.hostname || (c.machine_id || '').slice(0,8) }}</td>
+                                        <td><span class="os-badge">{{ c.command_type }}</span></td>
+                                        <td><span class="status-badge" :class="c.status === 'completed' ? 'online' : c.status === 'failed' ? 'offline' : 'warning'">{{ c.status }}</span></td>
+                                        <td style="font-size:0.8rem;max-width:380px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" :title="c.result || ''">{{ c.result || '–' }}</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                            <p v-else style="color:var(--text-muted)">Keine Befehle gefunden.</p>
+                        </div>
+                    </div>
+
+                    <!-- Agent / Container console log -->
+                    <div v-else>
+                        <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;margin-bottom:0.8rem">
                             <select v-model="logFilter" style="background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);border-radius:var(--radius);padding:0.35rem 0.6rem;font-size:0.82rem">
-                                <option value="">Alle Eintraege</option>
-                                <option value="ws">Nur [WS]</option>
+                                <option value="">Alle Level</option>
+                                <option value="info">Nur Info</option>
                                 <option value="warn">Nur Warnungen</option>
                                 <option value="error">Nur Fehler</option>
                             </select>
@@ -669,15 +716,15 @@
                             <button class="btn btn-ghost btn-sm" @click="logEntries = []">Leeren</button>
                             <span style="font-size:0.78rem;color:var(--text-muted)">{{ filteredLogEntries.length }} Eintraege</span>
                         </div>
-                    </div>
-                    <div class="card" style="padding:0;overflow:hidden">
-                        <div ref="logContainer" style="background:#0d1117;height:620px;overflow-y:auto;overflow-x:hidden;font-family:monospace;font-size:0.775rem;padding:0.6rem 0.8rem;line-height:1.55">
-                            <div v-for="(e, i) in filteredLogEntries" :key="i" style="display:flex;gap:0.6rem;padding:0.5px 0;min-width:0" :style="{color: logLineColor(e)}">
-                                <span style="color:#475569;flex-shrink:0;user-select:none">{{ formatLogTime(e.ts) }}</span>
-                                <span style="flex-shrink:0;width:2.2rem;text-align:right;font-weight:600;user-select:none" :style="{color: e.level==='error'?'#f87171':e.level==='warn'?'#fbbf24':'#6b7280'}">{{ e.level === 'error' ? 'ERR' : e.level === 'warn' ? 'WRN' : 'INF' }}</span>
-                                <span style="flex:1;min-width:0;word-break:break-all;overflow-wrap:anywhere">{{ e.text }}</span>
+                        <div class="card" style="padding:0;overflow:hidden">
+                            <div ref="logContainer" style="background:#0d1117;height:600px;overflow-y:auto;overflow-x:hidden;font-family:monospace;font-size:0.775rem;padding:0.6rem 0.8rem;line-height:1.55">
+                                <div v-for="(e, i) in filteredLogEntries" :key="i" style="display:flex;gap:0.6rem;padding:0.5px 0;min-width:0" :style="{color: logLineColor(e)}">
+                                    <span style="color:#475569;flex-shrink:0;user-select:none">{{ formatLogTime(e.ts) }}</span>
+                                    <span style="flex-shrink:0;width:2.2rem;text-align:right;font-weight:600;user-select:none" :style="{color: e.level==='error'?'#f87171':e.level==='warn'?'#fbbf24':'#6b7280'}">{{ e.level === 'error' ? 'ERR' : e.level === 'warn' ? 'WRN' : 'INF' }}</span>
+                                    <span style="flex:1;min-width:0;word-break:break-all;overflow-wrap:anywhere">{{ e.text }}</span>
+                                </div>
+                                <div v-if="!filteredLogEntries.length" style="color:#475569;padding:1rem 0;text-align:center">Keine Log-Eintraege vorhanden.</div>
                             </div>
-                            <div v-if="!filteredLogEntries.length" style="color:#475569;padding:1rem 0;text-align:center">Keine Log-Eintraege vorhanden.</div>
                         </div>
                     </div>
                 </div>

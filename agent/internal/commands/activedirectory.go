@@ -177,24 +177,39 @@ func execADUpdateUser(params map[string]interface{}) Result {
 
 	script := fmt.Sprintf("try {\n    Import-Module ActiveDirectory -ErrorAction Stop\n    $p = @{ Identity = '%s' }\n", escapePS(sam))
 
-	for _, pair := range [][2]string{
-		{"given_name", "GivenName"},
-		{"surname", "Surname"},
-		{"display_name", "DisplayName"},
-		{"department", "Department"},
-		{"title", "Title"},
-		{"company", "Company"},
-		{"description", "Description"},
-		{"email", "EmailAddress"},
-		{"office_phone", "OfficePhone"},
-		{"mobile_phone", "MobilePhone"},
+	// Empty string values must be cleared via -Clear, not set via the hashtable:
+	// Set-ADUser turns an empty value into an LDAP "replace" operation that fails
+	// with the error "replace" when the attribute currently has no value.
+	// Note: -Clear expects LDAP attribute names (e.g. "mail"), not the cmdlet
+	// parameter names (e.g. "EmailAddress").
+	var clearAttrs []string
+	for _, t := range [][3]string{
+		{"given_name", "GivenName", "givenName"},
+		{"surname", "Surname", "sn"},
+		{"display_name", "DisplayName", "displayName"},
+		{"department", "Department", "department"},
+		{"title", "Title", "title"},
+		{"company", "Company", "company"},
+		{"description", "Description", "description"},
+		{"email", "EmailAddress", "mail"},
+		{"office_phone", "OfficePhone", "telephoneNumber"},
+		{"mobile_phone", "MobilePhone", "mobile"},
 	} {
-		if val, ok := params[pair[0]].(string); ok {
-			script += fmt.Sprintf("    $p['%s'] = '%s'\n", pair[1], escapePS(val))
+		if val, ok := params[t[0]].(string); ok {
+			if val == "" {
+				clearAttrs = append(clearAttrs, t[2])
+			} else {
+				script += fmt.Sprintf("    $p['%s'] = '%s'\n", t[1], escapePS(val))
+			}
 		}
 	}
 
 	script += "    Set-ADUser @p -ErrorAction Stop\n"
+
+	if len(clearAttrs) > 0 {
+		script += fmt.Sprintf("    Set-ADUser -Identity '%s' -Clear %s -ErrorAction Stop\n",
+			escapePS(sam), strings.Join(clearAttrs, ","))
+	}
 
 	if v, ok := params["enabled"].(bool); ok {
 		if v {

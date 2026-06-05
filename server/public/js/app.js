@@ -353,6 +353,7 @@ createApp({
                 loadADTemplates();
             } else if (target === 'logs') {
                 connectLogStream();
+                loadCommandHistory();
             } else {
                 disconnectLogStream();
             }
@@ -1244,6 +1245,7 @@ createApp({
         }
 
         // Live log viewer
+        const logTab = ref('command');          // 'command' | 'agent' | 'container'
         const logEntries = ref([]);
         const logFilter = ref('');
         const logSearch = ref('');
@@ -1251,12 +1253,39 @@ createApp({
         const logContainer = ref(null);
         let logEventSource = null;
 
+        // Command log filters
+        const cmdLogSearch = ref('');
+        const cmdLogStatus = ref('');
+        const cmdLogType = ref('');
+
+        const commandTypes = computed(() =>
+            [...new Set(commandHistory.value.map(c => c.command_type).filter(Boolean))].sort()
+        );
+
+        const filteredCommandHistory = computed(() => {
+            let list = commandHistory.value;
+            if (cmdLogStatus.value) list = list.filter(c => c.status === cmdLogStatus.value);
+            if (cmdLogType.value) list = list.filter(c => c.command_type === cmdLogType.value);
+            if (cmdLogSearch.value) {
+                const q = cmdLogSearch.value.toLowerCase();
+                list = list.filter(c =>
+                    (c.command_type || '').toLowerCase().includes(q) ||
+                    (c.result || '').toLowerCase().includes(q) ||
+                    (c.hostname || '').toLowerCase().includes(q) ||
+                    (c.display_name || '').toLowerCase().includes(q) ||
+                    (c.machine_id || '').toLowerCase().includes(q)
+                );
+            }
+            return list;
+        });
+
+        // Console split: agent activity ([WS]) vs. container/server output (everything else)
         const filteredLogEntries = computed(() => {
-            let list = logEntries.value;
-            if (logFilter.value === 'ws') {
-                list = list.filter(e => e.text.includes('[WS]'));
-            } else if (logFilter.value === 'warn' || logFilter.value === 'error') {
-                list = list.filter(e => e.level === logFilter.value);
+            let list = logTab.value === 'agent'
+                ? logEntries.value.filter(e => e.text.includes('[WS]'))
+                : logEntries.value.filter(e => !e.text.includes('[WS]'));
+            if (logFilter.value === 'info' || logFilter.value === 'warn' || logFilter.value === 'error') {
+                list = list.filter(e => (e.level || 'info') === logFilter.value);
             }
             if (logSearch.value) {
                 const q = logSearch.value.toLowerCase();
@@ -1264,6 +1293,16 @@ createApp({
             }
             return list;
         });
+
+        function setLogTab(tab) {
+            logTab.value = tab;
+            if (tab === 'command') {
+                loadCommandHistory();
+            } else {
+                connectLogStream();
+                scrollLogsToBottom();
+            }
+        }
 
         function connectLogStream() {
             if (logEventSource) { logEventSource.close(); logEventSource = null; }
@@ -1538,8 +1577,9 @@ createApp({
             addVeeamInstance, deleteVeeamInstance,
             saveSettings, testEmail, regenerateEnrollmentKey, acknowledgeAlert, logout,
             loadTelemetryHistory, formatTime, formatBytes, diskPercent, formatUptime,
-            logEntries, logFilter, logSearch, logAutoScroll, logContainer, filteredLogEntries,
+            logTab, setLogTab, logEntries, logFilter, logSearch, logAutoScroll, logContainer, filteredLogEntries,
             connectLogStream, formatLogTime, logLineColor, scrollLogsToBottom,
+            cmdLogSearch, cmdLogStatus, cmdLogType, commandTypes, filteredCommandHistory,
             adDomainControllers, adSelectedDC, adUsers, adGroups, adUsersLoading, adUsersOutput,
             adTemplates, showADUserModal, showADTemplatesModal, adUserSearch, adUserFormMode,
             adUserFormTab, adEditingUser, adUserForm, adTemplateForm, adFilteredUsers,
