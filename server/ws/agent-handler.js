@@ -188,10 +188,14 @@ function handleRegister(ws, key, payload) {
         const ipStr = Array.isArray(ip_addresses) ? ip_addresses.join(', ') : (ip_addresses || '');
         const machineSecret = generateMachineSecret();
 
-        // Reinstall guard: if a machine with this hostname already exists, reuse it
-        // instead of creating a duplicate (handles lost config.json on agent reinstall).
-        const existing = hostname
-            ? db.prepare('SELECT * FROM machines WHERE hostname = ? ORDER BY id ASC LIMIT 1').get(hostname)
+        // Reinstall guard: if exactly ONE machine with this hostname exists, reuse it.
+        // Requires a unique hostname match to avoid ambiguity when multiple machines
+        // share the same hostname (e.g. two servers both named "pve").
+        const hostnameCount = hostname
+            ? db.prepare('SELECT COUNT(*) as n FROM machines WHERE hostname = ?').get(hostname).n
+            : 0;
+        const existing = hostnameCount === 1
+            ? db.prepare('SELECT * FROM machines WHERE hostname = ?').get(hostname)
             : null;
 
         if (existing) {
