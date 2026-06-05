@@ -76,6 +76,8 @@ func Execute(cmdType string, params map[string]interface{}, onProgress ProgressF
 		return execLocalUpdateUser(params)
 	case "local_delete_user":
 		return execLocalDeleteUser(params)
+	case "scan_disk":
+		return execScanDisk(params)
 	default:
 		return Result{Status: "failed", Output: fmt.Sprintf("unknown command: %s", cmdType)}
 	}

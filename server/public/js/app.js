@@ -225,6 +225,13 @@ const app = createApp({
             display_name: ''
         });
 
+        // Disk Explorer state
+        const diskExplorerMachineId = ref('');
+        const diskExplorerPath = ref('');
+        const diskExplorerLoading = ref(false);
+        const diskExplorerData = ref(null);
+        const diskExplorerHistory = ref([]);
+
         const settingsForm = reactive({
             smtpHost: '',
             smtpPort: 587,
@@ -345,6 +352,15 @@ const app = createApp({
             if (['local_create_user', 'local_update_user', 'local_delete_user'].includes(p.command_type)) {
                 if (p.status === 'completed') { toast(p.result || 'Operation erfolgreich', 'success'); loadLocalUsers(); }
                 else if (p.status === 'failed') { toast('Fehler: ' + (p.result || ''), 'error'); }
+            }
+            if (p.command_type === 'scan_disk') {
+                if (p.status === 'completed') {
+                    try { diskExplorerData.value = JSON.parse(p.result); } catch {}
+                    diskExplorerLoading.value = false;
+                } else if (p.status === 'failed') {
+                    toast('Scan fehlgeschlagen: ' + (p.result || ''), 'error');
+                    diskExplorerLoading.value = false;
+                }
             }
 
             // Live progress for machine-detail view
@@ -1718,6 +1734,61 @@ const app = createApp({
 
         function removeFromLocalGroup(g) { localUserForm.groups = localUserForm.groups.filter(x => x !== g); }
 
+        // ---- Disk Explorer ----
+        function onDiskExplorerMachineChange() {
+            const m = machines.value.find(x => x.machine_id === diskExplorerMachineId.value);
+            if (m) diskExplorerPath.value = m.os_type === 'windows' ? 'C:\\' : '/';
+            diskExplorerData.value = null;
+            diskExplorerHistory.value = [];
+        }
+
+        async function startDiskScan(customPath) {
+            if (!diskExplorerMachineId.value) { toast('Bitte eine Maschine auswählen', 'error'); return; }
+            const path = customPath !== undefined ? customPath : diskExplorerPath.value;
+            diskExplorerLoading.value = true;
+            diskExplorerData.value = null;
+            const res = await apiFetch(`/api/commands/${diskExplorerMachineId.value}/disk-scan`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ path })
+            });
+            if (!res.ok) {
+                diskExplorerLoading.value = false;
+                toast('Fehler beim Starten des Scans', 'error');
+            }
+        }
+
+        function diskExplorerDrillDown(entry) {
+            if (!entry.is_dir) return;
+            diskExplorerHistory.value.push(diskExplorerData.value ? diskExplorerData.value.path : diskExplorerPath.value);
+            diskExplorerPath.value = entry.path;
+            startDiskScan(entry.path);
+        }
+
+        function diskExplorerBack() {
+            if (!diskExplorerHistory.value.length) return;
+            const prev = diskExplorerHistory.value.pop();
+            diskExplorerPath.value = prev;
+            startDiskScan(prev);
+        }
+
+        function diskExplorerMaxSize() {
+            if (!diskExplorerData.value || !diskExplorerData.value.entries.length) return 1;
+            return diskExplorerData.value.entries[0].size || 1;
+        }
+
+        function diskExplorerBarWidth(entry) {
+            const pct = Math.round((entry.size / diskExplorerMaxSize()) * 100);
+            return Math.max(pct, entry.size > 0 ? 1 : 0);
+        }
+
+        function diskExplorerBarColor(entry) {
+            const pct = diskExplorerBarWidth(entry);
+            if (pct > 70) return 'var(--danger)';
+            if (pct > 35) return 'var(--warning)';
+            return 'var(--accent)';
+        }
+
         // ---- Table column definitions (used with <data-table>) ----
         const machineColumns = [
             { key: '_select', label: '', sortable: false, searchable: false, stopClick: true, thStyle: 'width:36px' },
@@ -1838,7 +1909,10 @@ const app = createApp({
             toasts, confirmData,
             machineColumns, updatesColumns, commandLogColumns, servicesColumns,
             firewallColumns, sharesColumns, veeamJobColumns, adUserColumns,
-            localUserColumns, scanResultColumns
+            localUserColumns, scanResultColumns,
+            diskExplorerMachineId, diskExplorerPath, diskExplorerLoading, diskExplorerData, diskExplorerHistory,
+            onDiskExplorerMachineChange, startDiskScan, diskExplorerDrillDown, diskExplorerBack,
+            diskExplorerBarWidth, diskExplorerBarColor
         };
     }
 });

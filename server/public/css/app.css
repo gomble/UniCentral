@@ -44,6 +44,7 @@
 .toast-info { background: #1a2a3a; border: 1px solid var(--accent); color: var(--accent); }
 .toast-warning { background: #3a2a1a; border: 1px solid var(--warning); color: var(--warning); }
 @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+@keyframes spin { to { transform: rotate(360deg); } }
 
 /* Confirm Dialog */
 .confirm-overlay {
