@@ -229,8 +229,15 @@
                                 <span class="status-badge" :class="m.status">{{ m.status }}</span>
                             </template>
                             <template #cell-name="{ row: m }">
-                                <span v-if="m.is_domain_controller" style="background:#7c3aed;color:#fff;font-size:0.6rem;padding:1px 4px;border-radius:3px;margin-right:4px;vertical-align:middle">DC</span>
-                                <strong>{{ m.display_name || m.hostname }}</strong>
+                                <div>
+                                    <div>
+                                        <span v-if="m.is_domain_controller" style="background:#7c3aed;color:#fff;font-size:0.6rem;padding:1px 4px;border-radius:3px;margin-right:4px;vertical-align:middle">DC</span>
+                                        <strong>{{ m.display_name || m.hostname }}</strong>
+                                    </div>
+                                    <div class="mobile-only" style="font-size:0.72rem;color:var(--text-muted);margin-top:1px">
+                                        <span>{{ m.os_type }}</span><span v-if="m.category"> · {{ m.category }}</span><span v-if="m.group_name"> · {{ m.group_name }}</span>
+                                    </div>
+                                </div>
                             </template>
                             <template #cell-os_type="{ row: m }">
                                 <span class="os-badge" :class="m.os_type">

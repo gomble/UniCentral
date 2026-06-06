@@ -1824,15 +1824,16 @@ const app = createApp({
         }
 
         // ---- Table column definitions (used with <data-table>) ----
+        const M = 'dt-hide-mobile';
         const machineColumns = [
             { key: '_select', label: '', sortable: false, searchable: false, stopClick: true, thStyle: 'width:36px' },
             { key: 'status', label: 'Status', filter: true },
             { key: 'name', label: 'Hostname', value: m => m.display_name || m.hostname },
-            { key: 'os_type', label: 'OS', filter: true },
-            { key: 'category', label: 'Typ', filter: true },
-            { key: 'group_name', label: 'Gruppe', filter: true, placeholder: '–' },
-            { key: 'agent_version', label: 'Agent', placeholder: '–' },
-            { key: 'uptime', label: 'Laufzeit', value: m => (m._telemetry && m._telemetry.uptime ? formatUptime(m._telemetry.uptime) : '–'), sortValue: m => (m._telemetry && m._telemetry.uptime) || 0 },
+            { key: 'os_type', label: 'OS', filter: true, thClass: M, tdClass: M },
+            { key: 'category', label: 'Typ', filter: true, thClass: M, tdClass: M },
+            { key: 'group_name', label: 'Gruppe', filter: true, placeholder: '–', thClass: M, tdClass: M },
+            { key: 'agent_version', label: 'Agent', placeholder: '–', thClass: M, tdClass: M },
+            { key: 'uptime', label: 'Laufzeit', value: m => (m._telemetry && m._telemetry.uptime ? formatUptime(m._telemetry.uptime) : '–'), sortValue: m => (m._telemetry && m._telemetry.uptime) || 0, thClass: M, tdClass: M },
             { key: '_actions', label: 'Aktionen', sortable: false, searchable: false, stopClick: true }
         ];
         const updatesColumns = [
@@ -1840,8 +1841,8 @@ const app = createApp({
             { key: 'status', label: 'Status', filter: true },
             { key: 'name', label: 'Maschine', value: m => m.display_name || m.hostname },
             { key: 'updates_available', label: 'Ausstehend', sortValue: m => m.updates_available || 0 },
-            { key: 'last_run_at', label: 'Letzter Lauf', sortValue: m => m.last_run_at || '', searchable: false },
-            { key: 'schedule_time', label: 'Zeitplan', placeholder: '–' },
+            { key: 'last_run_at', label: 'Letzter Lauf', sortValue: m => m.last_run_at || '', searchable: false, thClass: M, tdClass: M },
+            { key: 'schedule_time', label: 'Zeitplan', placeholder: '–', thClass: M, tdClass: M },
             { key: '_actions', label: 'Aktionen', sortable: false, searchable: false, stopClick: true }
         ];
         const commandLogColumns = [
