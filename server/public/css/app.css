@@ -44,6 +44,7 @@
 .toast-info { background: #1a2a3a; border: 1px solid var(--accent); color: var(--accent); }
 .toast-warning { background: #3a2a1a; border: 1px solid var(--warning); color: var(--warning); }
 @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+@keyframes spin { to { transform: rotate(360deg); } }
 
 /* Confirm Dialog */
 .confirm-overlay {
@@ -278,7 +279,49 @@ body {
     font-weight: 600;
 }
 .machine-table tr:hover td { background: var(--bg-hover); }
-.machine-table tr { cursor: pointer; }
+.machine-table tr { cursor: default; }
+
+/* Reusable data-table component */
+.data-table { width: 100%; }
+.dt-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin-bottom: 0.7rem;
+}
+.dt-search {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    color: var(--text-primary);
+    border-radius: var(--radius);
+    padding: 0.35rem 0.7rem;
+    font-size: 0.82rem;
+    width: 240px;
+    max-width: 100%;
+}
+.dt-search:focus { outline: none; border-color: var(--accent); }
+.dt-count { font-size: 0.78rem; color: var(--text-muted); margin-left: auto; }
+.data-table .machine-table th { vertical-align: bottom; }
+.dt-th-label { display: inline-flex; align-items: center; gap: 0.2rem; }
+.machine-table th.dt-sortable .dt-th-label { cursor: pointer; user-select: none; }
+.machine-table th.dt-sortable:hover .dt-th-label { color: var(--text-secondary); }
+.dt-sort { font-size: 0.65rem; color: var(--accent); }
+.dt-col-filter {
+    display: block;
+    margin-top: 0.3rem;
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+    border-radius: 4px;
+    padding: 0.15rem 0.3rem;
+    font-size: 0.72rem;
+    text-transform: none;
+    font-weight: 400;
+    max-width: 150px;
+}
+.data-table .dt-row-clickable { cursor: pointer; }
+.dt-empty { color: var(--text-muted); padding: 1rem 0; text-align: center; }
 
 /* Status Badge */
 .status-badge {
@@ -323,6 +366,17 @@ body {
     border-radius: 4px;
     background: var(--bg-hover);
     color: var(--text-secondary);
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+}
+.os-badge.windows {
+    background: rgba(59,130,246,0.12);
+    color: #3b82f6;
+}
+.os-badge.linux {
+    background: rgba(245,158,11,0.12);
+    color: #f59e0b;
 }
 
 /* Category Badge */

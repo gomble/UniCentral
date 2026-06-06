@@ -33,40 +33,67 @@ func execDeployNeighbor(params map[string]interface{}) Result {
 }
 
 func deployWindows(ip, user, pass, serverURL, key, category string) Result {
-	// Use PowerShell remoting via WinRM
-	script := fmt.Sprintf(`$ErrorActionPreference = "Stop"
+	if runtime.GOOS != "windows" {
+		return Result{Status: "failed", Output: "cross-OS deployment (Linux->Windows) not supported, use a Windows relay agent"}
+	}
+
+	jsonConfig := fmt.Sprintf(`{"server":"%s","enrollment_key":"%s","category":"%s"}`,
+		strings.ReplaceAll(serverURL, `"`, `\"`),
+		strings.ReplaceAll(key, `"`, `\"`),
+		strings.ReplaceAll(category, `"`, `\"`))
+
+	remoteScript := fmt.Sprintf(`
+$ErrorActionPreference = "Stop"
 $Server = "%s"
-$Key = "%s"
-$Category = "%s"
 $InstallDir = "C:\Program Files\UniCentral"
-$ConfigDir = "C:\ProgramData\UniCentral"
+$ConfigDir  = "C:\ProgramData\UniCentral"
+
+$svc = Get-Service UniCentralAgent -ErrorAction SilentlyContinue
+if ($svc) {
+    Stop-Service UniCentralAgent -Force -ErrorAction SilentlyContinue
+    Start-Sleep -Seconds 1
+    if (Test-Path "$InstallDir\unicentral-agent.exe") {
+        & "$InstallDir\unicentral-agent.exe" --uninstall 2>$null
+        Start-Sleep -Seconds 1
+    }
+}
+
 New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
-New-Item -ItemType Directory -Force -Path $ConfigDir | Out-Null
+New-Item -ItemType Directory -Force -Path $ConfigDir  | Out-Null
+
 Invoke-WebRequest -Uri "$Server/api/agent/download/windows/amd64" -OutFile "$InstallDir\unicentral-agent.exe" -UseBasicParsing
-@{server=$Server;enrollment_key=$Key;category=$Category} | ConvertTo-Json | Set-Content "$ConfigDir\config.json"
+
+$json = '%s'
+$utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+[System.IO.File]::WriteAllText("$ConfigDir\config.json", $json, $utf8NoBom)
+
 & "$InstallDir\unicentral-agent.exe" --install --config "$ConfigDir\config.json"
+Start-Sleep -Seconds 1
 Start-Service UniCentralAgent
-Write-Output "OK"`, serverURL, key, category)
+Write-Output "DEPLOYED_OK"
+`, serverURL, escapePS(jsonConfig))
 
-	var cmd *exec.Cmd
-	if runtime.GOOS == "windows" {
-		// From Windows to Windows - use Invoke-Command
-		psCmd := fmt.Sprintf(`$pass = ConvertTo-SecureString '%s' -AsPlainText -Force; $cred = New-Object System.Management.Automation.PSCredential('%s', $pass); Invoke-Command -ComputerName '%s' -Credential $cred -ScriptBlock { %s }`,
-			escapePS(pass), user, ip, script)
-		cmd = exec.Command("powershell", "-Command", psCmd)
-	} else {
-		// From Linux to Windows - use winrs or powershell over SSH (less common)
-		return Result{Status: "failed", Output: "cross-OS deployment (Linux->Windows) not yet supported, use a Windows relay agent"}
-	}
+	psCmd := fmt.Sprintf(
+		`$pass = ConvertTo-SecureString '%s' -AsPlainText -Force; `+
+			`$cred = New-Object System.Management.Automation.PSCredential('%s', $pass); `+
+			`Invoke-Command -ComputerName '%s' -Credential $cred -ScriptBlock { %s }`,
+		escapePS(pass), escapePS(user), ip, remoteScript)
 
+	cmd := exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command", psCmd)
 	out, err := cmd.CombinedOutput()
+	output := strings.TrimSpace(string(out))
+
 	if err != nil {
-		return Result{Status: "failed", Output: string(out) + "\n" + err.Error()}
+		hint := ""
+		if strings.Contains(output, "WinRM") || strings.Contains(output, "WSMan") || strings.Contains(err.Error(), "exit") {
+			hint = "\n\nHINWEIS: WinRM muss auf dem Zielrechner aktiv sein.\nAls Admin auf dem Ziel ausfuehren: Enable-PSRemoting -Force"
+		}
+		return Result{Status: "failed", Output: output + "\n" + err.Error() + hint}
 	}
-	if strings.Contains(string(out), "OK") {
-		return Result{Status: "completed", Output: fmt.Sprintf("Agent deployed to %s", ip)}
+	if strings.Contains(output, "DEPLOYED_OK") {
+		return Result{Status: "completed", Output: fmt.Sprintf("Agent erfolgreich deployt auf %s", ip)}
 	}
-	return Result{Status: "failed", Output: string(out)}
+	return Result{Status: "failed", Output: output}
 }
 
 func deployLinux(ip, user, pass, serverURL, key, category string) Result {

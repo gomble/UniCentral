@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>UniCentral</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
     <link rel="stylesheet" href="/css/app.css">
 </head>
 <body>
@@ -53,6 +54,10 @@
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
                         <span>Alarme</span>
                         <span v-if="alertCount" class="nav-badge">{{ alertCount }}</span>
+                    </div>
+                    <div class="nav-item" :class="{active: view === 'logs'}" @click="navigate('logs')">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/><line x1="8" y1="9" x2="10" y2="9"/></svg>
+                        <span>Logs</span>
                     </div>
                     <div class="nav-item" :class="{active: view === 'settings'}" @click="navigate('settings')">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15 1.65 1.65 0 003 14.08V14a2 2 0 014 0v.09c0 .67.44 1.26 1.09 1.49"/></svg>
@@ -111,7 +116,11 @@
                                 </div>
                                 <div style="display:flex;gap:0.3rem;align-items:center">
                                     <span class="category-badge" :class="m.category">{{ m.category }}</span>
-                                    <span class="os-badge">{{ m.os_type }}</span>
+                                    <span class="os-badge" :class="m.os_type">
+                                        <svg v-if="m.os_type === 'windows'" width="11" height="11" viewBox="0 0 24 24" fill="currentColor" style="flex-shrink:0"><path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801"/></svg>
+                                        <svg v-else-if="m.os_type === 'linux'" width="11" height="11" viewBox="0 0 24 24" fill="currentColor" style="flex-shrink:0"><path d="M12.504 0c-.155 0-.315.008-.48.021-4.226.333-3.105 4.807-3.17 6.298-.076 1.092-.3 1.953-1.05 3.02-.885 1.051-2.127 2.75-2.716 4.521-.278.832-.41 1.684-.287 2.489.117.779.567 1.563 1.182 2.114.267.235.537.458.816.67.302.221.607.435.917.642.61.407 1.222.786 1.834 1.153 1.247.728 2.495 1.431 3.742 2.134.248.142.497.283.746.425.249.141.497.283.745.424.248.14.496.283.744.424l.049.028c.154.087.308.174.462.262.155.087.31.175.464.262l.06.034c.31.175.618.35.927.524l.463.262a.065.065 0 0 0 .061 0l.463-.262c.309-.174.617-.349.926-.524l.06-.034c.155-.087.31-.175.464-.262.155-.088.309-.175.463-.262l.049-.028c.248-.141.496-.284.744-.424.248-.141.496-.283.745-.424.249-.142.498-.283.746-.425 1.247-.703 2.495-1.406 3.742-2.134.612-.367 1.224-.746 1.834-1.153.31-.207.615-.421.917-.642.279-.212.549-.435.816-.67.615-.551 1.065-1.335 1.182-2.114.123-.805-.009-1.657-.287-2.489-.589-1.771-1.831-3.47-2.716-4.521-.75-1.067-.974-1.928-1.05-3.02-.065-1.491 1.056-5.965-3.17-6.298-.165-.013-.325-.021-.48-.021zm-.982 6.008c.316 0 .604.111.822.296.213.183.349.44.349.725v.018c0 .283-.136.541-.35.724-.217.185-.505.296-.82.296s-.604-.111-.822-.296c-.213-.183-.349-.44-.349-.725v-.018c0-.283.136-.541.35-.724.217-.185.505-.296.82-.296zm1.963 0c.316 0 .604.111.822.296.213.183.349.44.349.725v.018c0 .283-.136.541-.35.724-.217.185-.505.296-.82.296s-.604-.111-.822-.296c-.213-.183-.349-.44-.349-.725v-.018c0-.283.136-.541.35-.724.217-.185.505-.296.82-.296z"/></svg>
+                                        {{ m.os_type }}
+                                    </span>
                                 </div>
                             </div>
                             <!-- Card Body - Metrics -->
@@ -193,41 +202,40 @@
                     </div>
 
                     <div class="card">
-                        <table class="machine-table" v-if="machines.length">
-                            <thead>
-                                <tr>
-                                    <th><input type="checkbox" @change="toggleAllMachines" :checked="selectedMachines.length === machines.length"></th>
-                                    <th>Status</th>
-                                    <th>Hostname</th>
-                                    <th>OS</th>
-                                    <th>Typ</th>
-                                    <th>Gruppe</th>
-                                    <th>Agent</th>
-                                    <th>Laufzeit</th>
-                                    <th>Aktionen</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr v-for="m in filteredMachines" :key="m.id">
-                                    <td><input type="checkbox" :value="m.machine_id" v-model="selectedMachines" @click.stop></td>
-                                    <td><span class="status-badge" :class="m.status">{{ m.status }}</span></td>
-                                    <td @click="navigate('machine-detail', m.id)" style="cursor:pointer">
-                                        <span v-if="m.is_domain_controller" style="background:#7c3aed;color:#fff;font-size:0.6rem;padding:1px 4px;border-radius:3px;margin-right:4px;vertical-align:middle">DC</span>
-                                        <strong>{{ m.display_name || m.hostname }}</strong>
-                                    </td>
-                                    <td><span class="os-badge">{{ m.os_type }}</span></td>
-                                    <td><span class="category-badge" :class="m.category">{{ m.category }}</span></td>
-                                    <td>{{ m.group_name || '–' }}</td>
-                                    <td>{{ m.agent_version || '–' }}</td>
-                                    <td style="color:var(--text-muted);font-size:0.82rem">{{ m._telemetry && m._telemetry.uptime ? formatUptime(m._telemetry.uptime) : '–' }}</td>
-                                    <td>
-                                        <button class="btn btn-ghost btn-sm" @click.stop="showToken(m)" title="Install-Befehl">Token</button>
-                                        <button class="btn btn-danger btn-sm" @click.stop="deleteMachine(m)" title="Entfernen">✕</button>
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
-                        <p v-else style="color: var(--text-muted); padding: 1rem 0;">Keine Maschinen vorhanden.</p>
+                        <data-table :rows="filteredMachines" :columns="machineColumns" row-key="id" row-clickable
+                            search-placeholder="Maschinen durchsuchen..." empty-text="Keine Maschinen vorhanden."
+                            @row-click="m => navigate('machine-detail', m.id)">
+                            <template #header-_select>
+                                <input type="checkbox" @change="toggleAllMachines" :checked="selectedMachines.length === machines.length && machines.length > 0">
+                            </template>
+                            <template #cell-_select="{ row: m }">
+                                <input type="checkbox" :value="m.machine_id" v-model="selectedMachines">
+                            </template>
+                            <template #cell-status="{ row: m }">
+                                <span class="status-badge" :class="m.status">{{ m.status }}</span>
+                            </template>
+                            <template #cell-name="{ row: m }">
+                                <span v-if="m.is_domain_controller" style="background:#7c3aed;color:#fff;font-size:0.6rem;padding:1px 4px;border-radius:3px;margin-right:4px;vertical-align:middle">DC</span>
+                                <strong>{{ m.display_name || m.hostname }}</strong>
+                            </template>
+                            <template #cell-os_type="{ row: m }">
+                                <span class="os-badge" :class="m.os_type">
+                                    <svg v-if="m.os_type === 'windows'" width="11" height="11" viewBox="0 0 24 24" fill="currentColor" style="flex-shrink:0"><path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801"/></svg>
+                                    <svg v-else-if="m.os_type === 'linux'" width="11" height="11" viewBox="0 0 24 24" fill="currentColor" style="flex-shrink:0"><path d="M12.504 0c-.155 0-.315.008-.48.021-4.226.333-3.105 4.807-3.17 6.298-.076 1.092-.3 1.953-1.05 3.02-.885 1.051-2.127 2.75-2.716 4.521-.278.832-.41 1.684-.287 2.489.117.779.567 1.563 1.182 2.114.267.235.537.458.816.67.302.221.607.435.917.642.61.407 1.222.786 1.834 1.153 1.247.728 2.495 1.431 3.742 2.134.248.142.497.283.746.425.249.141.497.283.745.424.248.14.496.283.744.424l.049.028c.154.087.308.174.462.262.155.087.31.175.464.262l.06.034c.31.175.618.35.927.524l.463.262a.065.065 0 0 0 .061 0l.463-.262c.309-.174.617-.349.926-.524l.06-.034c.155-.087.31-.175.464-.262.155-.088.309-.175.463-.262l.049-.028c.248-.141.496-.284.744-.424.248-.141.496-.283.745-.424.249-.142.498-.283.746-.425 1.247-.703 2.495-1.406 3.742-2.134.612-.367 1.224-.746 1.834-1.153.31-.207.615-.421.917-.642.279-.212.549-.435.816-.67.615-.551 1.065-1.335 1.182-2.114.123-.805-.009-1.657-.287-2.489-.589-1.771-1.831-3.47-2.716-4.521-.75-1.067-.974-1.928-1.05-3.02-.065-1.491 1.056-5.965-3.17-6.298-.165-.013-.325-.021-.48-.021zm-.982 6.008c.316 0 .604.111.822.296.213.183.349.44.349.725v.018c0 .283-.136.541-.35.724-.217.185-.505.296-.82.296s-.604-.111-.822-.296c-.213-.183-.349-.44-.349-.725v-.018c0-.283.136-.541.35-.724.217-.185.505-.296.82-.296zm1.963 0c.316 0 .604.111.822.296.213.183.349.44.349.725v.018c0 .283-.136.541-.35.724-.217.185-.505.296-.82.296s-.604-.111-.822-.296c-.213-.183-.349-.44-.349-.725v-.018c0-.283.136-.541.35-.724.217-.185.505-.296.82-.296z"/></svg>
+                                    {{ m.os_type }}
+                                </span>
+                            </template>
+                            <template #cell-category="{ row: m }">
+                                <span class="category-badge" :class="m.category">{{ m.category }}</span>
+                            </template>
+                            <template #cell-uptime="{ row: m }">
+                                <span style="color:var(--text-muted);font-size:0.82rem">{{ m._telemetry && m._telemetry.uptime ? formatUptime(m._telemetry.uptime) : '–' }}</span>
+                            </template>
+                            <template #cell-_actions="{ row: m }">
+                                <button class="btn btn-ghost btn-sm" @click.stop="showToken(m)" title="Install-Befehl">Token</button>
+                                <button class="btn btn-danger btn-sm" @click.stop="deleteMachine(m)" title="Entfernen">✕</button>
+                            </template>
+                        </data-table>
                     </div>
                 </div>
 
@@ -245,7 +253,7 @@
                             Windows
                         </button>
                         <button class="btn btn-sm" :class="updatesOsTab === 'linux' ? 'btn-primary' : 'btn-ghost'" @click="updatesOsTab = 'linux'; updatesSelected = []">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12.504 0c-.155 0-.315.008-.48.021-4.226.333-3.105 4.807-3.17 6.298-.076 1.092-.3 1.953-1.05 3.02-.885 1.051-2.127 2.75-2.716 4.521-.278.832-.41 1.684-.287 2.489.117.779.567 1.563 1.182 2.114.267.235.537.458.816.67.302.221.607.435.917.642.61.407 1.222.786 1.834 1.153 1.247.728 2.495 1.431 3.742 2.134.248.142.497.283.746.425.249.141.497.283.745.424.248.14.496.283.744.424l.049.028c.154.087.308.174.462.262.155.087.31.175.464.262l.06.034c.31.175.618.35.927.524l.463.262a.065.065 0 0 0 .061 0l.463-.262c.309-.174.617-.349.926-.524l.06-.034c.155-.087.31-.175.464-.262.155-.088.309-.175.463-.262l.049-.028c.248-.141.496-.284.744-.424.248-.141.496-.283.745-.424.249-.142.498-.283.746-.425 1.247-.703 2.495-1.406 3.742-2.134.612-.367 1.224-.746 1.834-1.153.31-.207.615-.421.917-.642.279-.212.549-.435.816-.67.615-.551 1.065-1.335 1.182-2.114.123-.805-.009-1.657-.287-2.489-.589-1.771-1.831-3.47-2.716-4.521-.75-1.067-.974-1.928-1.05-3.02-.065-1.491 1.056-5.965-3.17-6.298-.165-.013-.325-.021-.48-.021zm-.982 6.008c.316 0 .604.111.822.296.213.183.349.44.349.725v.018c0 .283-.136.541-.35.724-.217.185-.505.296-.82.296s-.604-.111-.822-.296c-.213-.183-.349-.44-.349-.725v-.018c0-.283.136-.541.35-.724.217-.185.505-.296.82-.296zm1.963 0c.316 0 .604.111.822.296.213.183.349.44.349.725v.018c0 .283-.136.541-.35.724-.217.185-.505.296-.82.296s-.604-.111-.822-.296c-.213-.183-.349-.44-.349-.725v-.018c0-.283.136-.541.35-.724.217-.185.505-.296.82-.296z"/></svg>
                             Linux
                         </button>
                     </div>
@@ -267,71 +275,63 @@
                     </div>
 
                     <!-- Machine Table -->
-                    <div class="card" style="padding:0;overflow:hidden">
-                        <table class="machine-table" v-if="updatesFilteredMachines.length">
-                            <thead>
-                                <tr>
-                                    <th style="width:36px"><input type="checkbox" @change="updatesToggleAll" :checked="updatesSelected.length === updatesFilteredMachines.length && updatesFilteredMachines.length > 0"></th>
-                                    <th>Status</th>
-                                    <th>Maschine</th>
-                                    <th>Ausstehend</th>
-                                    <th>Letzter Lauf</th>
-                                    <th>Zeitplan</th>
-                                    <th>Aktionen</th>
+                    <div class="card">
+                        <data-table :rows="updatesFilteredMachines" :columns="updatesColumns" row-key="machine_id"
+                            search-placeholder="Maschinen durchsuchen..."
+                            :empty-text="'Keine ' + (updatesOsTab === 'windows' ? 'Windows' : 'Linux') + '-Maschinen vorhanden.'">
+                            <template #header-_select>
+                                <input type="checkbox" @change="updatesToggleAll" :checked="updatesSelected.length === updatesFilteredMachines.length && updatesFilteredMachines.length > 0">
+                            </template>
+                            <template #cell-_select="{ row: m }">
+                                <input type="checkbox" :value="m.machine_id" v-model="updatesSelected" @click.stop>
+                            </template>
+                            <template #cell-status="{ row: m }">
+                                <span class="status-badge" :class="m.status">{{ m.status }}</span>
+                            </template>
+                            <template #cell-name="{ row: m }">
+                                <span style="cursor:pointer;color:var(--accent)" @click.stop="navigate('machine-detail', m.id)">{{ m.display_name || m.hostname }}</span>
+                                <div style="font-size:0.72rem;color:var(--text-muted)">{{ m.ip_address || '' }}</div>
+                            </template>
+                            <template #cell-updates_available="{ row: m }">
+                                <span v-if="m.updates_available > 0" style="color:var(--warning);font-weight:600;cursor:pointer;text-decoration:underline dotted" @click.stop="updatesPendingModal = m" :title="'Ausstehende Updates anzeigen'">
+                                    {{ m.updates_available }} Update(s)
+                                    <span v-if="m.updates_reboot_required" style="font-size:0.7rem;margin-left:4px;color:var(--danger)">⚠ Neustart</span>
+                                </span>
+                                <span v-else-if="updatesLiveStreams[m.machine_id] && ['sent','running'].includes(updatesLiveStreams[m.machine_id].status)" style="color:var(--accent);font-size:0.8rem">
+                                    <span class="pulse-dot"></span> läuft…
+                                </span>
+                                <span v-else style="color:var(--success);font-size:0.8rem">Aktuell</span>
+                            </template>
+                            <template #cell-last_run_at="{ row: m }">
+                                <span v-if="m.last_run_at" style="font-size:0.8rem">
+                                    <span class="status-badge" :class="m.last_run_status === 'completed' ? 'online' : m.last_run_status === 'failed' ? 'offline' : 'warning'" style="font-size:0.7rem">{{ m.last_run_status }}</span>
+                                    <span style="color:var(--text-muted);margin-left:4px">{{ formatTime(m.last_run_at) }}</span>
+                                </span>
+                                <span v-else style="color:var(--text-muted)">–</span>
+                            </template>
+                            <template #cell-schedule_time="{ row: m }">
+                                <span v-if="m.schedule_time" style="color:var(--text-secondary);font-size:0.8rem">
+                                    {{ m.schedule_time }} täglich
+                                    <span v-if="!m.schedule_enabled" style="color:var(--text-muted)"> (deaktiviert)</span>
+                                </span>
+                                <span v-else style="color:var(--text-muted)">–</span>
+                            </template>
+                            <template #cell-_actions="{ row: m }">
+                                <div style="display:flex;gap:0.4rem;flex-wrap:wrap">
+                                    <button class="btn btn-primary btn-sm" @click.stop="triggerSingleUpdate(m.machine_id, true)" :disabled="m.status !== 'online'" title="Updates installieren (mit Neustart bei Bedarf)">Updaten</button>
+                                    <button class="btn btn-ghost btn-sm" @click.stop="openUpdateLog(m)" title="Update-Logs ansehen">Log</button>
+                                    <button class="btn btn-ghost btn-sm" @click.stop="openScheduleModal(m)" title="Zeitplan bearbeiten">⏱</button>
+                                </div>
+                            </template>
+                            <template #row-extra="{ row: m }">
+                                <tr v-if="updatesLiveStreams[m.machine_id] && ['sent','running'].includes(updatesLiveStreams[m.machine_id].status)" style="background:var(--bg-secondary)">
+                                    <td colspan="7" style="padding:0.6rem 1rem">
+                                        <div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:0.3rem">Live-Ausgabe:</div>
+                                        <pre style="background:var(--bg-primary);border:1px solid var(--border);border-radius:4px;padding:0.5rem;max-height:160px;overflow:auto;font-size:0.72rem;white-space:pre-wrap;margin:0">{{ updatesLiveStreams[m.machine_id].output || 'Warte auf Ausgabe…' }}</pre>
+                                    </td>
                                 </tr>
-                            </thead>
-                            <tbody>
-                                <template v-for="m in updatesFilteredMachines" :key="m.machine_id">
-                                    <tr>
-                                        <td><input type="checkbox" :value="m.machine_id" v-model="updatesSelected" @click.stop></td>
-                                        <td><span class="status-badge" :class="m.status">{{ m.status }}</span></td>
-                                        <td>
-                                            <strong>{{ m.display_name || m.hostname }}</strong>
-                                            <div style="font-size:0.72rem;color:var(--text-muted)">{{ m.ip_address || '' }}</div>
-                                        </td>
-                                        <td>
-                                            <span v-if="m.updates_available > 0" style="color:var(--warning);font-weight:600">
-                                                {{ m.updates_available }} Update(s)
-                                                <span v-if="m.updates_reboot_required" style="font-size:0.7rem;margin-left:4px;color:var(--danger)">⚠ Neustart</span>
-                                            </span>
-                                            <span v-else-if="updatesLiveStreams[m.machine_id] && ['sent','running'].includes(updatesLiveStreams[m.machine_id].status)" style="color:var(--accent);font-size:0.8rem">
-                                                <span class="pulse-dot"></span> läuft…
-                                            </span>
-                                            <span v-else style="color:var(--success);font-size:0.8rem">Aktuell</span>
-                                        </td>
-                                        <td style="font-size:0.8rem">
-                                            <span v-if="m.last_run_at">
-                                                <span class="status-badge" :class="m.last_run_status === 'completed' ? 'online' : m.last_run_status === 'failed' ? 'offline' : 'warning'" style="font-size:0.7rem">{{ m.last_run_status }}</span>
-                                                <span style="color:var(--text-muted);margin-left:4px">{{ formatTime(m.last_run_at) }}</span>
-                                            </span>
-                                            <span v-else style="color:var(--text-muted)">–</span>
-                                        </td>
-                                        <td style="font-size:0.8rem">
-                                            <span v-if="m.schedule_time" style="color:var(--text-secondary)">
-                                                {{ m.schedule_time }} täglich
-                                                <span v-if="!m.schedule_enabled" style="color:var(--text-muted)"> (deaktiviert)</span>
-                                            </span>
-                                            <span v-else style="color:var(--text-muted)">–</span>
-                                        </td>
-                                        <td>
-                                            <div style="display:flex;gap:0.4rem;flex-wrap:wrap">
-                                                <button class="btn btn-primary btn-sm" @click.stop="triggerSingleUpdate(m.machine_id, true)" :disabled="m.status !== 'online'" title="Updates installieren (mit Neustart bei Bedarf)">Updaten</button>
-                                                <button class="btn btn-ghost btn-sm" @click.stop="openUpdateLog(m)" title="Update-Logs ansehen">Log</button>
-                                                <button class="btn btn-ghost btn-sm" @click.stop="openScheduleModal(m)" title="Zeitplan bearbeiten">⏱</button>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                    <!-- Live output inline (shown while an update is running for this machine) -->
-                                    <tr v-if="updatesLiveStreams[m.machine_id] && ['sent','running'].includes(updatesLiveStreams[m.machine_id].status)" style="background:var(--bg-secondary)">
-                                        <td colspan="7" style="padding:0.6rem 1rem">
-                                            <div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:0.3rem">Live-Ausgabe:</div>
-                                            <pre style="background:var(--bg-primary);border:1px solid var(--border);border-radius:4px;padding:0.5rem;max-height:160px;overflow:auto;font-size:0.72rem;white-space:pre-wrap;margin:0">{{ updatesLiveStreams[m.machine_id].output || 'Warte auf Ausgabe…' }}</pre>
-                                        </td>
-                                    </tr>
-                                </template>
-                            </tbody>
-                        </table>
-                        <p v-else style="padding:1.5rem;text-align:center;color:var(--text-muted)">Keine {{ updatesOsTab === 'windows' ? 'Windows' : 'Linux' }}-Maschinen vorhanden.</p>
+                            </template>
+                        </data-table>
                     </div>
                 </div>
 
@@ -393,6 +393,32 @@
                     </div>
                 </div>
 
+                <!-- Pending Updates Modal -->
+                <div class="confirm-overlay" v-if="updatesPendingModal" @click.self="updatesPendingModal = null">
+                    <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:1.5rem;width:90%;max-width:560px;max-height:80vh;display:flex;flex-direction:column">
+                        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+                            <h3>Ausstehende Updates: {{ updatesPendingModal.display_name || updatesPendingModal.hostname }}</h3>
+                            <button class="btn btn-ghost btn-sm" @click="updatesPendingModal = null">✕</button>
+                        </div>
+                        <div v-if="updatesPendingModal.updates_reboot_required" style="margin-bottom:0.8rem">
+                            <span class="status-badge warning">⚠ Neustart nach Update erforderlich</span>
+                        </div>
+                        <div style="overflow-y:auto;flex:1">
+                            <div v-if="updatesPendingModal.updates_pending && updatesPendingModal.updates_pending.length" style="display:flex;flex-direction:column;gap:0.3rem">
+                                <div v-for="(u, i) in updatesPendingModal.updates_pending" :key="i"
+                                    style="padding:0.4rem 0.6rem;background:var(--bg-secondary);border-radius:4px;font-size:0.84rem;font-family:monospace">
+                                    {{ u }}
+                                </div>
+                            </div>
+                            <p v-else style="color:var(--text-muted)">Keine Update-Details verfügbar.</p>
+                        </div>
+                        <div style="display:flex;justify-content:flex-end;margin-top:1rem;gap:0.5rem">
+                            <button class="btn btn-ghost btn-sm" @click="updatesPendingModal = null">Schließen</button>
+                            <button class="btn btn-primary btn-sm" @click="triggerSingleUpdate(updatesPendingModal.machine_id, true); updatesPendingModal = null" :disabled="updatesPendingModal.status !== 'online'">Jetzt updaten</button>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Command History View -->
                 <div v-if="view === 'command-history'">
                     <div class="page-header">
@@ -400,21 +426,17 @@
                         <button class="btn btn-ghost btn-sm" @click="navigate('machines')">← Zurueck</button>
                     </div>
                     <div class="card">
-                        <table class="machine-table" v-if="commandHistory.length">
-                            <thead><tr><th>Zeitpunkt</th><th>Maschine</th><th>Befehl</th><th>Status</th><th>Ergebnis</th></tr></thead>
-                            <tbody>
-                                <tr v-for="c in commandHistory" :key="c.id">
-                                    <td style="font-size:0.8rem">{{ formatTime(c.created_at) }}</td>
-                                    <td>{{ c.machine_id.slice(0,8) }}</td>
-                                    <td><span class="os-badge">{{ c.command_type }}</span></td>
-                                    <td>
-                                        <span class="status-badge" :class="c.status === 'completed' ? 'online' : c.status === 'failed' ? 'offline' : 'warning'">{{ c.status }}</span>
-                                    </td>
-                                    <td style="font-size:0.8rem;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ c.result || '–' }}</td>
-                                </tr>
-                            </tbody>
-                        </table>
-                        <p v-else style="color:var(--text-muted)">Keine Befehle ausgefuehrt.</p>
+                        <data-table :rows="commandHistory" :columns="commandLogColumns" row-key="id" row-clickable
+                            search-placeholder="Befehle durchsuchen..." empty-text="Keine Befehle ausgefuehrt."
+                            @row-click="openCmdDetail">
+                            <template #cell-command_type="{ row: c }"><span class="os-badge">{{ c.command_type }}</span></template>
+                            <template #cell-status="{ row: c }">
+                                <span class="status-badge" :class="c.status === 'completed' ? 'online' : c.status === 'failed' ? 'offline' : 'warning'">{{ c.status }}</span>
+                            </template>
+                            <template #cell-result="{ row: c }">
+                                <span style="display:inline-block;font-size:0.8rem;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom" :title="c.result || ''">{{ c.result || '–' }}</span>
+                            </template>
+                        </data-table>
                     </div>
                 </div>
 
@@ -425,6 +447,7 @@
                         <div style="display:flex;gap:0.5rem">
                             <button class="btn btn-ghost btn-sm" @click="navigate('machines')">&#8592; Zurueck</button>
                             <button class="btn btn-ghost btn-sm" @click="openEditMachine">Bearbeiten</button>
+                            <button class="btn btn-ghost btn-sm" @click="openUserAdmin(selectedMachine)">Benutzer</button>
                             <button class="btn btn-primary btn-sm" @click="updateAgent" :disabled="selectedMachine.status !== 'online'">Agent aktualisieren</button>
                             <button class="btn btn-warning btn-sm" @click="sendCommand('restart')" :disabled="selectedMachine.status !== 'online'">Neustart</button>
                             <button class="btn btn-danger btn-sm" @click="sendCommand('shutdown')" :disabled="selectedMachine.status !== 'online'">Herunterfahren</button>
@@ -437,7 +460,11 @@
                             <div class="stat-label">Status</div>
                         </div>
                         <div class="stat-card">
-                            <div class="stat-value" style="font-size:1.2rem">{{ selectedMachine.os_type }}</div>
+                            <div class="stat-value" style="font-size:1.2rem;display:flex;align-items:center;justify-content:center;gap:0.4rem">
+                                <svg v-if="selectedMachine.os_type === 'windows'" width="18" height="18" viewBox="0 0 24 24" fill="#3b82f6"><path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801"/></svg>
+                                <svg v-else-if="selectedMachine.os_type === 'linux'" width="18" height="18" viewBox="0 0 24 24" fill="#f59e0b"><path d="M12.504 0c-.155 0-.315.008-.48.021-4.226.333-3.105 4.807-3.17 6.298-.076 1.092-.3 1.953-1.05 3.02-.885 1.051-2.127 2.75-2.716 4.521-.278.832-.41 1.684-.287 2.489.117.779.567 1.563 1.182 2.114.267.235.537.458.816.67.302.221.607.435.917.642.61.407 1.222.786 1.834 1.153 1.247.728 2.495 1.431 3.742 2.134.248.142.497.283.746.425.249.141.497.283.745.424.248.14.496.283.744.424l.049.028c.154.087.308.174.462.262.155.087.31.175.464.262l.06.034c.31.175.618.35.927.524l.463.262a.065.065 0 0 0 .061 0l.463-.262c.309-.174.617-.349.926-.524l.06-.034c.155-.087.31-.175.464-.262.155-.088.309-.175.463-.262l.049-.028c.248-.141.496-.284.744-.424.248-.141.496-.283.745-.424.249-.142.498-.283.746-.425 1.247-.703 2.495-1.406 3.742-2.134.612-.367 1.224-.746 1.834-1.153.31-.207.615-.421.917-.642.279-.212.549-.435.816-.67.615-.551 1.065-1.335 1.182-2.114.123-.805-.009-1.657-.287-2.489-.589-1.771-1.831-3.47-2.716-4.521-.75-1.067-.974-1.928-1.05-3.02-.065-1.491 1.056-5.965-3.17-6.298-.165-.013-.325-.021-.48-.021zm-.982 6.008c.316 0 .604.111.822.296.213.183.349.44.349.725v.018c0 .283-.136.541-.35.724-.217.185-.505.296-.82.296s-.604-.111-.822-.296c-.213-.183-.349-.44-.349-.725v-.018c0-.283.136-.541.35-.724.217-.185.505-.296.82-.296zm1.963 0c.316 0 .604.111.822.296.213.183.349.44.349.725v.018c0 .283-.136.541-.35.724-.217.185-.505.296-.82.296s-.604-.111-.822-.296c-.213-.183-.349-.44-.349-.725v-.018c0-.283.136-.541.35-.724.217-.185.505-.296.82-.296z"/></svg>
+                                {{ selectedMachine.os_type }}
+                            </div>
                             <div class="stat-label">Betriebssystem</div>
                         </div>
                         <div class="stat-card">
@@ -452,71 +479,18 @@
                             <div class="stat-value" style="font-size:1.2rem">{{ machineUptime ? formatUptime(machineUptime) : '–' }}</div>
                             <div class="stat-label">Laufzeit</div>
                         </div>
+                        <div class="stat-card" v-if="machineLatestMetrics">
+                            <div class="stat-value" :style="{color: machineLatestMetrics.cpu_percent > 85 ? 'var(--danger)' : machineLatestMetrics.cpu_percent > 60 ? 'var(--warning)' : 'var(--success)'}">{{ machineLatestMetrics.cpu_percent != null ? machineLatestMetrics.cpu_percent.toFixed(0) + '%' : '–' }}</div>
+                            <div class="stat-label">CPU</div>
+                        </div>
+                        <div class="stat-card" v-if="machineLatestMetrics">
+                            <div class="stat-value" :style="{color: machineLatestMetrics.memory_percent > 90 ? 'var(--danger)' : machineLatestMetrics.memory_percent > 75 ? 'var(--warning)' : 'var(--success)'}">{{ machineLatestMetrics.memory_percent != null ? machineLatestMetrics.memory_percent.toFixed(0) + '%' : '–' }}</div>
+                            <div class="stat-label">Speicher</div>
+                        </div>
                         <div class="stat-card" v-if="selectedMachine.is_domain_controller">
                             <div class="stat-value" style="font-size:0.95rem;color:#a78bfa">DC</div>
                             <div class="stat-label">{{ selectedMachine.domain_name || 'Domäne' }}</div>
                         </div>
-                    </div>
-
-                    <div class="card">
-                        <div class="card-header"><h3>Laufwerke</h3></div>
-                        <div v-if="machineDisks.length">
-                            <div v-for="d in machineDisks" :key="d.id" style="margin-bottom:0.8rem">
-                                <div style="display:flex;justify-content:space-between;margin-bottom:0.3rem">
-                                    <span>{{ d.drive_letter || d.mount_point }}</span>
-                                    <span>{{ formatBytes(d.free_bytes) }} frei / {{ formatBytes(d.total_bytes) }}</span>
-                                </div>
-                                <div style="background:var(--bg-primary);border-radius:4px;height:8px;overflow:hidden">
-                                    <div :style="{width: diskPercent(d) + '%', background: diskPercent(d) > 90 ? 'var(--danger)' : diskPercent(d) > 75 ? 'var(--warning)' : 'var(--success)', height: '100%'}"></div>
-                                </div>
-                            </div>
-                        </div>
-                        <p v-else style="color:var(--text-muted)">Keine Laufwerksdaten verfuegbar</p>
-                    </div>
-
-                    <div class="card">
-                        <div class="card-header"><h3>Dienste</h3></div>
-                        <div v-if="machineServices.length" style="max-height:300px;overflow-y:auto">
-                            <table class="machine-table">
-                                <thead><tr><th>Dienst</th><th>Status</th><th>Starttyp</th></tr></thead>
-                                <tbody>
-                                    <tr v-for="s in machineServices" :key="s.id">
-                                        <td>{{ s.display_name || s.service_name }}</td>
-                                        <td><span class="status-badge" :class="s.status === 'running' ? 'online' : 'offline'">{{ s.status }}</span></td>
-                                        <td>{{ s.start_type }}</td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-                        <p v-else style="color:var(--text-muted)">Keine Dienstdaten verfuegbar</p>
-                    </div>
-
-                    <div class="card">
-                        <div class="card-header">
-                            <h3>Firewall</h3>
-                            <div style="display:flex;gap:0.5rem">
-                                <span class="status-badge" :class="machineFirewall.enabled ? 'online' : 'offline'">
-                                    {{ machineFirewall.enabled ? 'Aktiv' : 'Inaktiv' }}
-                                </span>
-                                <button class="btn btn-sm" :class="machineFirewall.enabled ? 'btn-danger' : 'btn-success'" @click="sendCommand(machineFirewall.enabled ? 'disable_firewall' : 'enable_firewall')" :disabled="selectedMachine.status !== 'online'">
-                                    {{ machineFirewall.enabled ? 'Deaktivieren' : 'Aktivieren' }}
-                                </button>
-                            </div>
-                        </div>
-                        <div v-if="machineFirewall.rules && machineFirewall.rules.length" style="max-height:250px;overflow-y:auto">
-                            <table class="machine-table">
-                                <thead><tr><th>Regel</th><th>Richtung</th><th>Aktion</th><th>Port</th></tr></thead>
-                                <tbody>
-                                    <tr v-for="(r, i) in machineFirewall.rules" :key="i">
-                                        <td>{{ r.rule_name || r.name }}</td>
-                                        <td>{{ r.direction }}</td>
-                                        <td><span :style="{color: r.action === 'allow' ? 'var(--success)' : 'var(--danger)'}">{{ r.action }}</span></td>
-                                        <td>{{ r.port || '–' }}</td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-                        <p v-else style="color:var(--text-muted)">Keine Firewall-Regeln vorhanden</p>
                     </div>
 
                     <div class="card">
@@ -541,8 +515,6 @@
                             <p style="color:var(--success);margin-bottom:0.5rem">System ist aktuell</p>
                             <button class="btn btn-ghost btn-sm" @click="triggerUpdates('no-reboot')" :disabled="selectedMachine.status !== 'online'">Trotzdem nach Updates suchen</button>
                         </div>
-
-                        <!-- Live-Verlauf des laufenden Update-Befehls -->
                         <div v-if="liveCommand && liveCommand.machine_id === selectedMachine.machine_id" style="margin-top:1rem;border-top:1px solid var(--border);padding-top:0.8rem">
                             <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.5rem">
                                 <strong style="font-size:0.85rem">Update-Verlauf</strong>
@@ -557,20 +529,30 @@
                     </div>
 
                     <div class="card">
-                        <div class="card-header"><h3>Netzwerkfreigaben</h3></div>
-                        <div v-if="machineShares.length">
-                            <table class="machine-table">
-                                <thead><tr><th>Freigabe</th><th>Pfad</th><th>Beschreibung</th></tr></thead>
-                                <tbody>
-                                    <tr v-for="s in machineShares" :key="s.id">
-                                        <td><strong>{{ s.share_name }}</strong></td>
-                                        <td>{{ s.path }}</td>
-                                        <td>{{ s.description || '–' }}</td>
-                                    </tr>
-                                </tbody>
-                            </table>
+                        <div class="card-header"><h3>Laufwerke</h3></div>
+                        <div v-if="machineDisks.length">
+                            <div v-for="d in machineDisks" :key="d.id" style="margin-bottom:0.8rem">
+                                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.3rem">
+                                    <div style="display:flex;align-items:center;gap:0.5rem">
+                                        <span style="font-weight:500">{{ d.drive_letter || d.mount_point }}</span>
+                                        <button class="btn btn-ghost btn-sm" style="font-size:0.7rem;padding:0.1rem 0.5rem" :disabled="selectedMachine.status !== 'online'" @click="openDiskExplorer(d)">Durchsuchen</button>
+                                    </div>
+                                    <span style="font-size:0.85rem;color:var(--text-secondary)">{{ formatBytes(d.free_bytes) }} frei / {{ formatBytes(d.total_bytes) }}</span>
+                                </div>
+                                <div style="background:var(--bg-primary);border-radius:4px;height:8px;overflow:hidden">
+                                    <div :style="{width: diskPercent(d) + '%', background: diskPercent(d) > 90 ? 'var(--danger)' : diskPercent(d) > 75 ? 'var(--warning)' : 'var(--success)', height: '100%'}"></div>
+                                </div>
+                            </div>
                         </div>
-                        <p v-else style="color:var(--text-muted)">Keine Freigaben gefunden</p>
+                        <p v-else style="color:var(--text-muted)">Keine Laufwerksdaten verfuegbar</p>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header"><h3>Netzwerkfreigaben</h3></div>
+                        <data-table :rows="machineShares" :columns="sharesColumns" row-key="id"
+                            search-placeholder="Freigaben durchsuchen..." empty-text="Keine Freigaben gefunden">
+                            <template #cell-share_name="{ row: s }"><strong>{{ s.share_name }}</strong></template>
+                        </data-table>
                     </div>
 
                     <div class="card">
@@ -587,6 +569,46 @@
                             <canvas ref="telemetryCanvas"></canvas>
                         </div>
                         <p v-else style="color:var(--text-muted)">Keine Verlaufsdaten verfuegbar</p>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header" style="cursor:pointer" @click="detailServicesClosed = !detailServicesClosed">
+                            <h3>Dienste <span style="font-size:0.8rem;color:var(--text-muted)">({{ machineServices.length }})</span></h3>
+                            <span style="color:var(--text-muted);font-size:0.9rem">{{ detailServicesClosed ? '▶' : '▼' }}</span>
+                        </div>
+                        <div v-show="!detailServicesClosed">
+                            <data-table :rows="machineServices" :columns="servicesColumns" row-key="id"
+                                search-placeholder="Dienste durchsuchen..." empty-text="Keine Dienstdaten verfuegbar"
+                                table-style="max-height:none">
+                                <template #cell-status="{ row: s }">
+                                    <span class="status-badge" :class="s.status === 'running' ? 'online' : 'offline'">{{ s.status }}</span>
+                                </template>
+                            </data-table>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header" style="cursor:pointer" @click="detailFirewallClosed = !detailFirewallClosed">
+                            <h3>Firewall</h3>
+                            <div style="display:flex;gap:0.5rem;align-items:center">
+                                <span class="status-badge" :class="machineFirewall.enabled ? 'online' : 'offline'">
+                                    {{ machineFirewall.enabled ? 'Aktiv' : 'Inaktiv' }}
+                                </span>
+                                <button class="btn btn-sm" :class="machineFirewall.enabled ? 'btn-danger' : 'btn-success'" @click.stop="sendCommand(machineFirewall.enabled ? 'disable_firewall' : 'enable_firewall')" :disabled="selectedMachine.status !== 'online'">
+                                    {{ machineFirewall.enabled ? 'Deaktivieren' : 'Aktivieren' }}
+                                </button>
+                                <span style="color:var(--text-muted);font-size:0.9rem;margin-left:0.3rem">{{ detailFirewallClosed ? '▶' : '▼' }}</span>
+                            </div>
+                        </div>
+                        <div v-show="!detailFirewallClosed">
+                            <data-table :rows="machineFirewall.rules || []" :columns="firewallColumns" row-key="rule_name"
+                                search-placeholder="Regeln durchsuchen..." empty-text="Keine Firewall-Regeln vorhanden">
+                                <template #cell-name="{ row: r }">{{ r.rule_name || r.name }}</template>
+                                <template #cell-action="{ row: r }">
+                                    <span :style="{color: r.action === 'allow' ? 'var(--success)' : 'var(--danger)'}">{{ r.action }}</span>
+                                </template>
+                            </data-table>
+                        </div>
                     </div>
                 </div>
 
@@ -609,26 +631,81 @@
                                 <button class="btn btn-danger btn-sm" @click="deleteVeeamInstance(inst.id)">Entfernen</button>
                             </div>
                         </div>
-                        <table class="machine-table" v-if="inst.jobs && inst.jobs.length">
-                            <thead><tr><th>Job</th><th>Typ</th><th>Letzter Status</th><th>Letzte Ausfuehrung</th><th>Naechster Lauf</th></tr></thead>
-                            <tbody>
-                                <tr v-for="j in inst.jobs" :key="j.id">
-                                    <td><strong>{{ j.job_name }}</strong></td>
-                                    <td><span class="os-badge">{{ j.job_type || '–' }}</span></td>
-                                    <td>
-                                        <span class="status-badge" :class="j.last_run_status === 'Success' ? 'online' : j.last_run_status === 'Failed' ? 'offline' : 'warning'">
-                                            {{ j.last_run_status || 'Unbekannt' }}
-                                        </span>
-                                    </td>
-                                    <td>{{ formatTime(j.last_run_time) }}</td>
-                                    <td>{{ formatTime(j.next_run_time) }}</td>
-                                </tr>
-                            </tbody>
-                        </table>
-                        <p v-else style="color:var(--text-muted)">Keine Jobs gefunden oder noch nicht gepollt.</p>
+                        <data-table :rows="inst.jobs || []" :columns="veeamJobColumns" row-key="id"
+                            search-placeholder="Jobs durchsuchen..." empty-text="Keine Jobs gefunden oder noch nicht gepollt.">
+                            <template #cell-job_name="{ row: j }"><strong>{{ j.job_name }}</strong></template>
+                            <template #cell-job_type="{ row: j }"><span class="os-badge">{{ j.job_type || '–' }}</span></template>
+                            <template #cell-last_run_status="{ row: j }">
+                                <span class="status-badge" :class="j.last_run_status === 'Success' ? 'online' : j.last_run_status === 'Failed' ? 'offline' : 'warning'">
+                                    {{ j.last_run_status || 'Unbekannt' }}
+                                </span>
+                            </template>
+                        </data-table>
                     </div>
 
                     <p v-if="!veeamInstances.length" style="color:var(--text-muted)">Keine Veeam-Instanzen konfiguriert. Klicke auf "+ Veeam Instanz" um eine hinzuzufuegen.</p>
+                </div>
+
+                <!-- Logs View -->
+                <div v-if="view === 'logs'">
+                    <div class="page-header">
+                        <h1>Logs</h1>
+                    </div>
+
+                    <!-- Log source selector -->
+                    <div style="display:flex;gap:0.5rem;margin-bottom:1rem;flex-wrap:wrap">
+                        <button class="btn btn-sm" :class="logTab === 'command' ? 'btn-primary' : 'btn-ghost'" @click="setLogTab('command')">Befehls-Log</button>
+                        <button class="btn btn-sm" :class="logTab === 'agent' ? 'btn-primary' : 'btn-ghost'" @click="setLogTab('agent')">Agenten-Log</button>
+                        <button class="btn btn-sm" :class="logTab === 'container' ? 'btn-primary' : 'btn-ghost'" @click="setLogTab('container')">Container-Log</button>
+                    </div>
+
+                    <!-- Command log -->
+                    <div v-if="logTab === 'command'">
+                        <div class="card">
+                            <data-table :rows="commandHistory" :columns="commandLogColumns" row-key="id" row-clickable
+                                search-placeholder="Befehle durchsuchen (Maschine, Ergebnis...)" empty-text="Keine Befehle gefunden."
+                                @row-click="openCmdDetail">
+                                <template #toolbar>
+                                    <button class="btn btn-ghost btn-sm" @click="loadCommandHistory">Aktualisieren</button>
+                                </template>
+                                <template #cell-command_type="{ row: c }"><span class="os-badge">{{ c.command_type }}</span></template>
+                                <template #cell-status="{ row: c }">
+                                    <span class="status-badge" :class="c.status === 'completed' ? 'online' : c.status === 'failed' ? 'offline' : 'warning'">{{ c.status }}</span>
+                                </template>
+                                <template #cell-result="{ row: c }">
+                                    <span style="display:inline-block;font-size:0.8rem;max-width:380px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom" :title="c.result || ''">{{ c.result || '–' }}</span>
+                                </template>
+                            </data-table>
+                        </div>
+                    </div>
+
+                    <!-- Agent / Container console log -->
+                    <div v-else>
+                        <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;margin-bottom:0.8rem">
+                            <select v-model="logFilter" style="background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);border-radius:var(--radius);padding:0.35rem 0.6rem;font-size:0.82rem">
+                                <option value="">Alle Level</option>
+                                <option value="info">Nur Info</option>
+                                <option value="warn">Nur Warnungen</option>
+                                <option value="error">Nur Fehler</option>
+                            </select>
+                            <input v-model="logSearch" placeholder="Suchen..." style="background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);border-radius:var(--radius);padding:0.35rem 0.7rem;font-size:0.82rem;width:180px">
+                            <label style="display:flex;align-items:center;gap:0.35rem;font-size:0.82rem;cursor:pointer;color:var(--text-secondary)">
+                                <input type="checkbox" v-model="logAutoScroll" @change="logAutoScroll && scrollLogsToBottom()"> Auto-Scroll
+                            </label>
+                            <button class="btn btn-ghost btn-sm" @click="logEntries = []">Leeren</button>
+                            <span style="font-size:0.78rem;color:var(--text-muted)">{{ filteredLogEntries.length }} Eintraege</span>
+                        </div>
+                        <div class="card" style="padding:0;overflow:hidden">
+                            <div ref="logContainer" style="background:#0d1117;height:600px;overflow-y:auto;overflow-x:hidden;font-family:monospace;font-size:0.775rem;padding:0.6rem 0.8rem;line-height:1.55">
+                                <div v-for="(e, i) in filteredLogEntries" :key="i" style="display:flex;gap:0.6rem;padding:0.5px 0;min-width:0" :style="{color: logLineColor(e)}">
+                                    <span style="color:#475569;flex-shrink:0;user-select:none">{{ formatLogTime(e.ts) }}</span>
+                                    <span style="flex-shrink:0;width:2.2rem;text-align:right;font-weight:600;user-select:none" :style="{color: e.level==='error'?'#f87171':e.level==='warn'?'#fbbf24':'#6b7280'}">{{ e.level === 'error' ? 'ERR' : e.level === 'warn' ? 'WRN' : 'INF' }}</span>
+                                    <span style="flex:1;min-width:0;word-break:break-all;overflow-wrap:anywhere">{{ e.text }}</span>
+                                </div>
+                                <div v-if="!filteredLogEntries.length" style="color:#475569;padding:1rem 0;text-align:center">Keine Log-Eintraege vorhanden.</div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Alerts View -->
@@ -740,72 +817,124 @@
                     </div>
                 </div>
 
-                <!-- AD-Verwaltung View -->
+                <!-- Benutzerverwaltung View -->
                 <div v-if="view === 'ad-admin'">
                     <div class="page-header">
-                        <h1>AD-Verwaltung</h1>
-                        <button class="btn btn-ghost btn-sm" @click="showADTemplatesModal = true">Vorlagen</button>
+                        <h1>Benutzerverwaltung</h1>
+                        <button v-if="adAdminTab === 'ad'" class="btn btn-ghost btn-sm" @click="showADTemplatesModal = true">Vorlagen</button>
                     </div>
 
-                    <div class="card" style="margin-bottom:1rem">
-                        <div class="card-header"><h3>Domänen Controller</h3></div>
-                        <div v-if="adDomainControllers.length" style="display:flex;gap:0.8rem;align-items:center;flex-wrap:wrap">
-                            <select v-model="adSelectedDC" @change="adUsers = []; adGroups = []" style="background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);border-radius:var(--radius);padding:0.45rem 0.7rem;font-size:0.9rem;min-width:260px">
-                                <option value="">-- DC auswählen --</option>
-                                <option v-for="dc in adDomainControllers" :key="dc.machine_id" :value="dc.machine_id">
-                                    {{ dc.display_name || dc.hostname }}{{ dc.domain_name ? ' (' + dc.domain_name + ')' : '' }}{{ dc.status !== 'online' ? ' [Offline]' : '' }}
-                                </option>
-                            </select>
-                            <button class="btn btn-primary btn-sm" @click="loadADUsers" :disabled="!adSelectedDC || adUsersLoading">{{ adUsersLoading ? 'Laden...' : 'Benutzer laden' }}</button>
-                            <button class="btn btn-ghost btn-sm" @click="loadADGroups" :disabled="!adSelectedDC">Gruppen laden</button>
-                            <span v-if="adGroups.length" style="font-size:0.8rem;color:var(--text-muted)">{{ adGroups.length }} Gruppen geladen</span>
+                    <!-- Tab bar -->
+                    <div style="display:flex;gap:0.3rem;margin-bottom:1rem">
+                        <button class="btn btn-sm" :class="adAdminTab === 'ad' ? 'btn-primary' : 'btn-ghost'" @click="adAdminTab = 'ad'">Active Directory</button>
+                        <button class="btn btn-sm" :class="adAdminTab === 'local' ? 'btn-primary' : 'btn-ghost'" @click="adAdminTab = 'local'">Lokale Benutzer</button>
+                    </div>
+
+                    <!-- ===== ACTIVE DIRECTORY TAB ===== -->
+                    <div v-if="adAdminTab === 'ad'">
+                        <div class="card" style="margin-bottom:1rem">
+                            <div class="card-header"><h3>Domänen Controller</h3></div>
+                            <div v-if="adDomainControllers.length" style="display:flex;gap:0.8rem;align-items:center;flex-wrap:wrap">
+                                <select v-model="adSelectedDC" @change="adUsers = []; adGroups = []; adOUs = []; adSelectedOU = null" style="background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);border-radius:var(--radius);padding:0.45rem 0.7rem;font-size:0.9rem;min-width:260px">
+                                    <option value="">-- DC auswählen --</option>
+                                    <option v-for="dc in adDomainControllers" :key="dc.machine_id" :value="dc.machine_id">{{ dc.display_name || dc.hostname }}{{ dc.domain_name ? ' (' + dc.domain_name + ')' : '' }}{{ dc.status !== 'online' ? ' [Offline]' : '' }}</option>
+                                </select>
+                                <button class="btn btn-primary btn-sm" @click="loadADUsers(); loadADOUs()" :disabled="!adSelectedDC || adUsersLoading">{{ adUsersLoading ? 'Laden...' : 'Benutzer laden' }}</button>
+                                <button class="btn btn-ghost btn-sm" @click="loadADGroups" :disabled="!adSelectedDC">Gruppen laden</button>
+                                <span v-if="adGroups.length" style="font-size:0.8rem;color:var(--text-muted)">{{ adGroups.length }} Gruppen</span>
+                            </div>
+                            <p v-else style="color:var(--text-muted)">Kein DC erkannt. Sobald ein Agent auf einem DC läuft und Telemetrie sendet, erscheint er hier.</p>
+                            <div v-if="adUsersOutput" style="margin-top:0.6rem;font-size:0.78rem;color:var(--text-muted);font-family:monospace;background:var(--bg-primary);padding:0.4rem;border-radius:4px">{{ adUsersOutput }}</div>
                         </div>
-                        <p v-else style="color:var(--text-muted)">Kein Domänen Controller erkannt. Sobald ein Agent auf einem DC läuft und Telemetrie sendet, erscheint er hier automatisch.</p>
-                        <div v-if="adUsersOutput" style="margin-top:0.8rem;font-size:0.78rem;color:var(--text-muted);font-family:monospace;background:var(--bg-primary);padding:0.4rem 0.6rem;border-radius:4px">{{ adUsersOutput }}</div>
-                    </div>
 
-                    <div class="card" v-if="adSelectedDC">
-                        <div class="card-header">
-                            <h3>Benutzer <span v-if="adUsers.length" style="color:var(--text-muted);font-size:0.8rem;font-weight:normal">({{ adFilteredUsers.length }}{{ adUsers.length !== adFilteredUsers.length ? ' von ' + adUsers.length : '' }})</span></h3>
-                            <div style="display:flex;gap:0.5rem;align-items:center">
-                                <input v-model="adUserSearch" placeholder="Suchen..." style="background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);border-radius:var(--radius);padding:0.35rem 0.7rem;font-size:0.85rem;width:200px">
-                                <button class="btn btn-primary btn-sm" @click="openCreateADUser">+ Benutzer erstellen</button>
+                        <div v-if="adSelectedDC" :style="{'display':'grid','grid-template-columns': ouTreeFlat.length ? '210px 1fr' : '1fr','gap':'1rem'}">
+                            <!-- OU Tree -->
+                            <div v-if="ouTreeFlat.length" class="card" style="padding:0;align-self:start;max-height:70vh;overflow-y:auto">
+                                <div style="padding:0.5rem 0.8rem;border-bottom:1px solid var(--border);font-size:0.75rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em">OU-Baum</div>
+                                <div style="padding:0.45rem 0.8rem;cursor:pointer;font-size:0.83rem;display:flex;align-items:center;gap:0.4rem" :style="{background: !adSelectedOU ? 'rgba(59,130,246,0.1)' : 'transparent'}" @click="adSelectedOU = null">
+                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/></svg>
+                                    <span>Alle Benutzer</span>
+                                    <span style="margin-left:auto;color:var(--text-muted);font-size:0.75rem">{{ adUsers.length }}</span>
+                                </div>
+                                <div v-for="ou in ouTreeFlat" :key="ou.distinguished_name"
+                                     :style="{paddingLeft: (0.8 + ou.level * 1.1) + 'rem', background: adSelectedOU === ou.distinguished_name ? 'rgba(59,130,246,0.1)' : 'transparent'}"
+                                     style="padding-top:0.4rem;padding-bottom:0.4rem;padding-right:0.6rem;cursor:pointer;font-size:0.83rem;display:flex;align-items:center;gap:0.4rem;border-top:1px solid var(--border)"
+                                     @click="adSelectedOU = ou.distinguished_name">
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
+                                    <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ ou.name }}</span>
+                                </div>
+                            </div>
+
+                            <!-- Users -->
+                            <div class="card">
+                                <div class="card-header">
+                                    <h3>
+                                        Benutzer
+                                        <span v-if="adSelectedOU" style="color:var(--accent);font-size:0.75rem;font-weight:normal;margin-left:0.4rem">{{ adSelectedOU.split(',')[0].replace('OU=','') }}</span>
+                                        <span style="color:var(--text-muted);font-size:0.8rem;font-weight:normal;margin-left:0.3rem">({{ adUsersForOU.length }})</span>
+                                    </h3>
+                                    <div style="display:flex;gap:0.5rem;align-items:center">
+                                        <input v-model="adUserSearch" placeholder="Suchen..." style="background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);border-radius:var(--radius);padding:0.35rem 0.7rem;font-size:0.85rem;width:180px">
+                                        <button class="btn btn-primary btn-sm" @click="openCreateADUser">+ Erstellen</button>
+                                    </div>
+                                </div>
+                                <div v-if="adUsersLoading" style="padding:2rem;text-align:center;color:var(--text-muted)">Benutzerliste wird geladen...</div>
+                                <div v-else style="overflow-x:auto">
+                                    <data-table :rows="adUsersForOU" :columns="adUserColumns" row-key="sam_account_name" row-clickable :search="false"
+                                        :empty-text="adUsers.length ? 'Keine Benutzer in dieser OU.' : 'Noch keine Benutzer geladen.'"
+                                        @row-click="openEditADUser">
+                                        <template #cell-sam_account_name="{ row: u }"><strong>{{ u.sam_account_name }}</strong></template>
+                                        <template #cell-status="{ row: u }"><span class="status-badge" :class="u.enabled ? 'online' : 'offline'">{{ u.enabled ? 'Aktiv' : 'Deakt.' }}</span></template>
+                                        <template #cell-_actions="{ row: u }">
+                                            <button class="btn btn-ghost btn-sm" @click.stop="openDuplicateADUser(u)">Dupl.</button>
+                                            <button class="btn btn-ghost btn-sm" @click.stop="openMoveUser(u)" title="In OU verschieben" :disabled="!ouTreeFlat.length">&#8594;OU</button>
+                                            <button class="btn btn-danger btn-sm" @click.stop="confirmDeleteADUser(u)">✕</button>
+                                        </template>
+                                    </data-table>
+                                </div>
                             </div>
                         </div>
-                        <div v-if="adUsersLoading" style="padding:2rem;text-align:center;color:var(--text-muted)">Benutzerliste wird geladen...</div>
-                        <div v-else-if="adFilteredUsers.length">
-                            <table class="machine-table">
-                                <thead>
-                                    <tr>
-                                        <th>Benutzername</th>
-                                        <th>Name</th>
-                                        <th>E-Mail</th>
-                                        <th>Abteilung</th>
-                                        <th>Titel</th>
-                                        <th>Status</th>
-                                        <th>Aktionen</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <tr v-for="u in adFilteredUsers" :key="u.sam_account_name">
-                                        <td><strong>{{ u.sam_account_name }}</strong></td>
-                                        <td>{{ u.display_name || (u.given_name + ' ' + u.surname) }}</td>
-                                        <td>{{ u.email || '–' }}</td>
-                                        <td>{{ u.department || '–' }}</td>
-                                        <td>{{ u.title || '–' }}</td>
-                                        <td><span class="status-badge" :class="u.enabled ? 'online' : 'offline'">{{ u.enabled ? 'Aktiv' : 'Deaktiviert' }}</span></td>
-                                        <td>
-                                            <button class="btn btn-ghost btn-sm" @click="openEditADUser(u)">Bearb.</button>
-                                            <button class="btn btn-ghost btn-sm" @click="openDuplicateADUser(u)" title="Duplizieren">Dupl.</button>
-                                            <button class="btn btn-danger btn-sm" @click="confirmDeleteADUser(u)">✕</button>
-                                        </td>
-                                    </tr>
-                                </tbody>
-                            </table>
+                    </div>
+
+                    <!-- ===== LOKALE BENUTZER TAB ===== -->
+                    <div v-if="adAdminTab === 'local'">
+                        <div class="card" style="margin-bottom:1rem">
+                            <div class="card-header"><h3>Maschine auswählen</h3></div>
+                            <div style="display:flex;gap:0.8rem;align-items:center;flex-wrap:wrap">
+                                <select v-model="localMachineId" @change="localUsers = []; localGroups = []" style="background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);border-radius:var(--radius);padding:0.45rem 0.7rem;font-size:0.9rem;min-width:260px">
+                                    <option value="">-- Maschine auswählen --</option>
+                                    <option v-for="m in machines.filter(x => x.status === 'online')" :key="m.machine_id" :value="m.machine_id">{{ m.display_name || m.hostname }} ({{ m.os_type }})</option>
+                                </select>
+                                <button class="btn btn-primary btn-sm" @click="loadLocalUsers(); loadLocalGroups()" :disabled="!localMachineId || localUsersLoading">{{ localUsersLoading ? 'Laden...' : 'Benutzer laden' }}</button>
+                            </div>
                         </div>
-                        <p v-else style="padding:1rem;color:var(--text-muted)">{{ adUsers.length ? 'Keine Benutzer gefunden.' : 'Noch keine Benutzer geladen. Klicke auf "Benutzer laden".' }}</p>
+
+                        <div class="card" v-if="localMachineId">
+                            <div class="card-header">
+                                <h3>Lokale Benutzer <span v-if="localUsers.length" style="color:var(--text-muted);font-size:0.8rem;font-weight:normal">({{ localFilteredUsers.length }})</span></h3>
+                                <div style="display:flex;gap:0.5rem;align-items:center">
+                                    <input v-model="localUserSearch" placeholder="Suchen..." style="background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);border-radius:var(--radius);padding:0.35rem 0.7rem;font-size:0.85rem;width:180px">
+                                    <button class="btn btn-primary btn-sm" @click="openCreateLocalUser">+ Erstellen</button>
+                                </div>
+                            </div>
+                            <div v-if="localUsersLoading" style="padding:2rem;text-align:center;color:var(--text-muted)">Benutzerliste wird geladen...</div>
+                            <div v-else style="overflow-x:auto">
+                                <data-table :rows="localFilteredUsers" :columns="localUserColumns" row-key="name" row-clickable :search="false"
+                                    :empty-text="localUsers.length ? 'Keine Benutzer gefunden.' : 'Klicke auf &quot;Benutzer laden&quot;.'"
+                                    @row-click="openEditLocalUser">
+                                    <template #cell-name="{ row: u }"><strong>{{ u.name }}</strong></template>
+                                    <template #cell-description="{ row: u }"><span style="color:var(--text-muted);font-size:0.82rem">{{ u.description || '–' }}</span></template>
+                                    <template #cell-status="{ row: u }"><span class="status-badge" :class="u.enabled ? 'online' : 'offline'">{{ u.enabled ? 'Aktiv' : 'Deakt.' }}</span></template>
+                                    <template #cell-_actions="{ row: u }">
+                                        <button class="btn btn-ghost btn-sm" @click.stop="openDuplicateLocalUser(u)">Dupl.</button>
+                                        <button class="btn btn-danger btn-sm" @click.stop="confirmDeleteLocalUser(u)">✕</button>
+                                    </template>
+                                </data-table>
+                            </div>
+                        </div>
                     </div>
                 </div>
+
             </main>
         </div>
 
@@ -897,10 +1026,46 @@
                 </div>
             </div>
         </div>
+        <!-- Command Log Detail Modal -->
+        <div class="modal-overlay" v-if="cmdLogDetail" @click.self="cmdLogDetail = null">
+            <div class="modal" style="max-width:760px">
+                <h2>Befehlsdetails</h2>
+                <div style="display:grid;grid-template-columns:auto 1fr;gap:0.4rem 1rem;font-size:0.85rem;margin-bottom:1rem">
+                    <span style="color:var(--text-muted)">Befehl</span><span><span class="os-badge">{{ cmdLogDetail.command_type }}</span></span>
+                    <span style="color:var(--text-muted)">Maschine</span><span>{{ cmdLogDetail.display_name || cmdLogDetail.hostname || cmdLogDetail.machine_id }}</span>
+                    <span style="color:var(--text-muted)">Status</span><span><span class="status-badge" :class="cmdLogDetail.status === 'completed' ? 'online' : cmdLogDetail.status === 'failed' ? 'offline' : 'warning'">{{ cmdLogDetail.status }}</span></span>
+                    <span style="color:var(--text-muted)">Gestartet</span><span>{{ formatTime(cmdLogDetail.created_at) }}</span>
+                    <span style="color:var(--text-muted)">Abgeschlossen</span><span>{{ cmdLogDetail.completed_at ? formatTime(cmdLogDetail.completed_at) : '–' }}</span>
+                    <span v-if="cmdLogDetail.issued_by" style="color:var(--text-muted)">Ausgefuehrt von</span><span v-if="cmdLogDetail.issued_by">{{ cmdLogDetail.issued_by }}</span>
+                </div>
+
+                <div v-if="cmdLogDetail.parameters && cmdLogDetail.parameters !== '{}'" style="margin-bottom:1rem">
+                    <label style="font-size:0.8rem;color:var(--text-muted)">Parameter</label>
+                    <pre style="background:#0d1117;color:#cbd5e1;border:1px solid var(--border);border-radius:var(--radius);padding:0.6rem 0.8rem;font-size:0.78rem;max-height:160px;overflow:auto;white-space:pre-wrap;word-break:break-word;margin:0.3rem 0 0">{{ formatCmdParams(cmdLogDetail.parameters) }}</pre>
+                </div>
+
+                <div>
+                    <div style="display:flex;justify-content:space-between;align-items:center">
+                        <label style="font-size:0.8rem;color:var(--text-muted)">Ergebnis</label>
+                        <button class="btn btn-ghost btn-sm" @click="copyText(cmdLogDetail.result || '')">Kopieren</button>
+                    </div>
+                    <pre style="background:#0d1117;color:#cbd5e1;border:1px solid var(--border);border-radius:var(--radius);padding:0.6rem 0.8rem;font-size:0.78rem;max-height:340px;overflow:auto;white-space:pre-wrap;word-break:break-word;margin:0.3rem 0 0">{{ cmdLogDetail.result || '(kein Ergebnis)' }}</pre>
+                </div>
+
+                <div class="modal-actions">
+                    <button class="btn btn-ghost" @click="cmdLogDetail = null">Schliessen</button>
+                </div>
+            </div>
+        </div>
         <!-- Deploy Modal -->
         <div class="modal-overlay" v-if="showDeployModal" @click.self="showDeployModal = false">
             <div class="modal" style="max-width:650px">
                 <h2>Remote Agent Deploy</h2>
+
+                <div style="background:rgba(251,191,36,0.08);border:1px solid rgba(251,191,36,0.3);border-radius:var(--radius);padding:0.5rem 0.8rem;font-size:0.8rem;color:#fde68a;margin-bottom:1rem">
+                    <strong>Voraussetzung:</strong> WinRM muss auf den Zielrechnern aktiv sein.<br>
+                    Als Admin auf dem Ziel ausfuehren: <code style="background:rgba(0,0,0,0.3);padding:1px 4px;border-radius:3px">Enable-PSRemoting -Force</code>
+                </div>
 
                 <!-- Step 1: Select relay and scan -->
                 <div class="form-group">
@@ -917,30 +1082,26 @@
                 </div>
 
                 <!-- Step 2: Scan results with checkboxes -->
-                <div v-if="scanDone && scanResults.length" class="card" style="max-height:250px;overflow-y:auto;margin-bottom:1rem;padding:0.8rem">
-                    <table class="machine-table" style="margin:0">
-                        <thead><tr><th><input type="checkbox" @change="toggleAllScan" :checked="deployTargets.length === scanResults.length"></th><th>IP</th><th>Hostname</th><th>OS</th><th>Kategorie</th></tr></thead>
-                        <tbody>
-                            <tr v-for="h in scanResults" :key="h.ip">
-                                <td><input type="checkbox" :value="h.ip" v-model="deployTargets"></td>
-                                <td>{{ h.ip }}</td>
-                                <td>{{ h.hostname || '–' }}</td>
-                                <td>
-                                    <select v-model="h.os_guess" style="background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);border-radius:4px;padding:0.2rem;font-size:0.8rem">
-                                        <option value="windows">Windows</option>
-                                        <option value="linux">Linux</option>
-                                        <option value="unknown">Unbekannt</option>
-                                    </select>
-                                </td>
-                                <td>
-                                    <select v-model="h.category" style="background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);border-radius:4px;padding:0.2rem;font-size:0.8rem">
-                                        <option value="server">Server</option>
-                                        <option value="client">Client</option>
-                                    </select>
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
+                <div v-if="scanDone && scanResults.length" class="card" style="max-height:280px;overflow-y:auto;margin-bottom:1rem;padding:0.8rem">
+                    <data-table :rows="scanResults" :columns="scanResultColumns" row-key="ip" search-placeholder="Hosts durchsuchen...">
+                        <template #header-_select>
+                            <input type="checkbox" @change="toggleAllScan" :checked="deployTargets.length === scanResults.length && scanResults.length > 0">
+                        </template>
+                        <template #cell-_select="{ row: h }"><input type="checkbox" :value="h.ip" v-model="deployTargets"></template>
+                        <template #cell-os_guess="{ row: h }">
+                            <select v-model="h.os_guess" @click.stop style="background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);border-radius:4px;padding:0.2rem;font-size:0.8rem">
+                                <option value="windows">Windows</option>
+                                <option value="linux">Linux</option>
+                                <option value="unknown">Unbekannt</option>
+                            </select>
+                        </template>
+                        <template #cell-category="{ row: h }">
+                            <select v-model="h.category" @click.stop style="background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);border-radius:4px;padding:0.2rem;font-size:0.8rem">
+                                <option value="server">Server</option>
+                                <option value="client">Client</option>
+                            </select>
+                        </template>
+                    </data-table>
                 </div>
                 <p v-if="scanDone && !scanResults.length" style="color:var(--text-muted);margin-bottom:1rem;font-size:0.85rem">Keine erreichbaren Hosts im Netzwerk gefunden.</p>
 
@@ -979,8 +1140,15 @@
                     </div>
                 </div>
 
-                <div v-if="deployResult" :style="{color: deployResult.success ? 'var(--success)' : 'var(--danger)', marginTop: '0.8rem', fontSize: '0.85rem'}">
-                    {{ deployResult.message }}
+                <div v-if="deployResult" style="margin-top:0.8rem;font-size:0.85rem">
+                    <div :style="{color: deployResult.success ? 'var(--success)' : 'var(--danger)'}">{{ deployResult.message }}</div>
+                    <div v-if="deployResult.details && deployResult.details.length" style="margin-top:0.5rem;max-height:150px;overflow-y:auto;background:var(--bg-primary);border-radius:4px;padding:0.5rem">
+                        <div v-for="r in deployResult.details" :key="r.ip" style="display:flex;gap:0.5rem;padding:0.2rem 0;font-size:0.78rem;font-family:monospace">
+                            <span :style="{color: r.success ? 'var(--success)' : 'var(--danger)'}">{{ r.success ? '✓' : '✗' }}</span>
+                            <span style="color:var(--text-secondary);min-width:110px">{{ r.ip }}</span>
+                            <span style="color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.message }}</span>
+                        </div>
+                    </div>
                 </div>
                 <div class="modal-actions">
                     <button class="btn btn-ghost" @click="showDeployModal = false; scanResults = []; scanDone = false; deployTargets = []">Schliessen</button>
@@ -1054,6 +1222,101 @@
                 <div class="modal-actions">
                     <button class="btn btn-ghost" @click="showAddVeeam = false">Abbrechen</button>
                     <button class="btn btn-primary" @click="addVeeamInstance">Hinzufuegen</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- OU Move Modal -->
+        <div class="modal-overlay" v-if="adShowMoveModal" @click.self="adShowMoveModal = false">
+            <div class="modal" style="max-width:500px">
+                <h2>Benutzer verschieben</h2>
+                <p style="color:var(--text-secondary);font-size:0.85rem;margin-bottom:1rem">{{ adMoveUser && adMoveUser.display_name || adMoveUser && adMoveUser.sam_account_name }}</p>
+                <div class="form-group">
+                    <label>Ziel-OU</label>
+                    <select v-model="adMoveTargetOU" style="background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);border-radius:var(--radius);padding:0.45rem 0.7rem;font-size:0.85rem;width:100%">
+                        <option value="">-- OU auswählen --</option>
+                        <option v-for="ou in ouTreeFlat" :key="ou.distinguished_name" :value="ou.distinguished_name" :style="{paddingLeft: (ou.level * 16) + 'px'}">{{ '&nbsp;'.repeat(ou.level * 2) }}{{ ou.name }}</option>
+                    </select>
+                    <div v-if="adMoveTargetOU" style="font-size:0.72rem;color:var(--text-muted);margin-top:0.3rem;font-family:monospace">{{ adMoveTargetOU }}</div>
+                </div>
+                <div class="modal-actions">
+                    <button class="btn btn-ghost" @click="adShowMoveModal = false">Abbrechen</button>
+                    <button class="btn btn-primary" @click="confirmMoveUser" :disabled="!adMoveTargetOU">Verschieben</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Local User Modal -->
+        <div class="modal-overlay" v-if="showLocalUserModal" @click.self="showLocalUserModal = false">
+            <div class="modal" style="max-width:620px">
+                <h2>{{ localUserFormMode === 'edit' ? 'Benutzer bearbeiten' : 'Lokalen Benutzer erstellen' }}</h2>
+
+                <div style="display:flex;gap:0.3rem;border-bottom:1px solid var(--border);margin-bottom:1rem">
+                    <button class="btn btn-sm" :class="localUserFormTab === 'general' ? 'btn-primary' : 'btn-ghost'" @click="localUserFormTab = 'general'">Allgemein</button>
+                    <button class="btn btn-sm" :class="localUserFormTab === 'options' ? 'btn-primary' : 'btn-ghost'" @click="localUserFormTab = 'options'">Optionen</button>
+                    <button class="btn btn-sm" :class="localUserFormTab === 'groups' ? 'btn-primary' : 'btn-ghost'" @click="localUserFormTab = 'groups'">Gruppen<span v-if="localUserForm.groups.length" style="margin-left:3px;color:var(--accent)">({{ localUserForm.groups.length }})</span></button>
+                </div>
+
+                <div v-if="localUserFormTab === 'general'">
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem">
+                        <div class="form-group">
+                            <label>Benutzername *</label>
+                            <input v-model="localUserForm.name" placeholder="mustermann" :disabled="localUserFormMode === 'edit'" :style="localUserFormMode === 'edit' ? 'opacity:0.6' : ''">
+                        </div>
+                        <div class="form-group">
+                            <label>Anzeigename</label>
+                            <input v-model="localUserForm.full_name" placeholder="Max Mustermann">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>{{ localUserFormMode === 'edit' ? 'Neues Passwort (leer = unverändert)' : 'Passwort *' }}</label>
+                        <input v-model="localUserForm.password" type="password" placeholder="Passwort">
+                    </div>
+                    <div class="form-group">
+                        <label>Beschreibung</label>
+                        <input v-model="localUserForm.description" placeholder="Optionale Beschreibung">
+                    </div>
+                </div>
+
+                <div v-if="localUserFormTab === 'options'" style="display:flex;flex-direction:column;gap:1rem;padding:0.5rem 0">
+                    <label style="display:flex;align-items:center;gap:0.7rem;cursor:pointer">
+                        <input type="checkbox" v-model="localUserForm.enabled">
+                        <div><div>Konto aktiviert</div></div>
+                    </label>
+                    <label style="display:flex;align-items:center;gap:0.7rem;cursor:pointer">
+                        <input type="checkbox" v-model="localUserForm.password_never_expires">
+                        <div><div>Passwort läuft nie ab</div></div>
+                    </label>
+                </div>
+
+                <div v-if="localUserFormTab === 'groups'">
+                    <div v-if="localGroups.length">
+                        <div style="margin-bottom:0.8rem">
+                            <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:0.35rem">Ausgewählt ({{ localUserForm.groups.length }}):</div>
+                            <div style="display:flex;flex-wrap:wrap;gap:0.3rem;min-height:1.8rem">
+                                <span v-for="g in localUserForm.groups" :key="g" style="display:inline-flex;align-items:center;gap:0.25rem;background:var(--accent);color:#fff;padding:0.18rem 0.5rem 0.18rem 0.7rem;border-radius:12px;font-size:0.8rem">
+                                    {{ g }}<span @click="removeFromLocalGroup(g)" style="cursor:pointer;font-size:1rem;line-height:1;opacity:0.75;padding:0 0.1rem">&times;</span>
+                                </span>
+                                <span v-if="!localUserForm.groups.length" style="font-size:0.8rem;color:var(--text-muted);font-style:italic">Keine Gruppen ausgewählt</span>
+                            </div>
+                        </div>
+                        <input v-model="localGroupSearch" placeholder="Gruppe suchen..." style="width:100%;background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);border-radius:var(--radius);padding:0.4rem 0.7rem;font-size:0.85rem;margin-bottom:0.5rem;box-sizing:border-box">
+                        <div style="border:1px solid var(--border);border-radius:var(--radius);max-height:260px;overflow-y:auto">
+                            <label v-for="g in localGroupsFiltered" :key="g.name" style="display:flex;align-items:center;gap:0.6rem;padding:0.45rem 0.7rem;cursor:pointer;border-bottom:1px solid var(--border)" :style="{background: localUserForm.groups.includes(g.name) ? 'rgba(59,130,246,0.08)' : 'transparent'}">
+                                <input type="checkbox" :value="g.name" v-model="localUserForm.groups" style="flex-shrink:0">
+                                <div style="flex:1;min-width:0">
+                                    <div style="font-size:0.85rem;font-weight:500">{{ g.name }}</div>
+                                    <div v-if="g.description" style="font-size:0.72rem;color:var(--text-muted)">{{ g.description }}</div>
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+                    <p v-else style="color:var(--text-muted)">Keine Gruppen geladen.</p>
+                </div>
+
+                <div class="modal-actions">
+                    <button class="btn btn-ghost" @click="showLocalUserModal = false">Abbrechen</button>
+                    <button class="btn btn-primary" @click="saveLocalUser">{{ localUserFormMode === 'edit' ? 'Aktualisieren' : 'Erstellen' }}</button>
                 </div>
             </div>
         </div>
@@ -1167,16 +1430,33 @@
 
                 <div v-if="adUserFormTab === 'groups'">
                     <div v-if="adGroups.length">
-                        <p style="font-size:0.8rem;color:var(--text-muted);margin-bottom:0.6rem">{{ adUserForm.groups.length }} Gruppe(n) ausgewählt</p>
-                        <div style="max-height:320px;overflow-y:auto;display:flex;flex-direction:column;gap:0.15rem">
-                            <label v-for="g in adGroups" :key="g.sam_account_name" style="display:flex;align-items:center;gap:0.6rem;cursor:pointer;padding:0.35rem 0.5rem;border-radius:4px;transition:background 0.1s" :style="{background: adUserForm.groups.includes(g.sam_account_name) ? 'var(--bg-secondary)' : 'transparent'}">
-                                <input type="checkbox" :value="g.sam_account_name" v-model="adUserForm.groups">
-                                <div>
-                                    <div style="font-size:0.85rem">{{ g.name || g.sam_account_name }}</div>
-                                    <div v-if="g.description" style="font-size:0.72rem;color:var(--text-muted)">{{ g.description }}</div>
+                        <!-- Selected groups as removable chips -->
+                        <div style="margin-bottom:0.8rem">
+                            <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:0.35rem">Ausgewählt ({{ adUserForm.groups.length }}):</div>
+                            <div style="display:flex;flex-wrap:wrap;gap:0.3rem;min-height:1.8rem">
+                                <span v-for="g in adUserForm.groups" :key="g" style="display:inline-flex;align-items:center;gap:0.25rem;background:var(--accent);color:#fff;padding:0.18rem 0.5rem 0.18rem 0.7rem;border-radius:12px;font-size:0.8rem">
+                                    {{ g }}
+                                    <span @click="removeFromADGroup(g)" style="cursor:pointer;font-size:1rem;line-height:1;opacity:0.75;padding:0 0.1rem">&times;</span>
+                                </span>
+                                <span v-if="!adUserForm.groups.length" style="font-size:0.8rem;color:var(--text-muted);font-style:italic">Keine Gruppen ausgewählt</span>
+                            </div>
+                        </div>
+                        <!-- Search -->
+                        <input v-model="adGroupSearch" placeholder="Gruppe suchen..." style="width:100%;background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);border-radius:var(--radius);padding:0.4rem 0.7rem;font-size:0.85rem;margin-bottom:0.5rem;box-sizing:border-box">
+                        <!-- Groups list -->
+                        <div style="border:1px solid var(--border);border-radius:var(--radius);max-height:260px;overflow-y:auto">
+                            <label v-for="g in adGroupsFiltered" :key="g.sam_account_name" style="display:flex;align-items:center;gap:0.6rem;padding:0.45rem 0.7rem;cursor:pointer;border-bottom:1px solid var(--border)" :style="{background: adUserForm.groups.includes(g.sam_account_name) ? 'rgba(59,130,246,0.08)' : 'transparent'}">
+                                <input type="checkbox" :value="g.sam_account_name" v-model="adUserForm.groups" style="flex-shrink:0">
+                                <div style="flex:1;min-width:0">
+                                    <div style="font-size:0.85rem;font-weight:500">{{ g.name || g.sam_account_name }}</div>
+                                    <div v-if="g.description" style="font-size:0.72rem;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ g.description }}</div>
                                 </div>
-                                <span style="margin-left:auto;font-size:0.7rem;color:var(--text-muted)">{{ g.scope }}</span>
+                                <div style="display:flex;gap:0.3rem;flex-shrink:0">
+                                    <span style="font-size:0.67rem;padding:1px 5px;border-radius:3px;background:var(--bg-primary);color:var(--text-muted)">{{ g.scope }}</span>
+                                    <span style="font-size:0.67rem;padding:1px 5px;border-radius:3px" :style="{background: g.category === 'Security' ? 'rgba(239,68,68,0.12)' : 'rgba(59,130,246,0.12)', color: g.category === 'Security' ? '#f87171' : '#60a5fa'}">{{ g.category }}</span>
+                                </div>
                             </label>
+                            <div v-if="!adGroupsFiltered.length" style="padding:0.8rem;text-align:center;color:var(--text-muted);font-size:0.85rem">Keine Gruppen gefunden.</div>
                         </div>
                     </div>
                     <p v-else style="color:var(--text-muted)">Keine Gruppen geladen. Bitte "Gruppen laden" im Hauptbereich klicken.</p>
@@ -1243,6 +1523,65 @@
                 <div class="modal-actions">
                     <button class="btn btn-ghost" @click="showBatchInstall = false">Abbrechen</button>
                     <button class="btn btn-primary" @click="executeBatchInstall">Installieren</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Disk Explorer Modal -->
+        <div class="modal-overlay" v-if="showDiskExplorer" @click.self="showDiskExplorer = false" style="z-index:1100">
+            <div class="modal" style="max-width:860px;width:95vw;max-height:88vh;display:flex;flex-direction:column;padding:0;overflow:hidden">
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:1rem 1.25rem;border-bottom:1px solid var(--border)">
+                    <h2 style="margin:0;font-size:1.1rem">Festplatten-Explorer</h2>
+                    <button class="btn btn-ghost btn-sm" @click="showDiskExplorer = false">✕</button>
+                </div>
+
+                <div v-if="diskExplorerLoading" style="text-align:center;padding:3rem;color:var(--text-muted)">
+                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-bottom:0.75rem;opacity:0.4;animation:spin 1.5s linear infinite"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+                    <div style="font-size:0.95rem">Verzeichnis wird analysiert…</div>
+                    <div style="font-size:0.8rem;margin-top:0.4rem;color:var(--text-muted)">Große Datenträger können einige Minuten dauern.</div>
+                </div>
+
+                <div v-if="diskExplorerData && !diskExplorerLoading" style="flex:1;overflow:auto;min-height:0">
+                    <div style="padding:0.6rem 1rem;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:0.75rem;background:var(--bg-secondary)">
+                        <button v-if="diskExplorerHistory.length" class="btn btn-ghost btn-sm" @click="diskExplorerBack()">← Zurück</button>
+                        <span style="font-family:monospace;font-size:0.85rem;color:var(--text-secondary)">{{ diskExplorerData.path }}</span>
+                        <span style="font-size:0.75rem;color:var(--text-muted);margin-left:auto">{{ diskExplorerData.entries.length }} Einträge</span>
+                    </div>
+                    <table class="machine-table">
+                        <thead>
+                            <tr>
+                                <th style="width:32px"></th>
+                                <th>Name</th>
+                                <th style="width:110px;text-align:right">Größe</th>
+                                <th style="width:220px">Anteil</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="entry in diskExplorerData.entries" :key="entry.path"
+                                :style="entry.is_dir ? 'cursor:pointer' : ''"
+                                @click="entry.is_dir && diskExplorerDrillDown(entry)">
+                                <td style="text-align:center;padding-left:0.75rem">
+                                    <svg v-if="entry.is_dir" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--warning)" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                                    <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
+                                </td>
+                                <td>
+                                    <span :style="entry.is_dir ? 'font-weight:500' : 'color:var(--text-secondary)'">{{ entry.name }}</span>
+                                    <span v-if="entry.error" style="font-size:0.72rem;color:var(--danger);margin-left:0.5rem">(Kein Zugriff)</span>
+                                    <span v-if="entry.is_dir" style="font-size:0.72rem;color:var(--text-muted);margin-left:0.4rem">›</span>
+                                </td>
+                                <td style="text-align:right;font-family:monospace;font-size:0.85rem;white-space:nowrap">{{ formatBytes(entry.size) }}</td>
+                                <td style="padding-right:1rem">
+                                    <div style="display:flex;align-items:center;gap:0.5rem">
+                                        <div style="flex:1;height:7px;background:var(--bg-primary);border-radius:4px;overflow:hidden">
+                                            <div :style="{width: diskExplorerBarWidth(entry) + '%', height:'100%', borderRadius:'4px', background: diskExplorerBarColor(entry), transition:'width 0.3s'}"></div>
+                                        </div>
+                                        <span style="font-size:0.72rem;color:var(--text-muted);width:32px;text-align:right">{{ diskExplorerBarWidth(entry) }}%</span>
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <p v-if="!diskExplorerData.entries.length" style="padding:2rem;text-align:center;color:var(--text-muted)">Keine Einträge gefunden.</p>
                 </div>
             </div>
         </div>

@@ -1,4 +1,4 @@
-const { createApp, ref, reactive, onMounted, onUnmounted, computed } = Vue;
+const { createApp, ref, reactive, onMounted, onUnmounted, computed, nextTick } = Vue;
 
 // Wrapper around fetch that redirects to /login.html on 401 (expired session).
 async function apiFetch(url, options) {
@@ -10,7 +10,142 @@ async function apiFetch(url, options) {
     return res;
 }
 
-createApp({
+// Reusable table component: global search, click-to-sort headers and optional
+// per-column value filters. Cells are rendered through scoped slots named
+// "cell-<key>" so each table keeps full control over its markup.
+// Column shape: { key, label, sortable?, searchable?, filter?, value?(row),
+//   sortValue?(row), thStyle?, tdStyle?, tdClass?, stopClick?, placeholder? }
+const DataTable = {
+    name: 'DataTable',
+    props: {
+        rows: { type: Array, default: () => [] },
+        columns: { type: Array, required: true },
+        rowKey: { type: String, default: 'id' },
+        rowClickable: { type: Boolean, default: false },
+        search: { type: Boolean, default: true },
+        searchPlaceholder: { type: String, default: 'Suchen...' },
+        initialSortKey: { type: String, default: '' },
+        initialSortDir: { type: String, default: 'asc' },
+        emptyText: { type: String, default: 'Keine Eintraege vorhanden.' },
+        tableClass: { type: String, default: 'machine-table' },
+        tableStyle: { type: [String, Object], default: '' }
+    },
+    emits: ['row-click'],
+    setup(props, { emit }) {
+        const q = ref('');
+        const sortKey = ref(props.initialSortKey);
+        const sortDir = ref(props.initialSortDir === 'desc' ? 'desc' : 'asc');
+        const colFilters = reactive({});
+
+        const toStr = (v) => (v === null || v === undefined ? '' : String(v));
+        const cellValue = (row, col) => (typeof col.value === 'function' ? col.value(row) : row[col.key]);
+        const sortBase = (row, col) => (typeof col.sortValue === 'function' ? col.sortValue(row) : cellValue(row, col));
+        const isSortable = (col) => col.sortable !== false && !!col.key;
+
+        function toggleSort(col) {
+            if (!isSortable(col)) return;
+            if (sortKey.value === col.key) {
+                sortDir.value = sortDir.value === 'asc' ? 'desc' : 'asc';
+            } else {
+                sortKey.value = col.key;
+                sortDir.value = 'asc';
+            }
+        }
+        function onCellClick(e, col) { if (col.stopClick) e.stopPropagation(); }
+        function onRowClick(row) { if (props.rowClickable) emit('row-click', row); }
+        function rowKeyOf(row, i) {
+            const k = row[props.rowKey];
+            return k !== undefined && k !== null ? k : i;
+        }
+        function display(row, col) {
+            const v = cellValue(row, col);
+            return v === null || v === undefined || v === '' ? (col.placeholder || '') : v;
+        }
+        function distinctValues(col) {
+            const set = new Set();
+            props.rows.forEach(r => {
+                const v = cellValue(r, col);
+                if (v !== null && v !== undefined && v !== '') set.add(String(v));
+            });
+            return [...set].sort((a, b) => a.localeCompare(b, 'de', { numeric: true }));
+        }
+
+        const searchCols = computed(() =>
+            props.columns.filter(c => c.searchable !== false && (c.key || typeof c.value === 'function'))
+        );
+
+        const viewRows = computed(() => {
+            let list = props.rows.slice();
+            const term = q.value.trim().toLowerCase();
+            if (term) {
+                list = list.filter(r => searchCols.value.some(c => toStr(cellValue(r, c)).toLowerCase().includes(term)));
+            }
+            for (const key of Object.keys(colFilters)) {
+                const fv = colFilters[key];
+                if (!fv) continue;
+                const col = props.columns.find(c => c.key === key);
+                if (col) list = list.filter(r => toStr(cellValue(r, col)) === fv);
+            }
+            if (sortKey.value) {
+                const col = props.columns.find(c => c.key === sortKey.value);
+                if (col) {
+                    const dir = sortDir.value === 'desc' ? -1 : 1;
+                    list.sort((a, b) => {
+                        const av = sortBase(a, col), bv = sortBase(b, col);
+                        const ae = av === null || av === undefined || av === '';
+                        const be = bv === null || bv === undefined || bv === '';
+                        if (ae && be) return 0;
+                        if (ae) return 1;
+                        if (be) return -1;
+                        if (typeof av === 'number' && typeof bv === 'number') return (av - bv) * dir;
+                        return toStr(av).localeCompare(toStr(bv), 'de', { numeric: true }) * dir;
+                    });
+                }
+            }
+            return list;
+        });
+
+        return { q, sortKey, sortDir, colFilters, cellValue, isSortable, toggleSort,
+            onCellClick, onRowClick, rowKeyOf, display, distinctValues, viewRows };
+    },
+    template: `
+    <div class="data-table">
+        <div class="dt-toolbar" v-if="search || $slots.toolbar">
+            <input v-if="search" class="dt-search" type="text" v-model="q" :placeholder="searchPlaceholder">
+            <slot name="toolbar"></slot>
+            <span class="dt-count">{{ viewRows.length }}<template v-if="viewRows.length !== rows.length"> / {{ rows.length }}</template></span>
+        </div>
+        <table :class="tableClass" :style="tableStyle">
+            <thead>
+                <tr>
+                    <th v-for="col in columns" :key="col.key || col.label" :style="col.thStyle" :class="[{ 'dt-sortable': isSortable(col) }, col.thClass]">
+                        <span class="dt-th-label" @click="toggleSort(col)">
+                            <slot :name="'header-' + col.key" :col="col">{{ col.label }}</slot>
+                            <span v-if="col.key && sortKey === col.key" class="dt-sort">{{ sortDir === 'asc' ? '▲' : '▼' }}</span>
+                        </span>
+                        <select v-if="col.filter" class="dt-col-filter" v-model="colFilters[col.key]" @click.stop>
+                            <option value="">Alle</option>
+                            <option v-for="v in distinctValues(col)" :key="v" :value="v">{{ v }}</option>
+                        </select>
+                    </th>
+                </tr>
+            </thead>
+            <tbody>
+                <template v-for="(row, i) in viewRows" :key="rowKeyOf(row, i)">
+                    <tr :class="{ 'dt-row-clickable': rowClickable }" @click="onRowClick(row)">
+                        <td v-for="col in columns" :key="col.key || col.label" :style="col.tdStyle" :class="col.tdClass" @click="onCellClick($event, col)">
+                            <slot :name="'cell-' + col.key" :row="row" :value="cellValue(row, col)">{{ display(row, col) }}</slot>
+                        </td>
+                    </tr>
+                    <slot name="row-extra" :row="row"></slot>
+                </template>
+            </tbody>
+        </table>
+        <p v-if="!viewRows.length" class="dt-empty">{{ emptyText }}</p>
+    </div>`
+};
+
+const app = createApp({
     setup() {
         const view = ref('dashboard');
         const username = ref('');
@@ -49,6 +184,7 @@ createApp({
             username: '', password: '', category: 'client'
         });
         const deployResult = ref(null);
+        const deployCommandMap = ref({});
         const showBatchInstall = ref(false);
         const batchInstallPkg = ref('');
         const batchInstallMethod = ref('auto');
@@ -66,6 +202,7 @@ createApp({
         const updatesLogs = ref([]);
         const updatesLogsLoading = ref(false);
         const updatesScheduleMachine = ref(null);
+        const updatesPendingModal = ref(null);
         const updatesScheduleForm = reactive({ time: '', reboot: true });
         const updatesLiveStreams = ref({});
         const tokenMachine = ref({});
@@ -87,6 +224,14 @@ createApp({
             category: 'server',
             display_name: ''
         });
+
+        // Disk Explorer state
+        const diskExplorerMachineId = ref('');
+        const diskExplorerPath = ref('');
+        const diskExplorerLoading = ref(false);
+        const diskExplorerData = ref(null);
+        const diskExplorerHistory = ref([]);
+        const showDiskExplorer = ref(false);
 
         const settingsForm = reactive({
             smtpHost: '',
@@ -116,6 +261,7 @@ createApp({
         }
 
         let ws = null;
+        let popstateHandler = null;
 
         onMounted(async () => {
             const authRes = await fetch('/auth/check');
@@ -126,12 +272,21 @@ createApp({
             }
             username.value = auth.username;
 
+            history.replaceState({ view: 'dashboard', id: null }, '', '#dashboard');
+            popstateHandler = (e) => {
+                if (e.state && e.state.view) navigateInternal(e.state.view, e.state.id);
+                else navigateInternal('dashboard');
+            };
+            window.addEventListener('popstate', popstateHandler);
+
             await loadDashboard();
             connectWebSocket();
         });
 
         onUnmounted(() => {
             if (ws) ws.close();
+            disconnectLogStream();
+            if (popstateHandler) window.removeEventListener('popstate', popstateHandler);
         });
 
         function connectWebSocket() {
@@ -181,11 +336,31 @@ createApp({
                 }
             }
             if (['ad_create_user', 'ad_update_user', 'ad_delete_user'].includes(p.command_type)) {
+                if (p.status === 'completed') { toast(p.result || 'Operation erfolgreich', 'success'); loadADUsers(); }
+                else if (p.status === 'failed') { toast('Fehler: ' + (p.result || 'Unbekannter Fehler'), 'error'); }
+            }
+            if (p.command_type === 'ad_list_ous') {
+                if (p.status === 'completed') { try { const parsed = JSON.parse(p.result); adOUs.value = Array.isArray(parsed) ? parsed : (parsed ? [parsed] : []); } catch {} }
+            }
+            if (p.command_type === 'ad_move_user') {
+                if (p.status === 'completed') { toast('Benutzer erfolgreich verschoben', 'success'); loadADUsers(); }
+                else if (p.status === 'failed') { toast('Fehler: ' + (p.result || ''), 'error'); }
+            }
+            if (p.command_type === 'local_list_users') {
+                if (p.status === 'completed') { try { const parsed = JSON.parse(p.result); localUsers.value = Array.isArray(parsed) ? parsed : (parsed ? [parsed] : []); } catch {} localUsersLoading.value = false; }
+                else if (p.status === 'failed') { localUsersLoading.value = false; toast('Fehler: ' + (p.result || ''), 'error'); }
+            }
+            if (['local_create_user', 'local_update_user', 'local_delete_user'].includes(p.command_type)) {
+                if (p.status === 'completed') { toast(p.result || 'Operation erfolgreich', 'success'); loadLocalUsers(); }
+                else if (p.status === 'failed') { toast('Fehler: ' + (p.result || ''), 'error'); }
+            }
+            if (p.command_type === 'scan_disk') {
                 if (p.status === 'completed') {
-                    toast(p.result || 'Operation erfolgreich', 'success');
-                    loadADUsers();
+                    try { diskExplorerData.value = JSON.parse(p.result); } catch {}
+                    diskExplorerLoading.value = false;
                 } else if (p.status === 'failed') {
-                    toast('Fehler: ' + (p.result || 'Unbekannter Fehler'), 'error');
+                    toast('Scan fehlgeschlagen: ' + (p.result || ''), 'error');
+                    diskExplorerLoading.value = false;
                 }
             }
 
@@ -213,6 +388,20 @@ createApp({
                 loadUpdatesMachines();
                 if (updatesLogMachine.value && updatesLogMachine.value.machine_id === data.machineId) {
                     loadMachineUpdateLogs(data.machineId);
+                }
+            }
+
+            // Update deploy modal results
+            if (p.command_id && deployCommandMap.value[p.command_id] && deployResult.value && deployResult.value.details) {
+                const ip = deployCommandMap.value[p.command_id];
+                const d = deployResult.value.details.find(x => x.ip === ip);
+                if (d && (p.status === 'completed' || p.status === 'failed')) {
+                    d.success = p.status === 'completed';
+                    d.message = p.result || p.status;
+                    const done = deployResult.value.details.filter(x => x.success !== null).length;
+                    const ok = deployResult.value.details.filter(x => x.success === true).length;
+                    deployResult.value.message = `${done}/${deployResult.value.details.length} abgeschlossen, ${ok} erfolgreich`;
+                    if (done === deployResult.value.details.length) loadMachines();
                 }
             }
 
@@ -297,18 +486,35 @@ createApp({
             }
         }
 
-        function navigate(target, id) {
+        function navigateInternal(target, id) {
             view.value = target;
             if (target === 'machine-detail' && id) {
                 loadMachineDetail(id);
+            } else if (target === 'machines' || target === 'dashboard') {
+                disconnectLogStream();
+                loadMachines();
+                loadStats();
             } else if (target === 'command-history') {
+                disconnectLogStream();
                 loadCommandHistory();
             } else if (target === 'updates') {
+                disconnectLogStream();
                 loadUpdatesMachines();
             } else if (target === 'ad-admin') {
+                disconnectLogStream();
                 loadADDomainControllers();
                 loadADTemplates();
+            } else if (target === 'logs') {
+                connectLogStream();
+                loadCommandHistory();
+            } else {
+                disconnectLogStream();
             }
+        }
+
+        function navigate(target, id) {
+            history.pushState({ view: target, id: id || null }, '', '#' + target + (id ? '/' + id : ''));
+            navigateInternal(target, id);
         }
 
         async function loadUpdatesMachines() {
@@ -737,7 +943,12 @@ createApp({
             });
             const data = await res.json();
             if (data.success) {
-                deployResult.value = { success: true, message: `Deploy gestartet fuer ${data.results.length} Maschine(n). Sie erscheinen in Kuerze im Dashboard.` };
+                const details = data.results.map(r => ({ ip: r.ip, command_id: r.command_id, success: null, message: 'Läuft...' }));
+                deployResult.value = { success: true, message: `Deploy läuft auf ${data.results.length} Maschine(n)...`, details };
+                deployCommandMap.value = {};
+                for (const r of data.results) {
+                    if (r.command_id) deployCommandMap.value[r.command_id] = r.ip;
+                }
                 deployTargets.value = [];
             } else {
                 deployResult.value = { success: false, message: data.error || 'Batch-Deploy fehlgeschlagen' };
@@ -911,6 +1122,14 @@ createApp({
             return m && m._telemetry ? m._telemetry.uptime || 0 : 0;
         });
 
+        const machineLatestMetrics = computed(() => {
+            if (!telemetryHistory.value.length) return null;
+            return telemetryHistory.value[telemetryHistory.value.length - 1];
+        });
+
+        const detailServicesClosed = ref(true);
+        const detailFirewallClosed = ref(true);
+
         // AD-Verwaltung state
         const adDomainControllers = ref([]);
         const adSelectedDC = ref('');
@@ -933,6 +1152,30 @@ createApp({
             cannot_change_password: false, groups: []
         });
         const adTemplateForm = reactive({ name: '', description: '' });
+
+        const adGroupSearch = ref('');
+
+        const adGroupsFiltered = computed(() => {
+            let groups = adGroups.value;
+            if (adGroupSearch.value) {
+                const q = adGroupSearch.value.toLowerCase();
+                groups = groups.filter(g =>
+                    (g.sam_account_name || '').toLowerCase().includes(q) ||
+                    (g.name || '').toLowerCase().includes(q) ||
+                    (g.description || '').toLowerCase().includes(q)
+                );
+            }
+            return [...groups].sort((a, b) => {
+                const aChecked = adUserForm.groups.includes(a.sam_account_name) ? 0 : 1;
+                const bChecked = adUserForm.groups.includes(b.sam_account_name) ? 0 : 1;
+                if (aChecked !== bChecked) return aChecked - bChecked;
+                return (a.name || a.sam_account_name).localeCompare(b.name || b.sam_account_name, 'de');
+            });
+        });
+
+        function removeFromADGroup(groupName) {
+            adUserForm.groups = adUserForm.groups.filter(g => g !== groupName);
+        }
 
         const adFilteredUsers = computed(() => {
             if (!adUserSearch.value) return adUsers.value;
@@ -1046,6 +1289,12 @@ createApp({
             adUserFormMode.value = 'duplicate';
             adUserFormTab.value = 'general';
             adEditingUser.value = null;
+            let ou = '';
+            if (user.distinguished_name) {
+                const parts = user.distinguished_name.split(',');
+                const ouStart = parts.findIndex(p => /^(ou|dc)=/i.test(p));
+                if (ouStart > 0) ou = parts.slice(ouStart).join(',');
+            }
             Object.assign(adUserForm, {
                 sam_account_name: '', given_name: '', surname: '', display_name: '',
                 password: '', email: '', upn: '',
@@ -1053,7 +1302,7 @@ createApp({
                 title: user.title || '',
                 company: user.company || '',
                 description: user.description || '',
-                office_phone: '', mobile_phone: '', ou: '',
+                office_phone: '', mobile_phone: '', ou,
                 enabled: user.enabled !== false,
                 password_never_expires: user.password_never_expires || false,
                 change_password_at_logon: true,
@@ -1156,11 +1405,467 @@ createApp({
             toast(`Vorlage "${name}" gespeichert.`, 'success');
         }
 
+        // Live log viewer
+        const logTab = ref('command');          // 'command' | 'agent' | 'container'
+        const logEntries = ref([]);
+        const logFilter = ref('');
+        const logSearch = ref('');
+        const logAutoScroll = ref(true);
+        const logContainer = ref(null);
+        let logEventSource = null;
+
+        // Command log filters
+        const cmdLogSearch = ref('');
+        const cmdLogStatus = ref('');
+        const cmdLogType = ref('');
+
+        const commandTypes = computed(() =>
+            [...new Set(commandHistory.value.map(c => c.command_type).filter(Boolean))].sort()
+        );
+
+        const filteredCommandHistory = computed(() => {
+            let list = commandHistory.value;
+            if (cmdLogStatus.value) list = list.filter(c => c.status === cmdLogStatus.value);
+            if (cmdLogType.value) list = list.filter(c => c.command_type === cmdLogType.value);
+            if (cmdLogSearch.value) {
+                const q = cmdLogSearch.value.toLowerCase();
+                list = list.filter(c =>
+                    (c.command_type || '').toLowerCase().includes(q) ||
+                    (c.result || '').toLowerCase().includes(q) ||
+                    (c.hostname || '').toLowerCase().includes(q) ||
+                    (c.display_name || '').toLowerCase().includes(q) ||
+                    (c.machine_id || '').toLowerCase().includes(q)
+                );
+            }
+            return list;
+        });
+
+        // Console split: agent activity ([WS]) vs. container/server output (everything else)
+        const filteredLogEntries = computed(() => {
+            let list = logTab.value === 'agent'
+                ? logEntries.value.filter(e => e.text.includes('[WS]'))
+                : logEntries.value.filter(e => !e.text.includes('[WS]'));
+            if (logFilter.value === 'info' || logFilter.value === 'warn' || logFilter.value === 'error') {
+                list = list.filter(e => (e.level || 'info') === logFilter.value);
+            }
+            if (logSearch.value) {
+                const q = logSearch.value.toLowerCase();
+                list = list.filter(e => e.text.toLowerCase().includes(q));
+            }
+            return list;
+        });
+
+        function setLogTab(tab) {
+            logTab.value = tab;
+            if (tab === 'command') {
+                loadCommandHistory();
+            } else {
+                connectLogStream();
+                scrollLogsToBottom();
+            }
+        }
+
+        const cmdLogDetail = ref(null);
+
+        function openCmdDetail(c) {
+            cmdLogDetail.value = c;
+        }
+
+        function formatCmdParams(raw) {
+            try {
+                return JSON.stringify(JSON.parse(raw), null, 2);
+            } catch {
+                return raw;
+            }
+        }
+
+        function copyText(text) {
+            navigator.clipboard.writeText(text).then(
+                () => toast('In Zwischenablage kopiert.', 'success'),
+                () => toast('Kopieren fehlgeschlagen.', 'error')
+            );
+        }
+
+        function connectLogStream() {
+            if (logEventSource) { logEventSource.close(); logEventSource = null; }
+            const res = fetch('/api/logs').then(r => r.ok ? r.json() : []).then(data => {
+                logEntries.value = data;
+                scrollLogsToBottom();
+            }).catch(() => {});
+
+            logEventSource = new EventSource('/api/logs/stream');
+            logEventSource.onmessage = (event) => {
+                try {
+                    const e = JSON.parse(event.data);
+                    // Deduplicate: skip if already loaded via /api/logs
+                    if (logEntries.value.length && logEntries.value[logEntries.value.length - 1].ts >= e.ts && logEntries.value.some(x => x.ts === e.ts && x.text === e.text)) return;
+                    logEntries.value.push(e);
+                    if (logEntries.value.length > 1200) logEntries.value.splice(0, 200);
+                    if (logAutoScroll.value) scrollLogsToBottom();
+                } catch {}
+            };
+        }
+
+        function scrollLogsToBottom() {
+            nextTick(() => {
+                const el = logContainer.value;
+                if (el) el.scrollTop = el.scrollHeight;
+            });
+        }
+
+        function disconnectLogStream() {
+            if (logEventSource) { logEventSource.close(); logEventSource = null; }
+        }
+
+        function formatLogTime(ts) {
+            const d = new Date(ts);
+            return d.toLocaleTimeString('de-DE', { hour12: false }) + '.' + String(d.getMilliseconds()).padStart(3, '0');
+        }
+
+        function logLineColor(e) {
+            const t = e.text;
+            if (e.level === 'error' || t.includes('rejected') || t.includes('Failed') || t.includes('failed') || t.includes('Invalid')) return '#fca5a5';
+            if (e.level === 'warn') return '#fde68a';
+            if (t.includes('registered') || t.includes('Connected') || t.includes('installed')) return '#86efac';
+            if (t.includes('[WS]')) return '#93c5fd';
+            if (t.includes('[DB]')) return '#c4b5fd';
+            return '#cbd5e1';
+        }
+
         function adAutoDisplayName() {
             const fn = adUserForm.given_name || '';
             const sn = adUserForm.surname || '';
             adUserForm.display_name = (fn + ' ' + sn).trim();
         }
+
+        // OU tree
+        const adOUs = ref([]);
+        const adSelectedOU = ref(null);
+        const adShowMoveModal = ref(false);
+        const adMoveUser = ref(null);
+        const adMoveTargetOU = ref('');
+
+        const ouTreeFlat = computed(() => {
+            if (!adOUs.value.length) return [];
+            const rootDN = adOUs.value[0].distinguished_name.split(',')
+                .filter(p => /^DC=/i.test(p)).join(',');
+            function getChildren(parentDN) {
+                return adOUs.value.filter(ou => {
+                    const parts = ou.distinguished_name.split(',');
+                    return parts.slice(1).join(',').toLowerCase() === parentDN.toLowerCase();
+                }).sort((a, b) => a.name.localeCompare(b.name, 'de'));
+            }
+            const result = [];
+            function flatten(pDN, level) {
+                for (const ou of getChildren(pDN)) { result.push({ ...ou, level }); flatten(ou.distinguished_name, level + 1); }
+            }
+            flatten(rootDN, 0);
+            return result;
+        });
+
+        const adUsersForOU = computed(() => {
+            let users = adFilteredUsers.value;
+            if (adSelectedOU.value) {
+                users = users.filter(u => u.distinguished_name &&
+                    u.distinguished_name.toLowerCase().endsWith(',' + adSelectedOU.value.toLowerCase()));
+            }
+            return users;
+        });
+
+        async function loadADOUs() {
+            if (!adSelectedDC.value) return;
+            const res = await apiFetch(`/api/ad/${adSelectedDC.value}/command`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ type: 'ad_list_ous', parameters: {} })
+            });
+            if (!res.ok) toast('Fehler beim Laden der OUs', 'error');
+        }
+
+        function openMoveUser(user) {
+            adMoveUser.value = user;
+            adMoveTargetOU.value = '';
+            adShowMoveModal.value = true;
+        }
+
+        async function confirmMoveUser() {
+            if (!adMoveUser.value || !adMoveTargetOU.value) return;
+            await apiFetch(`/api/ad/${adSelectedDC.value}/command`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ type: 'ad_move_user', parameters: { user_dn: adMoveUser.value.distinguished_name, target_ou: adMoveTargetOU.value } })
+            });
+            adShowMoveModal.value = false;
+            toast('Verschieben-Befehl gesendet...', 'info');
+        }
+
+        // AD admin tabs
+        const adAdminTab = ref('ad');
+
+        function openUserAdmin(machine) {
+            adAdminTab.value = machine.is_domain_controller ? 'ad' : 'local';
+            if (!machine.is_domain_controller) {
+                localMachineId.value = machine.machine_id;
+                loadLocalUsers();
+                loadLocalGroups();
+            } else {
+                adSelectedDC.value = machine.machine_id;
+            }
+            navigate('ad-admin');
+        }
+
+        // Local user management
+        const localMachineId = ref('');
+        const localUsers = ref([]);
+        const localGroups = ref([]);
+        const localUsersLoading = ref(false);
+        const showLocalUserModal = ref(false);
+        const localUserFormMode = ref('create');
+        const localUserFormTab = ref('general');
+        const localEditingUser = ref(null);
+        const localUserForm = reactive({
+            name: '', full_name: '', description: '', password: '',
+            enabled: true, password_never_expires: false, groups: []
+        });
+        const localUserSearch = ref('');
+        const localGroupSearch = ref('');
+
+        const localFilteredUsers = computed(() => {
+            if (!localUserSearch.value) return localUsers.value;
+            const q = localUserSearch.value.toLowerCase();
+            return localUsers.value.filter(u =>
+                (u.name || '').toLowerCase().includes(q) ||
+                (u.full_name || '').toLowerCase().includes(q));
+        });
+
+        const localGroupsFiltered = computed(() => {
+            let list = localGroups.value;
+            if (localGroupSearch.value) {
+                const q = localGroupSearch.value.toLowerCase();
+                list = list.filter(g => (g.name || '').toLowerCase().includes(q));
+            }
+            return [...list].sort((a, b) => {
+                const aChk = localUserForm.groups.includes(a.name) ? 0 : 1;
+                const bChk = localUserForm.groups.includes(b.name) ? 0 : 1;
+                if (aChk !== bChk) return aChk - bChk;
+                return (a.name || '').localeCompare(b.name || '', 'de');
+            });
+        });
+
+        async function loadLocalUsers() {
+            if (!localMachineId.value) return;
+            localUsersLoading.value = true;
+            const res = await apiFetch(`/api/ad/${localMachineId.value}/command`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ type: 'local_list_users', parameters: {} })
+            });
+            if (!res.ok) { localUsersLoading.value = false; toast('Fehler', 'error'); }
+        }
+
+        async function loadLocalGroups() {
+            if (!localMachineId.value) return;
+            const res = await apiFetch(`/api/ad/${localMachineId.value}/command`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ type: 'local_list_groups', parameters: {} })
+            });
+            const data = await res.json();
+            if (!data.success) return;
+            const cmdId = data.command_id;
+            for (let i = 0; i < 20; i++) {
+                await new Promise(r => setTimeout(r, 2000));
+                const cr = await apiFetch(`/api/commands/${localMachineId.value}/history`);
+                if (cr.ok) {
+                    const cmds = await cr.json();
+                    const cmd = cmds.find(c => c.id === cmdId);
+                    if (cmd && cmd.status === 'completed') {
+                        try { const p = JSON.parse(cmd.result); localGroups.value = Array.isArray(p) ? p : (p ? [p] : []); } catch {}
+                        break;
+                    } else if (cmd && cmd.status === 'failed') break;
+                }
+            }
+        }
+
+        function openCreateLocalUser() {
+            localUserFormMode.value = 'create'; localUserFormTab.value = 'general';
+            localEditingUser.value = null;
+            Object.assign(localUserForm, { name: '', full_name: '', description: '', password: '', enabled: true, password_never_expires: false, groups: [] });
+            showLocalUserModal.value = true;
+        }
+
+        function openEditLocalUser(user) {
+            localUserFormMode.value = 'edit'; localUserFormTab.value = 'general';
+            localEditingUser.value = user;
+            Object.assign(localUserForm, { name: user.name || '', full_name: user.full_name || '', description: user.description || '', password: '', enabled: user.enabled !== false, password_never_expires: user.password_never_expires || false, groups: Array.isArray(user.groups) ? [...user.groups] : [] });
+            showLocalUserModal.value = true;
+        }
+
+        function openDuplicateLocalUser(user) {
+            localUserFormMode.value = 'create'; localUserFormTab.value = 'general';
+            localEditingUser.value = null;
+            Object.assign(localUserForm, { name: '', full_name: '', description: user.description || '', password: '', enabled: user.enabled !== false, password_never_expires: user.password_never_expires || false, groups: Array.isArray(user.groups) ? [...user.groups] : [] });
+            showLocalUserModal.value = true;
+        }
+
+        async function saveLocalUser() {
+            if (!localUserForm.name) { toast('Benutzername erforderlich', 'error'); return; }
+            if (localUserFormMode.value !== 'edit' && !localUserForm.password) { toast('Passwort erforderlich', 'error'); return; }
+            let type, parameters;
+            if (localUserFormMode.value === 'edit') {
+                const orig = localEditingUser.value?.groups || [];
+                type = 'local_update_user';
+                parameters = { ...localUserForm, add_groups: localUserForm.groups.filter(g => !orig.includes(g)), remove_groups: orig.filter(g => !localUserForm.groups.includes(g)) };
+                delete parameters.groups;
+            } else {
+                type = 'local_create_user'; parameters = { ...localUserForm };
+            }
+            const res = await apiFetch(`/api/ad/${localMachineId.value}/command`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ type, parameters })
+            });
+            showLocalUserModal.value = false;
+            if (res.ok) toast('Befehl gesendet...', 'info'); else toast('Fehler', 'error');
+        }
+
+        async function confirmDeleteLocalUser(user) {
+            if (!await confirmDialog(`Benutzer "${user.name}" wirklich löschen?`)) return;
+            await apiFetch(`/api/ad/${localMachineId.value}/command`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ type: 'local_delete_user', parameters: { name: user.name } })
+            });
+            toast('Löschbefehl gesendet...', 'info');
+        }
+
+        function removeFromLocalGroup(g) { localUserForm.groups = localUserForm.groups.filter(x => x !== g); }
+
+        // ---- Disk Explorer ----
+        function openDiskExplorer(drive) {
+            diskExplorerMachineId.value = selectedMachine.value.machine_id;
+            const startPath = drive.drive_letter || drive.mount_point;
+            diskExplorerPath.value = startPath;
+            diskExplorerData.value = null;
+            diskExplorerHistory.value = [];
+            showDiskExplorer.value = true;
+            startDiskScan(startPath);
+        }
+
+        async function startDiskScan(customPath) {
+            if (!diskExplorerMachineId.value) { toast('Bitte eine Maschine auswählen', 'error'); return; }
+            const path = customPath !== undefined ? customPath : diskExplorerPath.value;
+            diskExplorerLoading.value = true;
+            diskExplorerData.value = null;
+            const res = await apiFetch(`/api/commands/${diskExplorerMachineId.value}/disk-scan`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ path })
+            });
+            if (!res.ok) {
+                diskExplorerLoading.value = false;
+                toast('Fehler beim Starten des Scans', 'error');
+            }
+        }
+
+        function diskExplorerDrillDown(entry) {
+            if (!entry.is_dir) return;
+            diskExplorerHistory.value.push(diskExplorerData.value ? diskExplorerData.value.path : diskExplorerPath.value);
+            diskExplorerPath.value = entry.path;
+            startDiskScan(entry.path);
+        }
+
+        function diskExplorerBack() {
+            if (!diskExplorerHistory.value.length) return;
+            const prev = diskExplorerHistory.value.pop();
+            diskExplorerPath.value = prev;
+            startDiskScan(prev);
+        }
+
+        function diskExplorerMaxSize() {
+            if (!diskExplorerData.value || !diskExplorerData.value.entries.length) return 1;
+            return diskExplorerData.value.entries[0].size || 1;
+        }
+
+        function diskExplorerBarWidth(entry) {
+            const pct = Math.round((entry.size / diskExplorerMaxSize()) * 100);
+            return Math.max(pct, entry.size > 0 ? 1 : 0);
+        }
+
+        function diskExplorerBarColor(entry) {
+            const pct = diskExplorerBarWidth(entry);
+            if (pct > 70) return 'var(--danger)';
+            if (pct > 35) return 'var(--warning)';
+            return 'var(--accent)';
+        }
+
+        // ---- Table column definitions (used with <data-table>) ----
+        const machineColumns = [
+            { key: '_select', label: '', sortable: false, searchable: false, stopClick: true, thStyle: 'width:36px' },
+            { key: 'status', label: 'Status', filter: true },
+            { key: 'name', label: 'Hostname', value: m => m.display_name || m.hostname },
+            { key: 'os_type', label: 'OS', filter: true },
+            { key: 'category', label: 'Typ', filter: true },
+            { key: 'group_name', label: 'Gruppe', filter: true, placeholder: '–' },
+            { key: 'agent_version', label: 'Agent', placeholder: '–' },
+            { key: 'uptime', label: 'Laufzeit', value: m => (m._telemetry && m._telemetry.uptime ? formatUptime(m._telemetry.uptime) : '–'), sortValue: m => (m._telemetry && m._telemetry.uptime) || 0 },
+            { key: '_actions', label: 'Aktionen', sortable: false, searchable: false, stopClick: true }
+        ];
+        const updatesColumns = [
+            { key: '_select', label: '', sortable: false, searchable: false, stopClick: true, thStyle: 'width:36px' },
+            { key: 'status', label: 'Status', filter: true },
+            { key: 'name', label: 'Maschine', value: m => m.display_name || m.hostname },
+            { key: 'updates_available', label: 'Ausstehend', sortValue: m => m.updates_available || 0 },
+            { key: 'last_run_at', label: 'Letzter Lauf', sortValue: m => m.last_run_at || '', searchable: false },
+            { key: 'schedule_time', label: 'Zeitplan', placeholder: '–' },
+            { key: '_actions', label: 'Aktionen', sortable: false, searchable: false, stopClick: true }
+        ];
+        const commandLogColumns = [
+            { key: 'created_at', label: 'Zeitpunkt', value: c => formatTime(c.created_at), sortValue: c => c.created_at || '', thStyle: 'white-space:nowrap' },
+            { key: 'machine', label: 'Maschine', value: c => c.display_name || c.hostname || (c.machine_id || '').slice(0, 8) },
+            { key: 'command_type', label: 'Befehl', filter: true },
+            { key: 'status', label: 'Status', filter: true },
+            { key: 'result', label: 'Ergebnis', placeholder: '–' }
+        ];
+        const servicesColumns = [
+            { key: 'name', label: 'Dienst', value: s => s.display_name || s.service_name },
+            { key: 'status', label: 'Status', filter: true },
+            { key: 'start_type', label: 'Starttyp', filter: true }
+        ];
+        const firewallColumns = [
+            { key: 'name', label: 'Regel', value: r => r.rule_name || r.name },
+            { key: 'direction', label: 'Richtung', filter: true },
+            { key: 'action', label: 'Aktion', filter: true },
+            { key: 'port', label: 'Port', placeholder: '–' }
+        ];
+        const sharesColumns = [
+            { key: 'share_name', label: 'Freigabe' },
+            { key: 'path', label: 'Pfad' },
+            { key: 'description', label: 'Beschreibung', placeholder: '–' }
+        ];
+        const veeamJobColumns = [
+            { key: 'job_name', label: 'Job' },
+            { key: 'job_type', label: 'Typ', filter: true, placeholder: '–' },
+            { key: 'last_run_status', label: 'Letzter Status', filter: true, placeholder: 'Unbekannt' },
+            { key: 'last_run_time', label: 'Letzte Ausfuehrung', value: j => formatTime(j.last_run_time), sortValue: j => j.last_run_time || '' },
+            { key: 'next_run_time', label: 'Naechster Lauf', value: j => formatTime(j.next_run_time), sortValue: j => j.next_run_time || '' }
+        ];
+        const adUserColumns = [
+            { key: 'sam_account_name', label: 'Benutzername' },
+            { key: 'name', label: 'Name', value: u => u.display_name || ((u.given_name || '') + ' ' + (u.surname || '')).trim() },
+            { key: 'email', label: 'E-Mail', placeholder: '–' },
+            { key: 'department', label: 'Abteilung', filter: true, placeholder: '–' },
+            { key: 'status', label: 'Status', filter: true, value: u => (u.enabled ? 'Aktiv' : 'Deakt.'), sortValue: u => (u.enabled ? 1 : 0) },
+            { key: '_actions', label: 'Aktionen', sortable: false, searchable: false, stopClick: true }
+        ];
+        const localUserColumns = [
+            { key: 'name', label: 'Benutzername' },
+            { key: 'full_name', label: 'Anzeigename', placeholder: '–' },
+            { key: 'description', label: 'Beschreibung', placeholder: '–' },
+            { key: 'status', label: 'Status', filter: true, value: u => (u.enabled ? 'Aktiv' : 'Deakt.'), sortValue: u => (u.enabled ? 1 : 0) },
+            { key: '_actions', label: 'Aktionen', sortable: false, searchable: false, stopClick: true }
+        ];
+        const scanResultColumns = [
+            { key: '_select', label: '', sortable: false, searchable: false, stopClick: true, thStyle: 'width:36px' },
+            { key: 'ip', label: 'IP' },
+            { key: 'hostname', label: 'Hostname', placeholder: '–' },
+            { key: 'os_guess', label: 'OS', filter: true },
+            { key: 'category', label: 'Kategorie', filter: true }
+        ];
 
         return {
             view, username, machines, stats, alerts, alertCount,
@@ -1171,7 +1876,8 @@ createApp({
             tokenMachine, selectedMachine, machineDisks, machineServices, machineFirewall,
             machineUpdates, machineShares, telemetryHistory, telemetryRange,
             telemetryCanvas, baseUrl, newMachine, settingsForm,
-            machineUptime,
+            machineUptime, machineLatestMetrics, detailServicesClosed, detailFirewallClosed,
+            updatesPendingModal,
             navigate, addMachine, deleteMachine, showToken, sendCommand, updateAgent,
             showEditMachine, editMachineForm, openEditMachine, saveEditMachine,
             triggerUpdates, scheduleUpdates, scheduleTime,
@@ -1182,17 +1888,38 @@ createApp({
             updatesScheduleMachine, updatesScheduleForm, openScheduleModal, saveSchedule, removeSchedule,
             setBatchSchedule, updatesLiveStreams,
             showDeployModal, onlineAgents, scanning, scanDone, scanResults, deployTargets,
-            deployForm, deployResult, scanNetwork, toggleAllScan, executeBatchDeploy, executeDeploy,
+            deployForm, deployResult, deployCommandMap, scanNetwork, toggleAllScan, executeBatchDeploy, executeDeploy,
             addVeeamInstance, deleteVeeamInstance,
             saveSettings, testEmail, regenerateEnrollmentKey, acknowledgeAlert, logout,
             loadTelemetryHistory, formatTime, formatBytes, diskPercent, formatUptime,
+            logTab, setLogTab, logEntries, logFilter, logSearch, logAutoScroll, logContainer, filteredLogEntries,
+            connectLogStream, formatLogTime, logLineColor, scrollLogsToBottom,
+            cmdLogSearch, cmdLogStatus, cmdLogType, commandTypes, filteredCommandHistory,
+            cmdLogDetail, openCmdDetail, formatCmdParams, copyText,
             adDomainControllers, adSelectedDC, adUsers, adGroups, adUsersLoading, adUsersOutput,
             adTemplates, showADUserModal, showADTemplatesModal, adUserSearch, adUserFormMode,
             adUserFormTab, adEditingUser, adUserForm, adTemplateForm, adFilteredUsers,
+            adGroupSearch, adGroupsFiltered, removeFromADGroup,
             loadADDomainControllers, loadADUsers, loadADGroups,
             openCreateADUser, openEditADUser, openDuplicateADUser, saveADUser, confirmDeleteADUser,
             loadADTemplates, deleteADTemplate, applyADTemplate, saveADTemplateFromForm, adAutoDisplayName,
-            toasts, confirmData
+            adOUs, adSelectedOU, adShowMoveModal, adMoveUser, adMoveTargetOU, ouTreeFlat, adUsersForOU,
+            loadADOUs, openMoveUser, confirmMoveUser, adAdminTab, openUserAdmin,
+            localMachineId, localUsers, localGroups, localUsersLoading, showLocalUserModal,
+            localUserFormMode, localUserFormTab, localEditingUser, localUserForm,
+            localUserSearch, localGroupSearch, localFilteredUsers, localGroupsFiltered,
+            loadLocalUsers, loadLocalGroups, openCreateLocalUser, openEditLocalUser,
+            openDuplicateLocalUser, saveLocalUser, confirmDeleteLocalUser, removeFromLocalGroup,
+            toasts, confirmData,
+            machineColumns, updatesColumns, commandLogColumns, servicesColumns,
+            firewallColumns, sharesColumns, veeamJobColumns, adUserColumns,
+            localUserColumns, scanResultColumns,
+            diskExplorerMachineId, diskExplorerPath, diskExplorerLoading, diskExplorerData, diskExplorerHistory,
+            showDiskExplorer, openDiskExplorer, startDiskScan, diskExplorerDrillDown, diskExplorerBack,
+            diskExplorerBarWidth, diskExplorerBarColor
         };
     }
-}).mount('#app');
+});
+
+app.component('data-table', DataTable);
+app.mount('#app');

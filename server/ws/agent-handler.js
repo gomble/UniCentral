@@ -118,23 +118,37 @@ function handleAgentConnection(ws, request) {
             ws.close();
             return;
         }
-        if (!verifyHmac(machineId, timestamp, signature)) {
-            ws.send(createMessage(MSG_TYPES.ERROR, { message: 'Invalid signature' }));
+        const machine = db.prepare('SELECT * FROM machines WHERE machine_id = ?').get(machineId);
+        if (!machine) {
+            ws.send(createMessage(MSG_TYPES.ERROR, { message: 'Unknown machine' }));
             ws.close();
             return;
         }
-        const machine = db.prepare('SELECT * FROM machines WHERE machine_id = ?').get(machineId);
-        if (machine) {
+        if (!verifyHmac(machineId, timestamp, signature)) {
+            // HMAC mismatch: issue a new secret so the agent can re-authenticate on next connect
+            console.log(`[WS] HMAC mismatch for machine ${machineId} (${machine.hostname}), issuing new secret`);
+            const newSecret = generateMachineSecret();
+            db.prepare('UPDATE machines SET machine_secret = ? WHERE machine_id = ?').run(newSecret, machineId);
             currentMachineId = machineId;
             connectedAgents.set(machineId, ws);
             ws._machineId = machineId;
             db.prepare('UPDATE machines SET status = ?, last_seen = CURRENT_TIMESTAMP WHERE machine_id = ?')
                 .run('online', machineId);
+            ws.send(createMessage(MSG_TYPES.REGISTERED, {
+                machine_id: machineId,
+                machine_secret: newSecret,
+                heartbeat_interval: config.heartbeatInterval,
+                telemetry_interval: config.telemetryInterval
+            }));
             broadcastToDashboards({ type: 'machine_connected', machineId });
-        } else {
-            ws.send(createMessage(MSG_TYPES.ERROR, { message: 'Unknown machine' }));
-            ws.close();
+            return;
         }
+        currentMachineId = machineId;
+        connectedAgents.set(machineId, ws);
+        ws._machineId = machineId;
+        db.prepare('UPDATE machines SET status = ?, last_seen = CURRENT_TIMESTAMP WHERE machine_id = ?')
+            .run('online', machineId);
+        broadcastToDashboards({ type: 'machine_connected', machineId });
         return;
     }
 
@@ -149,6 +163,7 @@ function handleAgentConnection(ws, request) {
                 .run('online', machineId);
             broadcastToDashboards({ type: 'machine_connected', machineId });
         } else {
+            console.log(`[WS] Legacy reconnect rejected: machine_id=${machineId} not in DB - stale config on agent`);
             ws.send(createMessage(MSG_TYPES.ERROR, { message: 'Unknown machine' }));
             ws.close();
         }
@@ -157,15 +172,63 @@ function handleAgentConnection(ws, request) {
 
 function handleRegister(ws, key, payload) {
     const { hostname, os_type, os_version, agent_version, ip_addresses, category } = payload;
-    console.log(`[WS] Register attempt: hostname=${hostname}, os=${os_type}, key_match=${key === config.enrollmentKey}`);
+    const keyProvided = key ? key.slice(0, 8) + '...' : 'none';
+    const keyMatch = key === config.enrollmentKey;
+    console.log(`[WS] Register attempt: hostname=${hostname}, os=${os_type}, key=${keyProvided}, match=${keyMatch}`);
 
     // Validate enrollment key or legacy token
+    if (!key) {
+        console.log(`[WS] Register rejected: no key provided (hostname=${hostname})`);
+        ws.send(createMessage(MSG_TYPES.ERROR, { message: 'No enrollment key provided' }));
+        ws.close();
+        return;
+    }
     if (key === config.enrollmentKey) {
         try {
-        // Self-registration with enrollment key - create machine automatically
+        const ipStr = Array.isArray(ip_addresses) ? ip_addresses.join(', ') : (ip_addresses || '');
+        const machineSecret = generateMachineSecret();
+
+        // Reinstall guard: if exactly ONE machine with this hostname exists, reuse it.
+        // Requires a unique hostname match to avoid ambiguity when multiple machines
+        // share the same hostname (e.g. two servers both named "pve").
+        const hostnameCount = hostname
+            ? db.prepare('SELECT COUNT(*) as n FROM machines WHERE hostname = ?').get(hostname).n
+            : 0;
+        const existing = hostnameCount === 1
+            ? db.prepare('SELECT * FROM machines WHERE hostname = ?').get(hostname)
+            : null;
+
+        if (existing) {
+            db.prepare(`
+                UPDATE machines SET
+                    os_type = COALESCE(?, os_type),
+                    agent_version = ?,
+                    ip_address = ?,
+                    category = COALESCE(?, category),
+                    machine_secret = ?,
+                    status = 'online',
+                    last_seen = CURRENT_TIMESTAMP
+                WHERE machine_id = ?
+            `).run(os_type || null, agent_version || '', ipStr, category || null, machineSecret, existing.machine_id);
+
+            ws._machineId = existing.machine_id;
+            connectedAgents.set(existing.machine_id, ws);
+
+            ws.send(createMessage(MSG_TYPES.REGISTERED, {
+                machine_id: existing.machine_id,
+                machine_secret: machineSecret,
+                heartbeat_interval: config.heartbeatInterval,
+                telemetry_interval: config.telemetryInterval
+            }));
+
+            console.log(`[WS] Reinstalled agent matched by hostname to existing machine: ${existing.machine_id} (${hostname})`);
+            broadcastToDashboards({ type: 'machine_connected', machineId: existing.machine_id });
+            return;
+        }
+
+        // New machine — create entry
         const { v4: uuidv4 } = require('uuid');
         const machineId = uuidv4();
-        const machineSecret = generateMachineSecret();
 
         db.prepare(`
             INSERT INTO machines (machine_id, hostname, os_type, category, agent_version, ip_address, status, last_seen, machine_secret)
@@ -176,7 +239,7 @@ function handleRegister(ws, key, payload) {
             os_type || 'windows',
             category || 'client',
             agent_version || '',
-            Array.isArray(ip_addresses) ? ip_addresses.join(', ') : (ip_addresses || ''),
+            ipStr,
             machineSecret
         );
 
