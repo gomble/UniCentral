@@ -23,8 +23,22 @@
                 </div>
             </div>
         </div>
+        <!-- Mobile top bar (hidden on desktop via CSS) -->
+        <div class="mobile-topbar">
+            <button class="hamburger-btn" @click="sidebarOpen = !sidebarOpen" aria-label="Menü">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <line v-if="!sidebarOpen" x1="3" y1="6" x2="21" y2="6"/><line v-if="!sidebarOpen" x1="3" y1="12" x2="21" y2="12"/><line v-if="!sidebarOpen" x1="3" y1="18" x2="21" y2="18"/>
+                    <line v-if="sidebarOpen" x1="4" y1="4" x2="20" y2="20"/><line v-if="sidebarOpen" x1="20" y1="4" x2="4" y2="20"/>
+                </svg>
+            </button>
+            <span class="mobile-topbar-title">UniCentral</span>
+            <span v-if="alertCount" style="background:var(--danger);color:#fff;border-radius:9px;min-width:20px;height:20px;font-size:0.7rem;font-weight:700;display:flex;align-items:center;justify-content:center;padding:0 4px">{{ alertCount }}</span>
+        </div>
+        <!-- Sidebar overlay for mobile -->
+        <div class="sidebar-overlay" :class="{open: sidebarOpen}" @click="sidebarOpen = false"></div>
+
         <div class="app-layout">
-            <aside class="sidebar">
+            <aside class="sidebar" :class="{open: sidebarOpen}">
                 <div class="sidebar-header">
                     <h1>UniCentral</h1>
                     <small>v0.1.0</small>
@@ -65,7 +79,7 @@
                     </div>
                 </nav>
                 <div class="sidebar-footer">
-                    <div @click="logout" style="cursor:pointer">Abmelden ({{ username }})</div>
+                    <div @click="logout(); sidebarOpen = false" style="cursor:pointer">Abmelden ({{ username }})</div>
                 </div>
             </aside>
 
@@ -174,11 +188,11 @@
                 <div v-if="view === 'machines'">
                     <div class="page-header">
                         <h1>Maschinen</h1>
-                        <div style="display:flex;gap:0.5rem">
+                        <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
                             <button class="btn btn-ghost btn-sm" @click="navigate('command-history')">Befehlshistorie</button>
                             <button class="btn btn-ghost btn-sm" @click="showDeployModal = true">Remote Deploy</button>
                             <button class="btn btn-ghost btn-sm" @click="showGroupsModal = true">Gruppen</button>
-                            <button class="btn btn-primary" @click="showAddMachine = true">+ Maschine hinzufuegen</button>
+                            <button class="btn btn-primary btn-sm" @click="showAddMachine = true">+ Hinzufuegen</button>
                         </div>
                     </div>
 
@@ -190,7 +204,7 @@
                     </div>
 
                     <!-- Batch Action Bar -->
-                    <div v-if="selectedMachines.length" class="card" style="display:flex;align-items:center;gap:1rem;padding:0.8rem 1.2rem;margin-bottom:1rem;border-color:var(--accent)">
+                    <div v-if="selectedMachines.length" class="card batch-bar" style="display:flex;align-items:center;gap:0.5rem;padding:0.8rem 1.2rem;margin-bottom:1rem;border-color:var(--accent)">
                         <span style="font-size:0.85rem"><strong>{{ selectedMachines.length }}</strong> ausgewaehlt</span>
                         <button class="btn btn-ghost btn-sm" @click="batchCommand('restart')">Neustart</button>
                         <button class="btn btn-ghost btn-sm" @click="batchCommand('shutdown')">Herunterfahren</button>
@@ -444,8 +458,8 @@
                 <div v-if="view === 'machine-detail' && selectedMachine">
                     <div class="page-header">
                         <h1>{{ selectedMachine.display_name || selectedMachine.hostname }}</h1>
-                        <div style="display:flex;gap:0.5rem">
-                            <button class="btn btn-ghost btn-sm" @click="navigate('machines')">&#8592; Zurueck</button>
+                        <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+                            <button class="btn btn-ghost btn-sm" @click="navigate('machines')">&#8592; Zurück</button>
                             <button class="btn btn-ghost btn-sm" @click="openEditMachine">Bearbeiten</button>
                             <button class="btn btn-ghost btn-sm" @click="openUserAdmin(selectedMachine)">Benutzer</button>
                             <button class="btn btn-primary btn-sm" @click="updateAgent" :disabled="selectedMachine.status !== 'online'">Agent aktualisieren</button>
@@ -1528,8 +1542,8 @@
         </div>
 
         <!-- Disk Explorer Modal -->
-        <div class="modal-overlay" v-if="showDiskExplorer" @click.self="showDiskExplorer = false" style="z-index:1100">
-            <div class="modal" style="max-width:900px;width:95vw;max-height:90vh;display:flex;flex-direction:column;padding:0;overflow:hidden">
+        <div class="modal-overlay" v-if="showDiskExplorer" @click.self="showDiskExplorer = false" style="z-index:1100;align-items:center">
+            <div class="modal modal-disk-explorer" style="max-width:900px;width:95vw;max-height:90vh;display:flex;flex-direction:column;padding:0;overflow:hidden;border-radius:var(--radius)">
 
                 <!-- Header -->
                 <div style="display:flex;align-items:center;justify-content:space-between;padding:0.9rem 1.25rem;border-bottom:1px solid var(--border);flex-shrink:0">

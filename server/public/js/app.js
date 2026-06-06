@@ -148,6 +148,7 @@ const DataTable = {
 const app = createApp({
     setup() {
         const view = ref('dashboard');
+        const sidebarOpen = ref(false);
         const username = ref('');
         const machines = ref([]);
         const stats = ref({});
@@ -532,6 +533,7 @@ const app = createApp({
         }
 
         function navigate(target, id) {
+            sidebarOpen.value = false;
             history.pushState({ view: target, id: id || null }, '', '#' + target + (id ? '/' + id : ''));
             navigateInternal(target, id);
         }
@@ -1896,7 +1898,7 @@ const app = createApp({
         ];
 
         return {
-            view, username, machines, stats, alerts, alertCount,
+            view, sidebarOpen, username, machines, stats, alerts, alertCount,
             showAddMachine, showTokenModal, showAddVeeam, showBatchInstall, showGroupsModal,
             groups, newGroupName, filterGroup, filteredMachines, addGroup, deleteGroup, assignGroup,
             batchInstallPkg, batchInstallMethod, selectedMachines, commandHistory, liveCommand,
