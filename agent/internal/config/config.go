@@ -1,6 +1,7 @@
 package config
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -37,6 +38,7 @@ func LoadFromFile(p string) {
 	if err != nil {
 		return
 	}
+	data = bytes.TrimPrefix(data, []byte{0xEF, 0xBB, 0xBF})
 	json.Unmarshal(data, Get())
 }
 
@@ -66,7 +68,12 @@ func Save() error {
 func SetMachineID(id string) {
 	Get().MachineID = id
 	Get().Token = ""
-	Get().EnrollmentKey = ""
+	Save()
+}
+
+func ClearIdentity() {
+	Get().MachineID = ""
+	Get().MachineSecret = ""
 	Save()
 }
 

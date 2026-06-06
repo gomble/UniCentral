@@ -108,7 +108,7 @@ func Update(downloadURL string) error {
 			exec.Command("powershell", "-Command", "Restart-Service UniCentralAgent").Run()
 		}()
 	} else {
-		// Linux: replace binary and restart
+		// Linux: replace binary, then exit — systemd Restart=always starts the new version
 		err = os.Rename(tmpPath, currentPath)
 		if err != nil {
 			os.Remove(tmpPath)
@@ -116,7 +116,8 @@ func Update(downloadURL string) error {
 		}
 		go func() {
 			time.Sleep(2 * time.Second)
-			exec.Command("systemctl", "restart", "unicentral-agent").Run()
+			log.Printf("Agent updated, restarting via service manager...")
+			os.Exit(0)
 		}()
 	}
 

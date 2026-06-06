@@ -6,8 +6,8 @@ services:
       - "9100:3000"
     environment:
       - NODE_ENV=production
-      - BASE_URL=https://your-domain.example.com
-      - ENROLLMENT_KEY=CHANGE_ME
+      - BASE_URL=${BASE_URL:-}
+      - ENROLLMENT_KEY=${ENROLLMENT_KEY:-}
     volumes:
       - unicentral-data:/app/data
     restart: unless-stopped

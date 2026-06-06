@@ -7,12 +7,14 @@ import (
 	"strings"
 )
 
+const psUTF8Prefix = "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8\n$OutputEncoding = [System.Text.Encoding]::UTF8\n"
+
 func runPSAD(script string) (string, error) {
 	if runtime.GOOS != "windows" {
 		return "", fmt.Errorf("Active Directory-Befehle sind nur unter Windows verfuegbar")
 	}
 	out, err := exec.Command("powershell", "-NoProfile", "-NonInteractive",
-		"-ExecutionPolicy", "Bypass", "-Command", script).CombinedOutput()
+		"-ExecutionPolicy", "Bypass", "-Command", psUTF8Prefix+script).CombinedOutput()
 	return strings.TrimSpace(string(out)), err
 }
 
@@ -175,24 +177,39 @@ func execADUpdateUser(params map[string]interface{}) Result {
 
 	script := fmt.Sprintf("try {\n    Import-Module ActiveDirectory -ErrorAction Stop\n    $p = @{ Identity = '%s' }\n", escapePS(sam))
 
-	for _, pair := range [][2]string{
-		{"given_name", "GivenName"},
-		{"surname", "Surname"},
-		{"display_name", "DisplayName"},
-		{"department", "Department"},
-		{"title", "Title"},
-		{"company", "Company"},
-		{"description", "Description"},
-		{"email", "EmailAddress"},
-		{"office_phone", "OfficePhone"},
-		{"mobile_phone", "MobilePhone"},
+	// Empty string values must be cleared via -Clear, not set via the hashtable:
+	// Set-ADUser turns an empty value into an LDAP "replace" operation that fails
+	// with the error "replace" when the attribute currently has no value.
+	// Note: -Clear expects LDAP attribute names (e.g. "mail"), not the cmdlet
+	// parameter names (e.g. "EmailAddress").
+	var clearAttrs []string
+	for _, t := range [][3]string{
+		{"given_name", "GivenName", "givenName"},
+		{"surname", "Surname", "sn"},
+		{"display_name", "DisplayName", "displayName"},
+		{"department", "Department", "department"},
+		{"title", "Title", "title"},
+		{"company", "Company", "company"},
+		{"description", "Description", "description"},
+		{"email", "EmailAddress", "mail"},
+		{"office_phone", "OfficePhone", "telephoneNumber"},
+		{"mobile_phone", "MobilePhone", "mobile"},
 	} {
-		if val, ok := params[pair[0]].(string); ok {
-			script += fmt.Sprintf("    $p['%s'] = '%s'\n", pair[1], escapePS(val))
+		if val, ok := params[t[0]].(string); ok {
+			if val == "" {
+				clearAttrs = append(clearAttrs, t[2])
+			} else {
+				script += fmt.Sprintf("    $p['%s'] = '%s'\n", t[1], escapePS(val))
+			}
 		}
 	}
 
 	script += "    Set-ADUser @p -ErrorAction Stop\n"
+
+	if len(clearAttrs) > 0 {
+		script += fmt.Sprintf("    Set-ADUser -Identity '%s' -Clear %s -ErrorAction Stop\n",
+			escapePS(sam), strings.Join(clearAttrs, ","))
+	}
 
 	if v, ok := params["enabled"].(bool); ok {
 		if v {
@@ -226,6 +243,46 @@ func execADUpdateUser(params map[string]interface{}) Result {
 
 	script += fmt.Sprintf("    Write-Output 'Benutzer aktualisiert: %s'\n} catch {\n    Write-Error $_.Exception.Message\n    exit 1\n}", sam)
 
+	out, err := runPSAD(script)
+	if err != nil {
+		return Result{Status: "failed", Output: out + "\n" + err.Error()}
+	}
+	return Result{Status: "completed", Output: out}
+}
+
+func execADListOUs(_ map[string]interface{}) Result {
+	script := `
+try {
+    Import-Module ActiveDirectory -ErrorAction Stop
+    $arr = @(Get-ADOrganizationalUnit -Filter * -Properties Name,Description,DistinguishedName -ErrorAction Stop | ForEach-Object {
+        [PSCustomObject]@{
+            name               = $_.Name
+            description        = [string]$_.Description
+            distinguished_name = $_.DistinguishedName
+        }
+    })
+    if ($arr.Count -eq 1) { @($arr) | ConvertTo-Json -Depth 3 -Compress }
+    else { $arr | ConvertTo-Json -Depth 3 -Compress }
+} catch { Write-Error $_.Exception.Message; exit 1 }`
+	out, err := runPSAD(script)
+	if err != nil {
+		return Result{Status: "failed", Output: out + "\n" + err.Error()}
+	}
+	return Result{Status: "completed", Output: out}
+}
+
+func execADMoveUser(params map[string]interface{}) Result {
+	userDN, _ := params["user_dn"].(string)
+	targetOU, _ := params["target_ou"].(string)
+	if userDN == "" || targetOU == "" {
+		return Result{Status: "failed", Output: "user_dn und target_ou erforderlich"}
+	}
+	script := fmt.Sprintf(`
+try {
+    Import-Module ActiveDirectory -ErrorAction Stop
+    Move-ADObject -Identity '%s' -TargetPath '%s' -Confirm:$false -ErrorAction Stop
+    Write-Output 'Benutzer verschoben'
+} catch { Write-Error $_.Exception.Message; exit 1 }`, escapePS(userDN), escapePS(targetOU))
 	out, err := runPSAD(script)
 	if err != nil {
 		return Result{Status: "failed", Output: out + "\n" + err.Error()}

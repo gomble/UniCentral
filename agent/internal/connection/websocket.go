@@ -236,6 +236,30 @@ func (c *Client) handleMessage(raw []byte) {
 			log.Println("Machine secret stored for HMAC authentication")
 		}
 
+	case "error":
+		payload, _ := json.Marshal(msg.Payload)
+		var errMsg struct {
+			Message string `json:"message"`
+		}
+		json.Unmarshal(payload, &errMsg)
+		log.Printf("Server error: %s", errMsg.Message)
+		if errMsg.Message == "Invalid signature" {
+			log.Println("HMAC mismatch detected, clearing machine secret for re-authentication")
+			c.cfg.MachineSecret = ""
+			config.SetMachineSecret("")
+		} else if errMsg.Message == "Unknown machine" {
+			if c.cfg.EnrollmentKey != "" {
+				// Fall back to enrollment key for next connect attempt.
+				// Only clear from memory; config file is untouched until
+				// a new registration succeeds and SetMachineID is called.
+				log.Println("Machine not recognised by server, will re-register with enrollment key")
+				c.cfg.MachineID = ""
+				c.cfg.MachineSecret = ""
+			} else {
+				log.Println("Machine not recognised by server and no enrollment key in config - run install script to re-enroll")
+			}
+		}
+
 	case "command":
 		payload, _ := json.Marshal(msg.Payload)
 		var cmd CommandPayload
