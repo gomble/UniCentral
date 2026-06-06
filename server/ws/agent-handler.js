@@ -474,7 +474,7 @@ function storeVeeamData(machineId, veeam) {
                 INSERT INTO veeam_agent_sessions
                     (machine_id, job_id, session_id, job_name, result, state, start_time, end_time, tasks_json)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(machine_id, job_id, session_id) DO UPDATE SET
+                ON CONFLICT(machine_id, session_id) DO UPDATE SET
                     tasks_json = CASE WHEN excluded.tasks_json != '[]' THEN excluded.tasks_json ELSE veeam_agent_sessions.tasks_json END
             `);
             for (const s of sessions) {
