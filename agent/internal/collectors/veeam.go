@@ -3,6 +3,7 @@ package collectors
 import (
 	"context"
 	"encoding/json"
+	"os"
 	"os/exec"
 	"runtime"
 	"strings"
@@ -53,6 +54,24 @@ type VeeamData struct {
 	Repositories []VeeamRepository `json:"repositories"`
 }
 
+// veeamShell returns the best available PowerShell executable for Veeam.
+// Veeam v12+ requires PowerShell 7 (pwsh.exe) because its module is compiled
+// against PS 7.4. Fall back to powershell.exe only when pwsh is not installed.
+func veeamShell() string {
+	if path, err := exec.LookPath("pwsh"); err == nil {
+		return path
+	}
+	for _, p := range []string{
+		`C:\Program Files\PowerShell\7\pwsh.exe`,
+		`C:\Program Files\PowerShell\7-preview\pwsh.exe`,
+	} {
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
+	}
+	return "powershell"
+}
+
 // GetVeeamData detects a local Veeam Backup & Replication installation and, if
 // present, gathers jobs (incl. backup copy jobs), their recent session history
 // and backup repository usage via the Veeam PowerShell module. Returns nil on
@@ -66,7 +85,7 @@ func GetVeeamData() *VeeamData {
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
 
-	out, err := exec.CommandContext(ctx, "powershell", "-NoProfile", "-NonInteractive",
+	out, err := exec.CommandContext(ctx, veeamShell(), "-NoProfile", "-NonInteractive",
 		"-ExecutionPolicy", "Bypass", "-Command", veeamScript).Output()
 	if err != nil && len(out) == 0 {
 		return nil
