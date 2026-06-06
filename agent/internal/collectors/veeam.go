@@ -283,6 +283,10 @@ try {
                     if ($proxObjs.Count -eq 1) { $tasksJson = '[' + $tasksJson + ']' }
                 }
             }
+            if ($tasksJson -eq '[]' -and [string]$j.JobType -eq 'EpAgentBackup') {
+                $tObj = [PSCustomObject]@{ name = [string]$j.Name; result = [string]$s.Result; reason = '' }
+                $tasksJson = '[' + ($tObj | ConvertTo-Json -Depth 2 -Compress) + ']'
+            }
             [void]$sessOut.Add([PSCustomObject]@{
                 job_id     = $jid
                 session_id = [string]$s.Id

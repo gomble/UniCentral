@@ -471,9 +471,11 @@ function storeVeeamData(machineId, veeam) {
 
             db.prepare('DELETE FROM veeam_agent_sessions WHERE machine_id = ?').run(machineId);
             const sStmt = db.prepare(`
-                INSERT OR IGNORE INTO veeam_agent_sessions
+                INSERT INTO veeam_agent_sessions
                     (machine_id, job_id, session_id, job_name, result, state, start_time, end_time, tasks_json)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(machine_id, job_id, session_id) DO UPDATE SET
+                    tasks_json = CASE WHEN excluded.tasks_json != '[]' THEN excluded.tasks_json ELSE veeam_agent_sessions.tasks_json END
             `);
             for (const s of sessions) {
                 sStmt.run(
