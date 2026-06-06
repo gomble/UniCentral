@@ -250,11 +250,18 @@ try {
             description      = [string]$j.Description
         })
 
-        # Session history: use global lookup; fall back to per-job query (e.g. Proxmox jobs
-        # where Get-VBRBackupSession may not populate JobId correctly).
+        # Session history: standard lookup covers Backup/BackupSync/Replica job types.
+        # VmbApiPolicyTempJob (Proxmox VE plugin) and EpAgentBackup sessions live in
+        # separate DB tables not exposed by Get-VBRBackupSession; fall back to the
+        # last-session job methods which are the only PS API that reaches them.
         $jobSessions = if ($sessByJob.ContainsKey($jid)) { @($sessByJob[$jid]) } else { @() }
         if ($jobSessions.Count -eq 0) {
-            try { $jobSessions = @(Get-VBRBackupSession -Name $j.Name -ErrorAction SilentlyContinue) } catch {}
+            try {
+                $ls = $j.FindLastSession()
+                if ($ls) { $jobSessions = @($ls) }
+                $lc = $j.FindLastCompletedSession()
+                if ($lc -and [string]$lc.Id -ne [string]$ls.Id) { $jobSessions += $lc }
+            } catch {}
         }
         $hist = @($jobSessions | Sort-Object CreationTime -Descending | Select-Object -First 10)
         foreach ($s in $hist) {
