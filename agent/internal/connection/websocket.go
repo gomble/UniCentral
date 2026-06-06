@@ -180,6 +180,7 @@ func (c *Client) register() {
 			"agent_version": c.cfg.AgentVersion,
 			"ip_addresses":  ips,
 			"category":      category,
+			"hardware_id":   collectors.GetHardwareID(),
 		},
 	}
 

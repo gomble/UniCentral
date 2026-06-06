@@ -11,6 +11,7 @@ type TelemetryData struct {
 	Updates            UpdateStatus   `json:"updates"`
 	IsDomainController bool           `json:"is_domain_controller"`
 	DomainName         string         `json:"domain_name"`
+	HardwareID         string         `json:"hardware_id"`
 }
 
 func CollectAll() TelemetryData {
@@ -28,5 +29,6 @@ func CollectAll() TelemetryData {
 		Updates:            GetUpdateStatus(),
 		IsDomainController: dcInfo.IsDomainController,
 		DomainName:         dcInfo.DomainName,
+		HardwareID:         GetHardwareID(),
 	}
 }

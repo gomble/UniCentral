@@ -38,6 +38,19 @@ func GetOSVersion() string {
 	return info.Platform + " " + info.PlatformVersion
 }
 
+// GetHardwareID returns a stable per-machine identifier that survives agent
+// reinstalls but differs between physical machines. On Linux this is derived
+// from /etc/machine-id, on Windows from the registry MachineGuid. It is used to
+// identify a machine independently of its hostname, so several machines may
+// share the same hostname without being treated as one.
+func GetHardwareID() string {
+	info, err := host.Info()
+	if err != nil {
+		return ""
+	}
+	return info.HostID
+}
+
 func GetBasicMetrics() (cpuPercent float64, memPercent float64, uptimeSeconds uint64) {
 	cpuPcts, err := cpu.Percent(time.Second, false)
 	if err == nil && len(cpuPcts) > 0 {

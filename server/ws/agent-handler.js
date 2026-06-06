@@ -171,7 +171,7 @@ function handleAgentConnection(ws, request) {
 }
 
 function handleRegister(ws, key, payload) {
-    const { hostname, os_type, os_version, agent_version, ip_addresses, category } = payload;
+    const { hostname, os_type, os_version, agent_version, ip_addresses, category, hardware_id } = payload;
     const keyProvided = key ? key.slice(0, 8) + '...' : 'none';
     const keyMatch = key === config.enrollmentKey;
     console.log(`[WS] Register attempt: hostname=${hostname}, os=${os_type}, key=${keyProvided}, match=${keyMatch}`);
@@ -188,28 +188,49 @@ function handleRegister(ws, key, payload) {
         const ipStr = Array.isArray(ip_addresses) ? ip_addresses.join(', ') : (ip_addresses || '');
         const machineSecret = generateMachineSecret();
 
-        // Reinstall guard: if exactly ONE machine with this hostname exists, reuse it.
-        // Requires a unique hostname match to avoid ambiguity when multiple machines
-        // share the same hostname (e.g. two servers both named "pve").
-        const hostnameCount = hostname
-            ? db.prepare('SELECT COUNT(*) as n FROM machines WHERE hostname = ?').get(hostname).n
-            : 0;
-        const existing = hostnameCount === 1
-            ? db.prepare('SELECT * FROM machines WHERE hostname = ?').get(hostname)
-            : null;
+        // Identify the machine by its stable hardware id so several machines may
+        // share the same hostname without being merged into one entry. A
+        // unique-hostname match is only used as a fallback for legacy agents/rows
+        // that have no hardware id yet, so reinstalling an older agent is still
+        // recognised instead of creating a duplicate.
+        let existing = null;
+        if (hardware_id) {
+            existing = db.prepare('SELECT * FROM machines WHERE hardware_id = ?').get(hardware_id) || null;
+        }
+        if (!existing && hostname) {
+            const sameHostname = db.prepare('SELECT * FROM machines WHERE hostname = ?').all(hostname);
+            if (sameHostname.length === 1 && !sameHostname[0].hardware_id) {
+                existing = sameHostname[0];
+            }
+        }
+
+        // If the matched machine is still actively connected, this is not a
+        // reinstall but a second, distinct machine that happens to share the
+        // same hardware id or hostname (e.g. a VM cloned without regenerating
+        // its machine-id). Register it as its own entry instead of merging.
+        if (existing) {
+            const liveWs = connectedAgents.get(existing.machine_id);
+            if (liveWs && liveWs !== ws && liveWs.readyState === WebSocket.OPEN) {
+                console.log(`[WS] Match ${existing.machine_id} (${existing.hostname}) is already online — registering ${hostname} as a separate machine`);
+                existing = null;
+            }
+        }
 
         if (existing) {
+            const hwid = hardware_id || existing.hardware_id || '';
             db.prepare(`
                 UPDATE machines SET
+                    hostname = ?,
                     os_type = COALESCE(?, os_type),
                     agent_version = ?,
                     ip_address = ?,
                     category = COALESCE(?, category),
+                    hardware_id = ?,
                     machine_secret = ?,
                     status = 'online',
                     last_seen = CURRENT_TIMESTAMP
                 WHERE machine_id = ?
-            `).run(os_type || null, agent_version || '', ipStr, category || null, machineSecret, existing.machine_id);
+            `).run(hostname || existing.hostname, os_type || null, agent_version || '', ipStr, category || null, hwid, machineSecret, existing.machine_id);
 
             ws._machineId = existing.machine_id;
             connectedAgents.set(existing.machine_id, ws);
@@ -221,7 +242,8 @@ function handleRegister(ws, key, payload) {
                 telemetry_interval: config.telemetryInterval
             }));
 
-            console.log(`[WS] Reinstalled agent matched by hostname to existing machine: ${existing.machine_id} (${hostname})`);
+            const matchedBy = hardware_id && existing.hardware_id === hardware_id ? 'hardware id' : 'hostname';
+            console.log(`[WS] Reinstalled agent matched by ${matchedBy} to existing machine: ${existing.machine_id} (${hostname})`);
             broadcastToDashboards({ type: 'machine_connected', machineId: existing.machine_id });
             return;
         }
@@ -231,8 +253,8 @@ function handleRegister(ws, key, payload) {
         const machineId = uuidv4();
 
         db.prepare(`
-            INSERT INTO machines (machine_id, hostname, os_type, category, agent_version, ip_address, status, last_seen, machine_secret)
-            VALUES (?, ?, ?, ?, ?, ?, 'online', CURRENT_TIMESTAMP, ?)
+            INSERT INTO machines (machine_id, hostname, os_type, category, agent_version, ip_address, status, last_seen, machine_secret, hardware_id)
+            VALUES (?, ?, ?, ?, ?, ?, 'online', CURRENT_TIMESTAMP, ?, ?)
         `).run(
             machineId,
             hostname || 'unknown',
@@ -240,7 +262,8 @@ function handleRegister(ws, key, payload) {
             category || 'client',
             agent_version || '',
             ipStr,
-            machineSecret
+            machineSecret,
+            hardware_id || ''
         );
 
         ws._machineId = machineId;
@@ -283,7 +306,8 @@ function handleRegister(ws, key, payload) {
             status = 'online',
             last_seen = CURRENT_TIMESTAMP,
             registration_token = NULL,
-            machine_secret = ?
+            machine_secret = ?,
+            hardware_id = ?
         WHERE machine_id = ?
     `).run(
         hostname || machine.hostname,
@@ -291,6 +315,7 @@ function handleRegister(ws, key, payload) {
         agent_version || '',
         Array.isArray(ip_addresses) ? ip_addresses.join(', ') : (ip_addresses || ''),
         machineSecret,
+        hardware_id || machine.hardware_id || '',
         machine.machine_id
     );
 
@@ -338,6 +363,13 @@ function handleHeartbeat(machineId, payload) {
 
 function handleTelemetry(machineId, payload) {
     if (!machineId) return;
+
+    // Backfill the stable hardware id for machines enrolled before this field
+    // existed, so duplicate-hostname machines can no longer be merged on reinstall.
+    if (payload.hardware_id) {
+        db.prepare("UPDATE machines SET hardware_id = ? WHERE machine_id = ? AND (hardware_id IS NULL OR hardware_id = '')")
+            .run(payload.hardware_id, machineId);
+    }
 
     db.prepare(`
         INSERT INTO machine_telemetry (machine_id, cpu_percent, memory_percent, uptime_seconds, data_json)
