@@ -265,6 +265,24 @@ try {
         }
         $hist = @($jobSessions | Sort-Object CreationTime -Descending | Select-Object -First 10)
         foreach ($s in $hist) {
+            $tasksJson = GetTasks $s
+            if ($tasksJson -eq '[]' -and [string]$j.JobType -eq 'VmbApiPolicyTempJob') {
+                $proxObjs = New-Object System.Collections.ArrayList
+                try {
+                    $jObjs = @($j.GetObjectsInJob())
+                    foreach ($obj in $jObjs) {
+                        [void]$proxObjs.Add([PSCustomObject]@{
+                            name   = [string]$obj.Name
+                            result = [string]$s.Result
+                            reason = ''
+                        })
+                    }
+                } catch {}
+                if ($proxObjs.Count -gt 0) {
+                    $tasksJson = ($proxObjs | ConvertTo-Json -Depth 2 -Compress)
+                    if ($proxObjs.Count -eq 1) { $tasksJson = '[' + $tasksJson + ']' }
+                }
+            }
             [void]$sessOut.Add([PSCustomObject]@{
                 job_id     = $jid
                 session_id = [string]$s.Id
@@ -273,7 +291,7 @@ try {
                 state      = [string]$s.State
                 start      = IsoOrNull $s.CreationTime
                 end        = IsoOrNull $s.EndTime
-                tasks_json = GetTasks $s
+                tasks_json = $tasksJson
             })
         }
     }
