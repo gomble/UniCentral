@@ -204,6 +204,59 @@ try {
     }
 } catch {}
 
+# --- Computer/Agent backup jobs (Veeam Agent managed jobs, v11+) ---
+try {
+    $agentJobs = @(Get-VBRComputerBackupJob -ErrorAction SilentlyContinue)
+    foreach ($j in $agentJobs) {
+        $jid = [string]$j.Id
+        $lastResult = ''; $lastState = ''; $lastRun = ''
+        $agentSessList = @()
+        try {
+            $agentSessList = @(Get-VBRComputerBackupJobSession -Name $j.Name -ErrorAction SilentlyContinue | Sort-Object CreationTime -Descending)
+            if ($agentSessList.Count -gt 0) {
+                $last = $agentSessList[0]
+                $lastResult = [string]$last.Result
+                $lastState  = [string]$last.State
+                $lastRun    = IsoOrNull $last.CreationTime
+            }
+        } catch {}
+        $nextRun = ''
+        try { $nextRun = IsoOrNull $j.GetScheduleOptions().NextRun } catch {}
+        $target = ''; $repoId = ''
+        try { $tr = $j.GetTargetRepository(); if ($tr) { $target = [string]$tr.Name; $repoId = [string]$tr.Id } } catch {}
+        $sched = $true
+        try { $sched = [bool]$j.IsScheduleEnabled } catch {}
+
+        [void]$jobOut.Add([PSCustomObject]@{
+            id               = $jid
+            name             = [string]$j.Name
+            type             = 'AgentBackup'
+            is_copy          = $false
+            last_result      = $lastResult
+            last_state       = $lastState
+            last_run         = $lastRun
+            next_run         = $nextRun
+            schedule_enabled = $sched
+            target_repo      = $target
+            repo_id          = $repoId
+            description      = [string]$j.Description
+        })
+
+        $hist = @($agentSessList | Select-Object -First 10)
+        foreach ($s in $hist) {
+            [void]$sessOut.Add([PSCustomObject]@{
+                job_id     = $jid
+                session_id = [string]$s.Id
+                job_name   = [string]$j.Name
+                result     = [string]$s.Result
+                state      = [string]$s.State
+                start      = IsoOrNull $s.CreationTime
+                end        = IsoOrNull $s.EndTime
+            })
+        }
+    }
+} catch {}
+
 $out = '{"installed":true,"collected":true,"version":' + ([string]$version | ConvertTo-Json -Compress) +
     ',"jobs":' + (JsonArray $jobOut) +
     ',"sessions":' + (JsonArray $sessOut) +

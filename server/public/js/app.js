@@ -1074,6 +1074,11 @@ const app = createApp({
             if (/failed/i.test(result)) return 'offline';
             return 'warning';
         }
+        function veeamJobTypeLabel(job) {
+            if (job.is_copy_job) return 'Backup Copy';
+            const map = { AgentBackup: 'Agent Backup', Backup: 'Backup', BackupSync: 'Backup Copy', EpAgentManagement: 'Agent', Replica: 'Replikation', FileCopy: 'Dateikopie', BackupToTape: 'Tape' };
+            return map[job.job_type] || job.job_type || '–';
+        }
 
         async function regenerateEnrollmentKey() {
             if (!await confirmDialog('Enrollment Key neu generieren? Bestehende Install-Befehle werden ungueltig.')) return;
@@ -1957,7 +1962,7 @@ const app = createApp({
             batchInstallPkg, batchInstallMethod, selectedMachines, commandHistory, liveCommand,
             veeamInstances, newVeeam,
             veeamServers, showVeeamHistory, veeamHistoryJob, veeamHistorySessions, veeamHistoryLoading,
-            loadVeeamServers, openVeeamHistory, veeamRepoPercent, veeamRepoColor, veeamResultClass,
+            loadVeeamServers, openVeeamHistory, veeamRepoPercent, veeamRepoColor, veeamResultClass, veeamJobTypeLabel,
             veeamServerJobColumns,
             tokenMachine, selectedMachine, machineDisks, machineServices, machineFirewall,
             machineUpdates, machineShares, telemetryHistory, telemetryRange,

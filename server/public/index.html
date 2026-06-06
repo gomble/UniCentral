@@ -694,7 +694,7 @@
                                 <span v-if="!j.schedule_enabled" style="font-size:0.7rem;color:var(--text-muted);margin-left:5px">(Zeitplan aus)</span>
                             </template>
                             <template #cell-job_type="{ row: j }">
-                                <span class="os-badge">{{ j.is_copy_job ? 'Backup Copy' : (j.job_type || '–') }}</span>
+                                <span class="os-badge">{{ veeamJobTypeLabel(j) }}</span>
                             </template>
                             <template #cell-last_result="{ row: j }">
                                 <span v-if="j.last_result" class="status-badge" :class="veeamResultClass(j.last_result)">{{ j.last_result }}</span>
@@ -749,7 +749,7 @@
                         </div>
                         <div v-if="veeamHistoryJob" style="font-size:0.85rem;color:var(--text-secondary);margin-bottom:1rem">
                             <strong style="color:var(--text-primary)">{{ veeamHistoryJob.job_name }}</strong>
-                            <span class="os-badge" style="margin-left:0.4rem">{{ veeamHistoryJob.is_copy_job ? 'Backup Copy' : (veeamHistoryJob.job_type || '–') }}</span>
+                            <span class="os-badge" style="margin-left:0.4rem">{{ veeamJobTypeLabel(veeamHistoryJob) }}</span>
                             <span v-if="veeamHistoryJob.target_repo"> → {{ veeamHistoryJob.target_repo }}</span>
                         </div>
                         <div style="flex:1;overflow-y:auto;min-height:0">
