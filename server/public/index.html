@@ -295,6 +295,39 @@
                         <button class="btn btn-ghost btn-sm" @click="updatesSelected = []">Auswahl aufheben</button>
                     </div>
 
+                    <!-- Batch Job Results Panel -->
+                    <div v-if="batchJobResults" class="card" style="margin-bottom:1rem">
+                        <div style="display:flex;align-items:center;gap:0.8rem;margin-bottom:0.8rem;flex-wrap:wrap">
+                            <div>
+                                <strong style="font-size:0.9rem">Letzter Batch-Job</strong>
+                                <span style="font-size:0.75rem;color:var(--text-muted);margin-left:0.5rem">{{ batchJobResults.label }} · {{ formatTime(batchJobResults.triggeredAt) }}</span>
+                            </div>
+                            <div style="display:flex;gap:0.4rem;align-items:center;margin-left:auto">
+                                <span class="status-badge online" style="font-size:0.7rem">{{ batchJobResults.machines.filter(m=>m.status==='completed').length }} OK</span>
+                                <span v-if="batchJobResults.machines.filter(m=>m.status==='failed').length" class="status-badge offline" style="font-size:0.7rem">{{ batchJobResults.machines.filter(m=>m.status==='failed').length }} Fehler</span>
+                                <span v-if="batchJobResults.machines.filter(m=>m.status==='disconnected').length" class="status-badge warning" style="font-size:0.7rem">{{ batchJobResults.machines.filter(m=>m.status==='disconnected').length }} getrennt</span>
+                                <span v-if="batchJobResults.machines.filter(m=>['sent','running'].includes(m.status)).length" class="status-badge warning" style="font-size:0.7rem"><span class="pulse-dot"></span> {{ batchJobResults.machines.filter(m=>['sent','running'].includes(m.status)).length }} läuft</span>
+                                <button class="btn btn-ghost btn-sm" @click="batchJobResults = null">✕</button>
+                            </div>
+                        </div>
+                        <div style="display:flex;flex-direction:column;gap:0.3rem">
+                            <div v-for="m in batchJobResults.machines" :key="m.machine_id"
+                                 style="display:flex;align-items:flex-start;gap:0.6rem;padding:0.4rem 0.6rem;background:var(--bg-secondary);border-radius:var(--radius);flex-wrap:wrap">
+                                <span class="status-badge"
+                                    :class="m.status==='completed'?'online':m.status==='failed'?'offline':m.status==='error'?'offline':'warning'"
+                                    style="font-size:0.7rem;min-width:72px;text-align:center;flex-shrink:0">
+                                    {{ m.status==='sent'?'gesendet':m.status==='running'?'läuft…':m.status==='completed'?'OK':m.status==='failed'?'Fehler':m.status==='disconnected'?'getrennt':'kein Kontakt' }}
+                                </span>
+                                <span style="font-size:0.82rem;font-weight:500;flex:1;min-width:120px">{{ m.hostname }}</span>
+                                <span v-if="m.completedAt" style="font-size:0.72rem;color:var(--text-muted)">{{ formatTime(m.completedAt) }}</span>
+                                <span v-if="m.sendError" style="font-size:0.72rem;color:var(--danger)">{{ m.sendError }}</span>
+                                <div v-if="m.output" style="width:100%;margin-top:0.2rem">
+                                    <pre style="background:var(--bg-primary);border:1px solid var(--border);border-radius:4px;padding:0.4rem 0.6rem;max-height:120px;overflow:auto;font-size:0.7rem;white-space:pre-wrap;margin:0">{{ m.output }}</pre>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Machine Table -->
                     <div class="card">
                         <data-table :rows="updatesFilteredMachines" :columns="updatesColumns" row-key="machine_id"
@@ -380,9 +413,12 @@
                         <div v-else>
                             <div v-for="log in updatesLogs" :key="log.id" style="border:1px solid var(--border);border-radius:var(--radius);margin-bottom:0.8rem;overflow:hidden">
                                 <div style="display:flex;align-items:center;gap:0.8rem;padding:0.6rem 0.8rem;background:var(--bg-secondary);cursor:pointer" @click="log._open = !log._open">
-                                    <span class="status-badge" :class="log.status === 'completed' ? 'online' : log.status === 'failed' ? 'offline' : 'warning'" style="font-size:0.7rem">{{ log.status }}</span>
+                                    <span class="status-badge" :class="log.status==='completed'?'online':log.status==='failed'?'offline':log.status==='disconnected'?'offline':'warning'" style="font-size:0.7rem">
+                                        {{ log.status==='completed'?'OK':log.status==='failed'?'Fehler':log.status==='disconnected'?'getrennt':log.status==='running'?'läuft…':'gesendet' }}
+                                    </span>
                                     <span style="font-size:0.8rem;color:var(--text-secondary)">{{ formatTime(log.created_at) }}</span>
                                     <span style="font-size:0.75rem;color:var(--text-muted)">{{ log.command_type === 'trigger_updates_reboot' ? 'mit Neustart' : 'ohne Neustart' }}</span>
+                                    <span v-if="log.status==='disconnected'" style="font-size:0.72rem;color:var(--text-muted)">Verbindung während Update getrennt (Neustart?)</span>
                                     <span v-if="log.completed_at" style="font-size:0.72rem;color:var(--text-muted);margin-left:auto">{{ formatTime(log.completed_at) }}</span>
                                     <span style="color:var(--text-muted);font-size:0.8rem">{{ log._open ? '▲' : '▼' }}</span>
                                 </div>

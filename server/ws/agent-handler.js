@@ -132,6 +132,7 @@ function handleAgentConnection(ws, request) {
             currentMachineId = machineId;
             connectedAgents.set(machineId, ws);
             ws._machineId = machineId;
+            markStaleCommands(machineId);
             db.prepare('UPDATE machines SET status = ?, last_seen = CURRENT_TIMESTAMP WHERE machine_id = ?')
                 .run('online', machineId);
             ws.send(createMessage(MSG_TYPES.REGISTERED, {
@@ -146,6 +147,7 @@ function handleAgentConnection(ws, request) {
         currentMachineId = machineId;
         connectedAgents.set(machineId, ws);
         ws._machineId = machineId;
+        markStaleCommands(machineId);
         db.prepare('UPDATE machines SET status = ?, last_seen = CURRENT_TIMESTAMP WHERE machine_id = ?')
             .run('online', machineId);
         broadcastToDashboards({ type: 'machine_connected', machineId });
@@ -159,6 +161,7 @@ function handleAgentConnection(ws, request) {
             currentMachineId = machineId;
             connectedAgents.set(machineId, ws);
             ws._machineId = machineId;
+            markStaleCommands(machineId);
             db.prepare('UPDATE machines SET status = ?, last_seen = CURRENT_TIMESTAMP WHERE machine_id = ?')
                 .run('online', machineId);
             broadcastToDashboards({ type: 'machine_connected', machineId });
@@ -497,6 +500,18 @@ function storeVeeamData(machineId, veeam) {
     } catch (err) {
         console.error('[WS] storeVeeamData error:', err.message);
     }
+}
+
+// When an agent reconnects any commands that were still pending from the previous
+// session are stale — the agent has no record of them. Mark them so the UI
+// doesn't show an endless "running" spinner.
+function markStaleCommands(machineId) {
+    try {
+        db.prepare(`
+            UPDATE command_log SET status = 'disconnected', completed_at = CURRENT_TIMESTAMP
+            WHERE machine_id = ? AND status IN ('sent', 'running')
+        `).run(machineId);
+    } catch {}
 }
 
 function handleCommandResult(machineId, payload) {

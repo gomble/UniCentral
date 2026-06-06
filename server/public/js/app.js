@@ -211,6 +211,7 @@ const app = createApp({
         const updatesPendingModal = ref(null);
         const updatesScheduleForm = reactive({ time: '', reboot: true });
         const updatesLiveStreams = ref({});
+        const batchJobResults = ref(null);
         const tokenMachine = ref({});
         const selectedMachine = ref(null);
         const machineDisks = ref([]);
@@ -332,6 +333,13 @@ const app = createApp({
 
         function handleWsEvent(data) {
             if (data.type === 'machine_connected' || data.type === 'machine_disconnected' || data.type === 'machine_registered') {
+                if (data.type === 'machine_disconnected' && batchJobResults.value) {
+                    const entry = batchJobResults.value.machines.find(m => m.machine_id === data.machineId);
+                    if (entry && ['sent', 'running'].includes(entry.status)) {
+                        entry.status = 'disconnected';
+                        entry.completedAt = new Date().toISOString();
+                    }
+                }
                 loadMachines();
                 loadStats();
             } else if (data.type === 'heartbeat') {
@@ -415,6 +423,16 @@ const app = createApp({
                 loadUpdatesMachines();
                 if (updatesLogMachine.value && updatesLogMachine.value.machine_id === data.machineId) {
                     loadMachineUpdateLogs(data.machineId);
+                }
+            }
+
+            // Update batch job results panel
+            if (batchJobResults.value && isUpdateCmd) {
+                const entry = batchJobResults.value.machines.find(m => m.machine_id === data.machineId);
+                if (entry) {
+                    entry.status = p.status || 'completed';
+                    if (p.result) entry.output = p.result;
+                    if (!['sent', 'running'].includes(entry.status)) entry.completedAt = new Date().toISOString();
                 }
             }
 
@@ -581,6 +599,24 @@ const app = createApp({
                 const r = await res.json();
                 const ok = r.results.filter(x => x.success).length;
                 toast(`Update-Befehl gesendet an ${ok} Maschine(n).`, 'success');
+                batchJobResults.value = {
+                    triggeredAt: new Date().toISOString(),
+                    label,
+                    machines: online.map(mid => {
+                        const m = updatesMachines.value.find(x => x.machine_id === mid);
+                        const sent = r.results.find(x => x.machine_id === mid);
+                        return {
+                            machine_id: mid,
+                            hostname: m ? (m.display_name || m.hostname) : mid,
+                            os_type: m?.os_type || '',
+                            sendSuccess: sent?.success ?? false,
+                            sendError: sent?.error || '',
+                            status: sent?.success ? 'sent' : 'error',
+                            output: '',
+                            completedAt: null
+                        };
+                    })
+                };
                 updatesSelected.value = [];
                 await loadUpdatesMachines();
             }
@@ -1974,7 +2010,7 @@ const app = createApp({
             triggerUpdates, scheduleUpdates, scheduleTime,
             toggleAllMachines, batchCommand, executeBatchInstall,
             updatesOsTab, updatesMachines, updatesSelected, updatesBatchTime, updatesBatchReboot,
-            updatesFilteredMachines, updatesToggleAll, triggerBatchUpdates, triggerSingleUpdate,
+            updatesFilteredMachines, updatesToggleAll, triggerBatchUpdates, triggerSingleUpdate, batchJobResults,
             updatesLogMachine, updatesLogs, updatesLogsLoading, openUpdateLog, loadMachineUpdateLogs,
             updatesScheduleMachine, updatesScheduleForm, openScheduleModal, saveSchedule, removeSchedule,
             setBatchSchedule, updatesLiveStreams,
