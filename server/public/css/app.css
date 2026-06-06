@@ -589,11 +589,29 @@ body {
     /* ── Batch action bar ── */
     .batch-bar { flex-wrap: wrap; gap: 0.5rem; }
 
+    /* ── Main content: multi-column grids → single column ── */
+    .main-content [style*="grid-template-columns:1fr 1fr"],
+    .main-content [style*="grid-template-columns: 1fr 1fr"] {
+        grid-template-columns: 1fr !important;
+    }
+    .main-content [style*="210px"] {
+        grid-template-columns: 1fr !important;
+    }
+    /* Selects with inline min-width: fill container */
+    .main-content select[style*="min-width"] {
+        min-width: 0 !important;
+        width: 100%;
+    }
+
     /* ── Disk explorer modal: larger on mobile ── */
     .modal-disk-explorer {
         max-height: 95vh;
         border-radius: var(--radius) var(--radius) 0 0;
     }
+    /* Disk explorer table: no forced min-width, hide bar-chart column */
+    .modal-disk-explorer .machine-table { min-width: 0 !important; }
+    .modal-disk-explorer .machine-table th:last-child,
+    .modal-disk-explorer .machine-table td:last-child { display: none; }
 }
 
 /* ─── 480 px (small phones) ─── */

@@ -1850,7 +1850,7 @@ const app = createApp({
             { key: 'machine', label: 'Maschine', value: c => c.display_name || c.hostname || (c.machine_id || '').slice(0, 8) },
             { key: 'command_type', label: 'Befehl', filter: true },
             { key: 'status', label: 'Status', filter: true },
-            { key: 'result', label: 'Ergebnis', placeholder: '–' }
+            { key: 'result', label: 'Ergebnis', placeholder: '–', thClass: M, tdClass: M }
         ];
         const servicesColumns = [
             { key: 'name', label: 'Dienst', value: s => s.display_name || s.service_name },
@@ -1861,7 +1861,7 @@ const app = createApp({
             { key: 'name', label: 'Regel', value: r => r.rule_name || r.name },
             { key: 'direction', label: 'Richtung', filter: true },
             { key: 'action', label: 'Aktion', filter: true },
-            { key: 'port', label: 'Port', placeholder: '–' }
+            { key: 'port', label: 'Port', placeholder: '–', thClass: M, tdClass: M }
         ];
         const sharesColumns = [
             { key: 'share_name', label: 'Freigabe' },
@@ -1872,21 +1872,21 @@ const app = createApp({
             { key: 'job_name', label: 'Job' },
             { key: 'job_type', label: 'Typ', filter: true, placeholder: '–' },
             { key: 'last_run_status', label: 'Letzter Status', filter: true, placeholder: 'Unbekannt' },
-            { key: 'last_run_time', label: 'Letzte Ausfuehrung', value: j => formatTime(j.last_run_time), sortValue: j => j.last_run_time || '' },
-            { key: 'next_run_time', label: 'Naechster Lauf', value: j => formatTime(j.next_run_time), sortValue: j => j.next_run_time || '' }
+            { key: 'last_run_time', label: 'Letzte Ausfuehrung', value: j => formatTime(j.last_run_time), sortValue: j => j.last_run_time || '', thClass: M, tdClass: M },
+            { key: 'next_run_time', label: 'Naechster Lauf', value: j => formatTime(j.next_run_time), sortValue: j => j.next_run_time || '', thClass: M, tdClass: M }
         ];
         const adUserColumns = [
             { key: 'sam_account_name', label: 'Benutzername' },
             { key: 'name', label: 'Name', value: u => u.display_name || ((u.given_name || '') + ' ' + (u.surname || '')).trim() },
-            { key: 'email', label: 'E-Mail', placeholder: '–' },
-            { key: 'department', label: 'Abteilung', filter: true, placeholder: '–' },
+            { key: 'email', label: 'E-Mail', placeholder: '–', thClass: M, tdClass: M },
+            { key: 'department', label: 'Abteilung', filter: true, placeholder: '–', thClass: M, tdClass: M },
             { key: 'status', label: 'Status', filter: true, value: u => (u.enabled ? 'Aktiv' : 'Deakt.'), sortValue: u => (u.enabled ? 1 : 0) },
             { key: '_actions', label: 'Aktionen', sortable: false, searchable: false, stopClick: true }
         ];
         const localUserColumns = [
             { key: 'name', label: 'Benutzername' },
             { key: 'full_name', label: 'Anzeigename', placeholder: '–' },
-            { key: 'description', label: 'Beschreibung', placeholder: '–' },
+            { key: 'description', label: 'Beschreibung', placeholder: '–', thClass: M, tdClass: M },
             { key: 'status', label: 'Status', filter: true, value: u => (u.enabled ? 'Aktiv' : 'Deakt.'), sortValue: u => (u.enabled ? 1 : 0) },
             { key: '_actions', label: 'Aktionen', sortable: false, searchable: false, stopClick: true }
         ];
@@ -1895,7 +1895,7 @@ const app = createApp({
             { key: 'ip', label: 'IP' },
             { key: 'hostname', label: 'Hostname', placeholder: '–' },
             { key: 'os_guess', label: 'OS', filter: true },
-            { key: 'category', label: 'Kategorie', filter: true }
+            { key: 'category', label: 'Kategorie', filter: true, thClass: M, tdClass: M }
         ];
 
         return {
