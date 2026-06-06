@@ -95,9 +95,29 @@ $ErrorActionPreference = 'SilentlyContinue'
 $svc = Get-Service -Name 'VeeamBackupSvc' -ErrorAction SilentlyContinue
 if (-not $svc) { Write-Output '{"installed":false}'; exit 0 }
 
-# Load the Veeam PowerShell module (v11/v12), falling back to the legacy snapin.
+# Load the Veeam PowerShell module — try multiple strategies since the agent
+# may run as SYSTEM without the Veeam path in PSModulePath.
 $loaded = $false
+# 1. Standard PSModulePath (works for interactive sessions)
 try { Import-Module Veeam.Backup.PowerShell -ErrorAction Stop; $loaded = $true } catch {}
+# 2. Explicit DLL path — v11/v12 console install
+if (-not $loaded) {
+    $candidates = @(
+        'C:\Program Files\Veeam\Backup and Replication\Console\Veeam.Backup.PowerShell.dll',
+        'C:\Program Files\Veeam\Backup and Replication\Backup\Veeam.Backup.PowerShell.dll'
+    )
+    foreach ($p in $candidates) {
+        if (-not $loaded -and (Test-Path $p)) {
+            try { Import-Module $p -ErrorAction Stop; $loaded = $true } catch {}
+        }
+    }
+}
+# 3. Scan Program Files for the DLL (catches non-default install paths)
+if (-not $loaded) {
+    $found = Get-ChildItem 'C:\Program Files\Veeam' -Recurse -Filter 'Veeam.Backup.PowerShell.dll' -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($found) { try { Import-Module $found.FullName -ErrorAction Stop; $loaded = $true } catch {} }
+}
+# 4. Legacy PSSnapin (v9/v10)
 if (-not $loaded) { try { Add-PSSnapin VeeamPSSnapIn -ErrorAction Stop; $loaded = $true } catch {} }
 if (-not $loaded) {
     Write-Output '{"installed":true,"collected":false,"version":"","jobs":[],"sessions":[],"repositories":[]}'
