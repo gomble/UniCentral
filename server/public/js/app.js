@@ -233,6 +233,25 @@ const app = createApp({
         const diskExplorerHistory = ref([]);
         const showDiskExplorer = ref(false);
 
+        const diskExplorerBreadcrumbs = computed(() => {
+            if (!diskExplorerData.value) return [];
+            const path = diskExplorerData.value.path;
+            const isWin = /^[A-Za-z]:\\/i.test(path);
+            if (isWin) {
+                const parts = path.split('\\').filter(Boolean);
+                return parts.map((part, i) => ({
+                    label: i === 0 ? part + '\\' : part,
+                    path: i === 0 ? part + '\\' : parts.slice(0, i + 1).join('\\')
+                }));
+            }
+            const parts = path.split('/').filter(Boolean);
+            const crumbs = [{ label: '/', path: '/' }];
+            return crumbs.concat(parts.map((part, i) => ({
+                label: part,
+                path: '/' + parts.slice(0, i + 1).join('/')
+            })));
+        });
+
         const settingsForm = reactive({
             smtpHost: '',
             smtpPort: 587,
@@ -354,7 +373,7 @@ const app = createApp({
                 if (p.status === 'completed') { toast(p.result || 'Operation erfolgreich', 'success'); loadLocalUsers(); }
                 else if (p.status === 'failed') { toast('Fehler: ' + (p.result || ''), 'error'); }
             }
-            if (p.command_type === 'scan_disk') {
+            if (p.command_type === 'scan_disk' && data.machineId === diskExplorerMachineId.value) {
                 if (p.status === 'completed') {
                     try { diskExplorerData.value = JSON.parse(p.result); } catch {}
                     diskExplorerLoading.value = false;
@@ -1738,12 +1757,21 @@ const app = createApp({
         // ---- Disk Explorer ----
         function openDiskExplorer(drive) {
             diskExplorerMachineId.value = selectedMachine.value.machine_id;
-            const startPath = drive.drive_letter || drive.mount_point;
+            let startPath = drive.drive_letter || drive.mount_point;
+            // Ensure Windows drive letters have a trailing backslash (C: → C:\)
+            if (startPath && /^[A-Za-z]:$/.test(startPath)) startPath += '\\';
             diskExplorerPath.value = startPath;
             diskExplorerData.value = null;
             diskExplorerHistory.value = [];
             showDiskExplorer.value = true;
             startDiskScan(startPath);
+        }
+
+        function diskExplorerGoTo(path) {
+            diskExplorerData.value = null;
+            diskExplorerHistory.value = [];
+            diskExplorerPath.value = path;
+            startDiskScan(path);
         }
 
         async function startDiskScan(customPath) {
@@ -1915,8 +1943,8 @@ const app = createApp({
             firewallColumns, sharesColumns, veeamJobColumns, adUserColumns,
             localUserColumns, scanResultColumns,
             diskExplorerMachineId, diskExplorerPath, diskExplorerLoading, diskExplorerData, diskExplorerHistory,
-            showDiskExplorer, openDiskExplorer, startDiskScan, diskExplorerDrillDown, diskExplorerBack,
-            diskExplorerBarWidth, diskExplorerBarColor
+            showDiskExplorer, openDiskExplorer, diskExplorerGoTo, startDiskScan, diskExplorerDrillDown, diskExplorerBack,
+            diskExplorerBreadcrumbs, diskExplorerBarWidth, diskExplorerBarColor
         };
     }
 });

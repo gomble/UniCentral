@@ -321,6 +321,8 @@ body {
     max-width: 150px;
 }
 .data-table .dt-row-clickable { cursor: pointer; }
+.machine-table tbody tr.row-clickable { cursor: pointer; }
+.machine-table tbody tr.row-clickable:hover { background: var(--bg-secondary); }
 .dt-empty { color: var(--text-muted); padding: 1rem 0; text-align: center; }
 
 /* Status Badge */
