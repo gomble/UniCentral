@@ -452,7 +452,7 @@ function storeVeeamData(machineId, veeam) {
         const replace = db.transaction(() => {
             db.prepare('DELETE FROM veeam_agent_jobs WHERE machine_id = ?').run(machineId);
             const jStmt = db.prepare(`
-                INSERT INTO veeam_agent_jobs
+                INSERT OR IGNORE INTO veeam_agent_jobs
                     (machine_id, job_id, job_name, job_type, is_copy_job, last_result, last_state,
                      last_run, next_run, schedule_enabled, target_repo, repo_id, description)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
