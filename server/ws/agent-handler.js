@@ -442,11 +442,12 @@ function storeVeeamData(machineId, veeam) {
         db.prepare('UPDATE machines SET is_veeam_server = 1, veeam_version = ? WHERE machine_id = ?')
             .run(veeam.version || '', machineId);
 
-        if (!veeam.collected) return;
-
         const jobs = Array.isArray(veeam.jobs) ? veeam.jobs : [];
         const sessions = Array.isArray(veeam.sessions) ? veeam.sessions : [];
         const repos = Array.isArray(veeam.repositories) ? veeam.repositories : [];
+        console.log(`[Veeam] ${machineId} collected=${veeam.collected} jobs=${jobs.length} sessions=${sessions.length} repos=${repos.length} version=${veeam.version||''}`);
+
+        if (!veeam.collected) return;
 
         const replace = db.transaction(() => {
             db.prepare('DELETE FROM veeam_agent_jobs WHERE machine_id = ?').run(machineId);
