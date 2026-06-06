@@ -1194,11 +1194,18 @@ const app = createApp({
         function formatTime(t) {
             if (!t) return '–';
             const d = new Date(t + 'Z');
+            if (isNaN(d.getTime())) return '–';
             const now = new Date();
             const diff = (now - d) / 1000;
-            if (diff < 60) return 'gerade eben';
-            if (diff < 3600) return `vor ${Math.floor(diff / 60)} Min.`;
-            if (diff < 86400) return `vor ${Math.floor(diff / 3600)} Std.`;
+            if (Math.abs(diff) < 60) return 'gerade eben';
+            if (diff > 0) {
+                if (diff < 3600) return `vor ${Math.floor(diff / 60)} Min.`;
+                if (diff < 86400) return `vor ${Math.floor(diff / 3600)} Std.`;
+            } else {
+                const f = -diff;
+                if (f < 3600) return `in ${Math.floor(f / 60)} Min.`;
+                if (f < 86400) return `in ${Math.floor(f / 3600)} Std.`;
+            }
             return d.toLocaleDateString('de-DE') + ' ' + d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
         }
 

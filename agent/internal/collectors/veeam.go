@@ -335,8 +335,17 @@ try {
             description      = [string]$j.Description
         })
 
+        $agentMachineName = ''
+        try { $agentMachineName = [string]$j.Object.Name } catch {}
+        try { if (-not $agentMachineName) { $agentMachineName = [string]$j.Object.DisplayName } } catch {}
+
         $hist = @($agentSessList | Select-Object -First 10)
         foreach ($s in $hist) {
+            $tasksJson = GetTasks $s
+            if ($tasksJson -eq '[]' -and $agentMachineName) {
+                $tObj = [PSCustomObject]@{ name = $agentMachineName; result = [string]$s.Result; reason = '' }
+                $tasksJson = '[' + ($tObj | ConvertTo-Json -Depth 2 -Compress) + ']'
+            }
             [void]$sessOut.Add([PSCustomObject]@{
                 job_id     = $jid
                 session_id = [string]$s.Id
@@ -345,7 +354,7 @@ try {
                 state      = [string]$s.State
                 start      = IsoOrNull $s.CreationTime
                 end        = IsoOrNull $s.EndTime
-                tasks_json = GetTasks $s
+                tasks_json = $tasksJson
             })
         }
     }
