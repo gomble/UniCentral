@@ -574,7 +574,52 @@ body {
     /* ── Tables ── */
     .dt-hide-mobile { display: none !important; }
     .mobile-only { display: block; }
-    .data-table { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+    /* Reusable data-table → stacked card layout (no horizontal scroll) */
+    .data-table table,
+    .data-table tbody,
+    .data-table tr,
+    .data-table td { display: block; width: 100%; }
+    .data-table thead { display: none; }
+    .data-table tr {
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        background: var(--bg-card);
+        margin-bottom: 0.6rem;
+        padding: 0.2rem 0.7rem;
+    }
+    .data-table td {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: 1rem;
+        text-align: right;
+        padding: 0.4rem 0;
+        border: none;
+        border-bottom: 1px solid var(--border);
+        min-width: 0;
+        word-break: break-word;
+        overflow-wrap: anywhere;
+    }
+    .data-table tr td:last-child { border-bottom: none; }
+    .data-table td::before {
+        content: attr(data-label);
+        font-size: 0.72rem;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+        font-weight: 600;
+        color: var(--text-muted);
+        text-align: left;
+        flex-shrink: 0;
+        white-space: nowrap;
+    }
+    /* Cells with no label (checkbox/select) and spanning rows: no prefix, full width */
+    .data-table td[data-label=""]::before { content: none; }
+    .data-table td[data-label=""] { justify-content: flex-end; }
+    .data-table td[colspan]::before { content: none; }
+    .data-table td[colspan] { display: block; text-align: left; }
+    .data-table tr:hover td { background: transparent; }
+    /* Hand-written tables (machine detail, disk explorer): still scroll inside their box */
     .card > .machine-table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
 
     /* ── Stats grids ── */

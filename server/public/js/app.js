@@ -133,7 +133,7 @@ const DataTable = {
             <tbody>
                 <template v-for="(row, i) in viewRows" :key="rowKeyOf(row, i)">
                     <tr :class="{ 'dt-row-clickable': rowClickable }" @click="onRowClick(row)">
-                        <td v-for="col in columns" :key="col.key || col.label" :style="col.tdStyle" :class="col.tdClass" @click="onCellClick($event, col)">
+                        <td v-for="col in columns" :key="col.key || col.label" :style="col.tdStyle" :class="col.tdClass" :data-label="col.label" @click="onCellClick($event, col)">
                             <slot :name="'cell-' + col.key" :row="row" :value="cellValue(row, col)">{{ display(row, col) }}</slot>
                         </td>
                     </tr>
