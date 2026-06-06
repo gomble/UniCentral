@@ -791,11 +791,30 @@
                         <div style="flex:1;overflow-y:auto;min-height:0">
                             <div v-if="veeamHistoryLoading" style="text-align:center;padding:2rem;color:var(--text-muted)">Lade…</div>
                             <div v-else-if="!veeamHistorySessions.length" style="color:var(--text-muted);padding:1rem 0">Keine Läufe aufgezeichnet.</div>
-                            <div v-else style="display:flex;flex-direction:column;gap:0.4rem">
-                                <div v-for="s in veeamHistorySessions" :key="s.session_id" style="display:flex;align-items:center;gap:0.7rem;flex-wrap:wrap;padding:0.5rem 0.7rem;background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius)">
-                                    <span class="status-badge" :class="veeamResultClass(s.result)" style="flex-shrink:0">{{ s.result || s.state || '–' }}</span>
-                                    <span style="font-size:0.82rem;color:var(--text-primary)">{{ formatTime(s.start_time) }}</span>
-                                    <span style="font-size:0.75rem;color:var(--text-muted);margin-left:auto">{{ s.end_time ? ('bis ' + formatTime(s.end_time)) : s.state }}</span>
+                            <div v-else style="display:flex;flex-direction:column;gap:0.5rem">
+                                <div v-for="s in veeamHistorySessions" :key="s.session_id"
+                                     style="border:1px solid var(--border);border-radius:var(--radius);overflow:hidden">
+                                    <!-- Session header row -->
+                                    <div style="display:flex;align-items:center;gap:0.7rem;flex-wrap:wrap;padding:0.5rem 0.7rem;background:var(--bg-secondary);cursor:pointer"
+                                         @click="s._open = !s._open">
+                                        <span class="status-badge" :class="veeamResultClass(s.result)" style="flex-shrink:0">{{ s.result || s.state || '–' }}</span>
+                                        <span style="font-size:0.82rem;color:var(--text-primary)">{{ formatTime(s.start_time) }}</span>
+                                        <span style="font-size:0.75rem;color:var(--text-muted)">{{ s.end_time ? ('bis ' + formatTime(s.end_time)) : s.state }}</span>
+                                        <span v-if="s.tasks && s.tasks.length" style="font-size:0.72rem;color:var(--text-muted);margin-left:auto">
+                                            {{ s.tasks.filter(t=>/success/i.test(t.result)).length }}/{{ s.tasks.length }} OK
+                                        </span>
+                                        <span style="color:var(--text-muted);font-size:0.75rem" :style="s.tasks&&s.tasks.length?'':'margin-left:auto'">{{ s._open ? '▲' : '▼' }}</span>
+                                    </div>
+                                    <!-- Per-VM task breakdown -->
+                                    <div v-if="s._open && s.tasks && s.tasks.length" style="padding:0.4rem 0.7rem;display:flex;flex-direction:column;gap:0.25rem">
+                                        <div v-for="t in s.tasks" :key="t.name"
+                                             style="display:flex;align-items:baseline;gap:0.5rem;font-size:0.8rem;padding:0.2rem 0">
+                                            <span class="status-badge" :class="veeamResultClass(t.result)" style="font-size:0.65rem;flex-shrink:0">{{ t.result || '–' }}</span>
+                                            <span style="font-weight:500">{{ t.name }}</span>
+                                            <span v-if="t.reason" style="color:var(--text-muted);font-size:0.75rem">{{ t.reason }}</span>
+                                        </div>
+                                    </div>
+                                    <div v-else-if="s._open" style="padding:0.4rem 0.7rem;font-size:0.8rem;color:var(--text-muted)">Keine VM-Detaildaten verfügbar.</div>
                                 </div>
                             </div>
                         </div>

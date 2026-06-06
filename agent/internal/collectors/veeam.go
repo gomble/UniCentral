@@ -33,6 +33,7 @@ type VeeamSession struct {
 	State     string `json:"state"`
 	Start     string `json:"start"`
 	End       string `json:"end"`
+	TasksJSON string `json:"tasks_json"`
 }
 
 type VeeamRepository struct {
@@ -182,12 +183,33 @@ try {
     }
 } catch {}
 
-# --- All sessions once, grouped by job, to avoid repeated expensive queries ---
+# Helper: collect task sessions (per-VM results) for a backup session object.
+function GetTasks($session) {
+    $out = New-Object System.Collections.ArrayList
+    try {
+        $tasks = @($session.GetTaskSessions())
+        foreach ($t in $tasks) {
+            $reason = ''
+            try { $reason = [string]$t.Info.Reason } catch {}
+            [void]$out.Add([PSCustomObject]@{
+                name   = [string]$t.Name
+                result = [string]$t.Result
+                reason = $reason
+            })
+        }
+    } catch {}
+    if ($out.Count -eq 0) { return '[]' }
+    $j = ($out | ConvertTo-Json -Depth 3 -Compress)
+    if ($out.Count -eq 1) { $j = '[' + $j + ']' }
+    return $j
+}
+
+# --- All sessions once, grouped by job ID (normalized to lower-case GUID string) ---
 $sessByJob = @{}
 try {
     $allSessions = @(Get-VBRBackupSession -ErrorAction SilentlyContinue)
     foreach ($s in $allSessions) {
-        $jid = [string]$s.JobId
+        $jid = ([string]$s.JobId).ToLower().Trim()
         if (-not $sessByJob.ContainsKey($jid)) { $sessByJob[$jid] = New-Object System.Collections.ArrayList }
         [void]$sessByJob[$jid].Add($s)
     }
@@ -199,7 +221,7 @@ $sessOut = New-Object System.Collections.ArrayList
 try {
     $jobs = @(Get-VBRJob -ErrorAction SilentlyContinue)
     foreach ($j in $jobs) {
-        $jid = [string]$j.Id
+        $jid = ([string]$j.Id).ToLower().Trim()
         $lastResult = ''; $lastState = ''; $lastRun = ''
         try {
             $last = $j.FindLastSession()
@@ -228,19 +250,24 @@ try {
             description      = [string]$j.Description
         })
 
-        if ($sessByJob.ContainsKey($jid)) {
-            $hist = @($sessByJob[$jid] | Sort-Object CreationTime -Descending | Select-Object -First 10)
-            foreach ($s in $hist) {
-                [void]$sessOut.Add([PSCustomObject]@{
-                    job_id     = $jid
-                    session_id = [string]$s.Id
-                    job_name   = [string]$j.Name
-                    result     = [string]$s.Result
-                    state      = [string]$s.State
-                    start      = IsoOrNull $s.CreationTime
-                    end        = IsoOrNull $s.EndTime
-                })
-            }
+        # Session history: use global lookup; fall back to per-job query (e.g. Proxmox jobs
+        # where Get-VBRBackupSession may not populate JobId correctly).
+        $jobSessions = if ($sessByJob.ContainsKey($jid)) { @($sessByJob[$jid]) } else { @() }
+        if ($jobSessions.Count -eq 0) {
+            try { $jobSessions = @(Get-VBRBackupSession -Name $j.Name -ErrorAction SilentlyContinue) } catch {}
+        }
+        $hist = @($jobSessions | Sort-Object CreationTime -Descending | Select-Object -First 10)
+        foreach ($s in $hist) {
+            [void]$sessOut.Add([PSCustomObject]@{
+                job_id     = $jid
+                session_id = [string]$s.Id
+                job_name   = [string]$j.Name
+                result     = [string]$s.Result
+                state      = [string]$s.State
+                start      = IsoOrNull $s.CreationTime
+                end        = IsoOrNull $s.EndTime
+                tasks_json = GetTasks $s
+            })
         }
     }
 } catch {}
@@ -249,7 +276,7 @@ try {
 try {
     $agentJobs = @(Get-VBRComputerBackupJob -ErrorAction SilentlyContinue)
     foreach ($j in $agentJobs) {
-        $jid = [string]$j.Id
+        $jid = ([string]$j.Id).ToLower().Trim()
         $lastResult = ''; $lastState = ''; $lastRun = ''
         $agentSessList = @()
         try {
@@ -293,6 +320,7 @@ try {
                 state      = [string]$s.State
                 start      = IsoOrNull $s.CreationTime
                 end        = IsoOrNull $s.EndTime
+                tasks_json = GetTasks $s
             })
         }
     }

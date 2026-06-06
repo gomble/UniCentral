@@ -1090,7 +1090,12 @@ const app = createApp({
             showVeeamHistory.value = true;
             veeamHistoryLoading.value = true;
             const res = await apiFetch(`/api/veeam/servers/${server.machine_id}/sessions?job_id=${encodeURIComponent(job.job_id)}`);
-            veeamHistorySessions.value = res.ok ? await res.json() : [];
+            const rows = res.ok ? await res.json() : [];
+            veeamHistorySessions.value = rows.map(s => ({
+                ...s,
+                tasks: (() => { try { return JSON.parse(s.tasks_json || '[]'); } catch { return []; } })(),
+                _open: false
+            }));
             veeamHistoryLoading.value = false;
         }
 

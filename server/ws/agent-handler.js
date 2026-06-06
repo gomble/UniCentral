@@ -472,13 +472,14 @@ function storeVeeamData(machineId, veeam) {
             db.prepare('DELETE FROM veeam_agent_sessions WHERE machine_id = ?').run(machineId);
             const sStmt = db.prepare(`
                 INSERT OR IGNORE INTO veeam_agent_sessions
-                    (machine_id, job_id, session_id, job_name, result, state, start_time, end_time)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    (machine_id, job_id, session_id, job_name, result, state, start_time, end_time, tasks_json)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             `);
             for (const s of sessions) {
                 sStmt.run(
                     machineId, String(s.job_id || ''), String(s.session_id || ''), s.job_name || '',
-                    s.result || '', s.state || '', s.start || null, s.end || null
+                    s.result || '', s.state || '', s.start || null, s.end || null,
+                    s.tasks_json || '[]'
                 );
             }
 
