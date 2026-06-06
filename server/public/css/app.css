@@ -68,6 +68,11 @@
 .confirm-box .confirm-actions { display: flex; justify-content: flex-end; gap: 0.5rem; }
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
+html, body {
+    max-width: 100%;
+    overflow-x: hidden;
+}
+
 body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     background: var(--bg-primary);
@@ -204,6 +209,8 @@ body {
 
 .main-content {
     flex: 1;
+    min-width: 0;
+    max-width: 100%;
     margin-left: 240px;
     padding: 1.5rem;
     min-height: 100vh;
@@ -536,6 +543,18 @@ body {
         margin-left: 0;
         margin-top: 52px;
         padding: 0.75rem;
+        max-width: 100vw;
+        overflow-x: hidden;
+    }
+
+    /* Cards never exceed the viewport */
+    .card { max-width: 100%; }
+
+    /* Long monospace/output strings wrap instead of forcing the page wider */
+    [style*="font-family:monospace"],
+    [style*="font-family: monospace"] {
+        overflow-wrap: anywhere;
+        word-break: break-word;
     }
 
     /* ── Page headers: stack ── */
