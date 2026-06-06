@@ -108,6 +108,7 @@ func GetVeeamData() *VeeamData {
 
 const veeamScript = `
 $ErrorActionPreference = 'SilentlyContinue'
+$WarningPreference = 'SilentlyContinue'
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
 # Fast detection: the Veeam Backup service only exists on a B&R server.
@@ -119,22 +120,23 @@ if (-not $svc) { Write-Output '{"installed":false}'; exit 0 }
 $loaded = $false
 # 1. Standard PSModulePath (works for interactive sessions)
 try { Import-Module Veeam.Backup.PowerShell -ErrorAction Stop; $loaded = $true } catch {}
-# 2. Explicit DLL path — v11/v12 console install
+# 2. Explicit module directory — v11/v12 console install (Import-Module needs the
+#    folder containing the .psd1 manifest, not the .dll file directly)
 if (-not $loaded) {
     $candidates = @(
-        'C:\Program Files\Veeam\Backup and Replication\Console\Veeam.Backup.PowerShell.dll',
-        'C:\Program Files\Veeam\Backup and Replication\Backup\Veeam.Backup.PowerShell.dll'
+        'C:\Program Files\Veeam\Backup and Replication\Console\Veeam.Backup.PowerShell',
+        'C:\Program Files\Veeam\Backup and Replication\Backup\Veeam.Backup.PowerShell'
     )
     foreach ($p in $candidates) {
         if (-not $loaded -and (Test-Path $p)) {
-            try { Import-Module $p -ErrorAction Stop; $loaded = $true } catch {}
+            try { Import-Module $p -ErrorAction Stop -WarningAction SilentlyContinue; $loaded = $true } catch {}
         }
     }
 }
-# 3. Scan Program Files for the DLL (catches non-default install paths)
+# 3. Scan Program Files for the module directory
 if (-not $loaded) {
-    $found = Get-ChildItem 'C:\Program Files\Veeam' -Recurse -Filter 'Veeam.Backup.PowerShell.dll' -ErrorAction SilentlyContinue | Select-Object -First 1
-    if ($found) { try { Import-Module $found.FullName -ErrorAction Stop; $loaded = $true } catch {} }
+    $found = Get-ChildItem 'C:\Program Files\Veeam' -Recurse -Filter 'Veeam.Backup.PowerShell.psd1' -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($found) { try { Import-Module $found.DirectoryName -ErrorAction Stop -WarningAction SilentlyContinue; $loaded = $true } catch {} }
 }
 # 4. Legacy PSSnapin (v9/v10)
 if (-not $loaded) { try { Add-PSSnapin VeeamPSSnapIn -ErrorAction Stop; $loaded = $true } catch {} }
