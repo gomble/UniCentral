@@ -637,10 +637,80 @@
                 <div v-if="view === 'veeam'">
                     <div class="page-header">
                         <h1>Veeam Backup</h1>
-                        <button class="btn btn-primary" @click="showAddVeeam = true">+ Veeam Instanz</button>
+                        <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+                            <button class="btn btn-ghost btn-sm" @click="loadVeeamServers(); loadVeeamInstances()">Aktualisieren</button>
+                            <button class="btn btn-primary btn-sm" @click="showAddVeeam = true">+ Externe Instanz</button>
+                        </div>
                     </div>
 
-                    <!-- Instances -->
+                    <!-- ===== Agent-detected Veeam servers ===== -->
+                    <div class="card" v-for="server in veeamServers" :key="server.machine_id">
+                        <div class="card-header">
+                            <div>
+                                <span style="background:#16a34a;color:#fff;font-size:0.6rem;padding:1px 5px;border-radius:3px;margin-right:6px;vertical-align:middle">VEEAM</span>
+                                <h3 style="display:inline">{{ server.display_name || server.hostname }}</h3>
+                                <span class="status-badge" :class="server.status" style="margin-left:0.5rem">{{ server.status }}</span>
+                            </div>
+                            <span style="font-size:0.75rem;color:var(--text-muted)" v-if="server.veeam_version">B&R {{ server.veeam_version }}</span>
+                        </div>
+
+                        <!-- Summary chips -->
+                        <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-bottom:1rem">
+                            <span style="font-size:0.78rem;background:var(--bg-secondary);border:1px solid var(--border);border-radius:6px;padding:0.2rem 0.55rem">{{ server.summary.jobs }} Jobs</span>
+                            <span v-if="server.summary.copy_jobs" style="font-size:0.78rem;background:var(--bg-secondary);border:1px solid var(--border);border-radius:6px;padding:0.2rem 0.55rem">{{ server.summary.copy_jobs }} Copy</span>
+                            <span v-if="server.summary.success" style="font-size:0.78rem;background:rgba(34,197,94,0.12);border:1px solid var(--success);color:var(--success);border-radius:6px;padding:0.2rem 0.55rem">{{ server.summary.success }} OK</span>
+                            <span v-if="server.summary.warning" style="font-size:0.78rem;background:rgba(245,158,11,0.12);border:1px solid var(--warning);color:var(--warning);border-radius:6px;padding:0.2rem 0.55rem">{{ server.summary.warning }} Warnung</span>
+                            <span v-if="server.summary.failed" style="font-size:0.78rem;background:rgba(239,68,68,0.12);border:1px solid var(--danger);color:var(--danger);border-radius:6px;padding:0.2rem 0.55rem">{{ server.summary.failed }} Fehler</span>
+                        </div>
+
+                        <!-- Repositories -->
+                        <div v-if="server.repositories.length">
+                            <div style="font-size:0.75rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:0.5rem">Backup-Repositories</div>
+                            <div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(260px, 1fr));gap:0.75rem;margin-bottom:1.2rem">
+                                <div v-for="r in server.repositories" :key="r.id" style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);padding:0.7rem 0.8rem">
+                                    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:0.5rem">
+                                        <strong style="font-size:0.88rem">{{ r.repo_name }}</strong>
+                                        <span class="os-badge" style="flex-shrink:0">{{ r.repo_type }}</span>
+                                    </div>
+                                    <div style="font-size:0.72rem;color:var(--text-muted);margin:0.25rem 0;word-break:break-all">{{ r.path || '–' }}</div>
+                                    <div style="height:8px;background:var(--bg-primary);border-radius:4px;overflow:hidden;margin:0.45rem 0">
+                                        <div :style="{width: veeamRepoPercent(r)+'%', height:'100%', background: veeamRepoColor(r), transition:'width 0.3s'}"></div>
+                                    </div>
+                                    <div style="display:flex;justify-content:space-between;font-size:0.75rem;color:var(--text-secondary)">
+                                        <span><strong style="color:var(--text-primary)">{{ formatBytes(r.free_bytes) }}</strong> frei</span>
+                                        <span>{{ veeamRepoPercent(r) }}% von {{ formatBytes(r.capacity_bytes) }}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Jobs with history -->
+                        <div style="font-size:0.75rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:0.5rem">Jobs</div>
+                        <data-table :rows="server.jobs" :columns="veeamServerJobColumns" row-key="job_id" row-clickable
+                            search-placeholder="Jobs durchsuchen..." empty-text="Keine Jobs gefunden."
+                            @row-click="j => openVeeamHistory(server, j)">
+                            <template #cell-job_name="{ row: j }">
+                                <strong>{{ j.job_name }}</strong>
+                                <span v-if="!j.schedule_enabled" style="font-size:0.7rem;color:var(--text-muted);margin-left:5px">(Zeitplan aus)</span>
+                            </template>
+                            <template #cell-job_type="{ row: j }">
+                                <span class="os-badge">{{ j.is_copy_job ? 'Backup Copy' : (j.job_type || '–') }}</span>
+                            </template>
+                            <template #cell-last_result="{ row: j }">
+                                <span v-if="j.last_result" class="status-badge" :class="veeamResultClass(j.last_result)">{{ j.last_result }}</span>
+                                <span v-else style="color:var(--text-muted);font-size:0.8rem">Nie gelaufen</span>
+                            </template>
+                            <template #cell-target_repo="{ row: j }">
+                                <span style="font-size:0.82rem">{{ j.target_repo || '–' }}</span>
+                            </template>
+                            <template #cell-_actions="{ row: j }">
+                                <button class="btn btn-ghost btn-sm" @click.stop="openVeeamHistory(server, j)">Historie</button>
+                            </template>
+                        </data-table>
+                    </div>
+
+                    <!-- ===== External REST-API instances ===== -->
+                    <div v-if="veeamInstances.length" style="font-size:0.75rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.04em;margin:1.5rem 0 0.5rem">Externe Instanzen (REST API)</div>
                     <div class="card" v-for="inst in veeamInstances" :key="inst.id">
                         <div class="card-header">
                             <div>
@@ -664,7 +734,36 @@
                         </data-table>
                     </div>
 
-                    <p v-if="!veeamInstances.length" style="color:var(--text-muted)">Keine Veeam-Instanzen konfiguriert. Klicke auf "+ Veeam Instanz" um eine hinzuzufuegen.</p>
+                    <div v-if="!veeamServers.length && !veeamInstances.length" class="card" style="color:var(--text-muted)">
+                        <p style="margin-bottom:0.4rem">Noch kein Veeam erkannt.</p>
+                        <p style="font-size:0.85rem">Sobald auf einer Maschine mit installiertem Agent ein Veeam Backup &amp; Replication Server läuft, erscheint er hier automatisch (inkl. Jobs, Historie und Repositories). Alternativ kannst du eine externe Veeam-Instanz per REST-API anbinden.</p>
+                    </div>
+                </div>
+
+                <!-- Veeam Job History Modal -->
+                <div class="modal-overlay" v-if="showVeeamHistory" @click.self="showVeeamHistory = false" style="z-index:1100;align-items:center">
+                    <div class="modal" style="max-width:680px;width:95vw;max-height:88vh;display:flex;flex-direction:column">
+                        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.3rem">
+                            <h2 style="margin:0">Job-Historie</h2>
+                            <button class="btn btn-ghost btn-sm" @click="showVeeamHistory = false">✕</button>
+                        </div>
+                        <div v-if="veeamHistoryJob" style="font-size:0.85rem;color:var(--text-secondary);margin-bottom:1rem">
+                            <strong style="color:var(--text-primary)">{{ veeamHistoryJob.job_name }}</strong>
+                            <span class="os-badge" style="margin-left:0.4rem">{{ veeamHistoryJob.is_copy_job ? 'Backup Copy' : (veeamHistoryJob.job_type || '–') }}</span>
+                            <span v-if="veeamHistoryJob.target_repo"> → {{ veeamHistoryJob.target_repo }}</span>
+                        </div>
+                        <div style="flex:1;overflow-y:auto;min-height:0">
+                            <div v-if="veeamHistoryLoading" style="text-align:center;padding:2rem;color:var(--text-muted)">Lade…</div>
+                            <div v-else-if="!veeamHistorySessions.length" style="color:var(--text-muted);padding:1rem 0">Keine Läufe aufgezeichnet.</div>
+                            <div v-else style="display:flex;flex-direction:column;gap:0.4rem">
+                                <div v-for="s in veeamHistorySessions" :key="s.session_id" style="display:flex;align-items:center;gap:0.7rem;flex-wrap:wrap;padding:0.5rem 0.7rem;background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius)">
+                                    <span class="status-badge" :class="veeamResultClass(s.result)" style="flex-shrink:0">{{ s.result || s.state || '–' }}</span>
+                                    <span style="font-size:0.82rem;color:var(--text-primary)">{{ formatTime(s.start_time) }}</span>
+                                    <span style="font-size:0.75rem;color:var(--text-muted);margin-left:auto">{{ s.end_time ? ('bis ' + formatTime(s.end_time)) : s.state }}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Logs View -->

@@ -12,6 +12,7 @@ type TelemetryData struct {
 	IsDomainController bool           `json:"is_domain_controller"`
 	DomainName         string         `json:"domain_name"`
 	HardwareID         string         `json:"hardware_id"`
+	Veeam              *VeeamData     `json:"veeam,omitempty"`
 }
 
 func CollectAll() TelemetryData {
@@ -30,5 +31,6 @@ func CollectAll() TelemetryData {
 		IsDomainController: dcInfo.IsDomainController,
 		DomainName:         dcInfo.DomainName,
 		HardwareID:         GetHardwareID(),
+		Veeam:              GetVeeamData(),
 	}
 }

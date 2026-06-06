@@ -163,6 +163,11 @@ const app = createApp({
             name: '', base_url: '', username: '', password: '',
             poll_interval_seconds: 300, verify_ssl: false
         });
+        const veeamServers = ref([]);
+        const showVeeamHistory = ref(false);
+        const veeamHistoryJob = ref(null);
+        const veeamHistorySessions = ref([]);
+        const veeamHistoryLoading = ref(false);
         const showGroupsModal = ref(false);
         const groups = ref([]);
         const newGroupName = ref('');
@@ -334,6 +339,8 @@ const app = createApp({
                 if (m) m.status = 'online';
             } else if (data.type === 'command_result') {
                 handleCommandResultEvent(data);
+            } else if (data.type === 'veeam_updated') {
+                if (view.value === 'veeam') loadVeeamServers();
             }
         }
 
@@ -434,7 +441,7 @@ const app = createApp({
         }
 
         async function loadDashboard() {
-            await Promise.all([loadMachines(), loadStats(), loadAlerts(), loadSettings(), loadVeeamInstances(), loadOnlineAgents(), loadGroups()]);
+            await Promise.all([loadMachines(), loadStats(), loadAlerts(), loadSettings(), loadVeeamInstances(), loadVeeamServers(), loadOnlineAgents(), loadGroups()]);
         }
 
         async function loadGroups() {
@@ -527,6 +534,10 @@ const app = createApp({
             } else if (target === 'logs') {
                 connectLogStream();
                 loadCommandHistory();
+            } else if (target === 'veeam') {
+                disconnectLogStream();
+                loadVeeamInstances();
+                loadVeeamServers();
             } else {
                 disconnectLogStream();
             }
@@ -1030,6 +1041,38 @@ const app = createApp({
             if (!await confirmDialog('Veeam-Instanz wirklich entfernen?')) return;
             await apiFetch(`/api/veeam/instances/${id}`, { method: 'DELETE' });
             await loadVeeamInstances();
+        }
+
+        async function loadVeeamServers() {
+            const res = await apiFetch('/api/veeam/servers');
+            if (res.ok) veeamServers.value = await res.json();
+        }
+
+        async function openVeeamHistory(server, job) {
+            veeamHistoryJob.value = { ...job, _server: server };
+            veeamHistorySessions.value = [];
+            showVeeamHistory.value = true;
+            veeamHistoryLoading.value = true;
+            const res = await apiFetch(`/api/veeam/servers/${server.machine_id}/sessions?job_id=${encodeURIComponent(job.job_id)}`);
+            veeamHistorySessions.value = res.ok ? await res.json() : [];
+            veeamHistoryLoading.value = false;
+        }
+
+        function veeamRepoPercent(repo) {
+            if (!repo.capacity_bytes) return 0;
+            return Math.min(100, Math.round((repo.used_bytes / repo.capacity_bytes) * 100));
+        }
+        function veeamRepoColor(repo) {
+            const pct = veeamRepoPercent(repo);
+            if (pct >= 90) return 'var(--danger)';
+            if (pct >= 75) return 'var(--warning)';
+            return 'var(--success)';
+        }
+        function veeamResultClass(result) {
+            if (/success/i.test(result)) return 'online';
+            if (/warning/i.test(result)) return 'warning';
+            if (/failed/i.test(result)) return 'offline';
+            return 'warning';
         }
 
         async function regenerateEnrollmentKey() {
@@ -1875,6 +1918,15 @@ const app = createApp({
             { key: 'last_run_time', label: 'Letzte Ausfuehrung', value: j => formatTime(j.last_run_time), sortValue: j => j.last_run_time || '', thClass: M, tdClass: M },
             { key: 'next_run_time', label: 'Naechster Lauf', value: j => formatTime(j.next_run_time), sortValue: j => j.next_run_time || '', thClass: M, tdClass: M }
         ];
+        const veeamServerJobColumns = [
+            { key: 'job_name', label: 'Job' },
+            { key: 'job_type', label: 'Typ', filter: true },
+            { key: 'last_result', label: 'Ergebnis', filter: true, placeholder: 'Nie gelaufen' },
+            { key: 'last_run', label: 'Letzter Lauf', value: j => formatTime(j.last_run), sortValue: j => j.last_run || '', thClass: M, tdClass: M },
+            { key: 'next_run', label: 'Nächster Lauf', value: j => formatTime(j.next_run), sortValue: j => j.next_run || '', thClass: M, tdClass: M },
+            { key: 'target_repo', label: 'Ziel', placeholder: '–', thClass: M, tdClass: M },
+            { key: '_actions', label: '', sortable: false, searchable: false, stopClick: true }
+        ];
         const adUserColumns = [
             { key: 'sam_account_name', label: 'Benutzername' },
             { key: 'name', label: 'Name', value: u => u.display_name || ((u.given_name || '') + ' ' + (u.surname || '')).trim() },
@@ -1904,6 +1956,9 @@ const app = createApp({
             groups, newGroupName, filterGroup, filteredMachines, addGroup, deleteGroup, assignGroup,
             batchInstallPkg, batchInstallMethod, selectedMachines, commandHistory, liveCommand,
             veeamInstances, newVeeam,
+            veeamServers, showVeeamHistory, veeamHistoryJob, veeamHistorySessions, veeamHistoryLoading,
+            loadVeeamServers, openVeeamHistory, veeamRepoPercent, veeamRepoColor, veeamResultClass,
+            veeamServerJobColumns,
             tokenMachine, selectedMachine, machineDisks, machineServices, machineFirewall,
             machineUpdates, machineShares, telemetryHistory, telemetryRange,
             telemetryCanvas, baseUrl, newMachine, settingsForm,

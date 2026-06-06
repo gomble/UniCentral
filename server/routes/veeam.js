@@ -77,6 +77,60 @@ router.get('/jobs', (req, res) => {
     res.json(jobs);
 });
 
+// ----- Agent-detected Veeam servers (no REST credentials needed) -----
+
+// List all machines on which the agent detected Veeam B&R, with their jobs and
+// repositories embedded plus a small health summary for the dashboard.
+router.get('/servers', (req, res) => {
+    const servers = db.prepare(`
+        SELECT machine_id, hostname, display_name, status, veeam_version, last_seen, ip_address
+        FROM machines
+        WHERE is_veeam_server = 1
+        ORDER BY COALESCE(NULLIF(display_name, ''), hostname) ASC
+    `).all();
+
+    const jobStmt = db.prepare('SELECT * FROM veeam_agent_jobs WHERE machine_id = ? ORDER BY job_name ASC');
+    const repoStmt = db.prepare('SELECT * FROM veeam_agent_repositories WHERE machine_id = ? ORDER BY repo_name ASC');
+
+    for (const s of servers) {
+        s.jobs = jobStmt.all(s.machine_id);
+        s.repositories = repoStmt.all(s.machine_id);
+
+        const failed = s.jobs.filter(j => /failed/i.test(j.last_result)).length;
+        const warning = s.jobs.filter(j => /warning/i.test(j.last_result)).length;
+        const success = s.jobs.filter(j => /success/i.test(j.last_result)).length;
+        s.summary = {
+            jobs: s.jobs.length,
+            copy_jobs: s.jobs.filter(j => j.is_copy_job).length,
+            failed, warning, success,
+            repositories: s.repositories.length
+        };
+    }
+
+    res.json(servers);
+});
+
+// Session history for one job (newest first).
+router.get('/servers/:machineId/sessions', (req, res) => {
+    const { machineId } = req.params;
+    const { job_id } = req.query;
+    let rows;
+    if (job_id) {
+        rows = db.prepare(`
+            SELECT * FROM veeam_agent_sessions
+            WHERE machine_id = ? AND job_id = ?
+            ORDER BY start_time DESC
+        `).all(machineId, job_id);
+    } else {
+        rows = db.prepare(`
+            SELECT * FROM veeam_agent_sessions
+            WHERE machine_id = ?
+            ORDER BY start_time DESC
+        `).all(machineId);
+    }
+    res.json(rows);
+});
+
 router.post('/instances/:id/test', requireAdmin, async (req, res) => {
     const instance = db.prepare('SELECT * FROM veeam_instances WHERE id = ?').get(req.params.id);
     if (!instance) return res.status(404).json({ error: 'Instance not found' });

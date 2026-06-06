@@ -414,6 +414,10 @@ function handleTelemetry(machineId, payload) {
             .run(payload.is_domain_controller ? 1 : 0, payload.domain_name || '', machineId);
     }
 
+    if (payload.veeam && payload.veeam.installed) {
+        storeVeeamData(machineId, payload.veeam);
+    }
+
     if (payload.firewall && payload.firewall.rules) {
         db.prepare('DELETE FROM firewall_rules WHERE machine_id = ?').run(machineId);
         const stmt = db.prepare(`
@@ -426,6 +430,72 @@ function handleTelemetry(machineId, payload) {
     }
 
     broadcastToDashboards({ type: 'telemetry', machineId, data: payload });
+}
+
+// storeVeeamData persists agent-reported Veeam Backup & Replication state. The
+// machine is always flagged as a Veeam server (and its version recorded), but
+// jobs/sessions/repositories are only replaced when the agent actually managed
+// to query Veeam (collected === true) — so a transient PowerShell/module error
+// never wipes the last known good data from the dashboard.
+function storeVeeamData(machineId, veeam) {
+    try {
+        db.prepare('UPDATE machines SET is_veeam_server = 1, veeam_version = ? WHERE machine_id = ?')
+            .run(veeam.version || '', machineId);
+
+        if (!veeam.collected) return;
+
+        const jobs = Array.isArray(veeam.jobs) ? veeam.jobs : [];
+        const sessions = Array.isArray(veeam.sessions) ? veeam.sessions : [];
+        const repos = Array.isArray(veeam.repositories) ? veeam.repositories : [];
+
+        const replace = db.transaction(() => {
+            db.prepare('DELETE FROM veeam_agent_jobs WHERE machine_id = ?').run(machineId);
+            const jStmt = db.prepare(`
+                INSERT INTO veeam_agent_jobs
+                    (machine_id, job_id, job_name, job_type, is_copy_job, last_result, last_state,
+                     last_run, next_run, schedule_enabled, target_repo, repo_id, description)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `);
+            for (const j of jobs) {
+                jStmt.run(
+                    machineId, String(j.id || ''), j.name || '', j.type || '',
+                    j.is_copy ? 1 : 0, j.last_result || '', j.last_state || '',
+                    j.last_run || null, j.next_run || null, j.schedule_enabled ? 1 : 0,
+                    j.target_repo || '', String(j.repo_id || ''), j.description || ''
+                );
+            }
+
+            db.prepare('DELETE FROM veeam_agent_sessions WHERE machine_id = ?').run(machineId);
+            const sStmt = db.prepare(`
+                INSERT OR IGNORE INTO veeam_agent_sessions
+                    (machine_id, job_id, session_id, job_name, result, state, start_time, end_time)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            `);
+            for (const s of sessions) {
+                sStmt.run(
+                    machineId, String(s.job_id || ''), String(s.session_id || ''), s.job_name || '',
+                    s.result || '', s.state || '', s.start || null, s.end || null
+                );
+            }
+
+            db.prepare('DELETE FROM veeam_agent_repositories WHERE machine_id = ?').run(machineId);
+            const rStmt = db.prepare(`
+                INSERT OR IGNORE INTO veeam_agent_repositories
+                    (machine_id, repo_id, repo_name, repo_type, path, capacity_bytes, free_bytes, used_bytes)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            `);
+            for (const r of repos) {
+                rStmt.run(
+                    machineId, String(r.id || ''), r.name || '', r.type || '', r.path || '',
+                    Number(r.capacity) || 0, Number(r.free) || 0, Number(r.used) || 0
+                );
+            }
+        });
+        replace();
+        broadcastToDashboards({ type: 'veeam_updated', machineId });
+    } catch (err) {
+        console.error('[WS] storeVeeamData error:', err.message);
+    }
 }
 
 function handleCommandResult(machineId, payload) {
