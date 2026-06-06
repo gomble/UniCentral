@@ -335,15 +335,14 @@ try {
             description      = [string]$j.Description
         })
 
-        $agentMachineName = ''
-        try { $agentMachineName = [string]$j.Object.Name } catch {}
-        try { if (-not $agentMachineName) { $agentMachineName = [string]$j.Object.DisplayName } } catch {}
-
         $hist = @($agentSessList | Select-Object -First 10)
         foreach ($s in $hist) {
             $tasksJson = GetTasks $s
-            if ($tasksJson -eq '[]' -and $agentMachineName) {
-                $tObj = [PSCustomObject]@{ name = $agentMachineName; result = [string]$s.Result; reason = '' }
+            if ($tasksJson -eq '[]') {
+                $fallbackName = ''
+                try { $fallbackName = [string]$s.ClientName } catch {}
+                if (-not $fallbackName) { $fallbackName = [string]$j.Name }
+                $tObj = [PSCustomObject]@{ name = $fallbackName; result = [string]$s.Result; reason = '' }
                 $tasksJson = '[' + ($tObj | ConvertTo-Json -Depth 2 -Compress) + ']'
             }
             [void]$sessOut.Add([PSCustomObject]@{
