@@ -315,9 +315,18 @@ const app = createApp({
             if (popstateHandler) window.removeEventListener('popstate', popstateHandler);
         });
 
+        let wsEverConnected = false;
         function connectWebSocket() {
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
             ws = new WebSocket(`${protocol}//${window.location.host}/ws/dashboard`);
+
+            ws.onopen = () => {
+                if (wsEverConnected) {
+                    loadMachines();
+                    loadStats();
+                }
+                wsEverConnected = true;
+            };
 
             ws.onmessage = (event) => {
                 try {
