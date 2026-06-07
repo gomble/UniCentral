@@ -339,14 +339,18 @@ try {
             description      = [string]$j.Description
         })
 
+        $agentHostName = [string]$j.Name
+        $bo = [string]$j.BackupObject
+        if ($bo) {
+            try { $agentHostName = [System.Net.Dns]::GetHostEntry($bo).HostName.Split('.')[0] } catch {}
+            if (-not $agentHostName) { $agentHostName = $bo }
+        }
+
         $hist = @($agentSessList | Select-Object -First 10)
         foreach ($s in $hist) {
             $tasksJson = GetTasks $s
             if ($tasksJson -eq '[]') {
-                $fallbackName = ''
-                try { $fallbackName = [string]$s.ClientName } catch {}
-                if (-not $fallbackName) { $fallbackName = [string]$j.Name }
-                $tObj = [PSCustomObject]@{ name = $fallbackName; result = [string]$s.Result; reason = '' }
+                $tObj = [PSCustomObject]@{ name = $agentHostName; result = [string]$s.Result; reason = '' }
                 $tasksJson = '[' + ($tObj | ConvertTo-Json -Depth 2 -Compress) + ']'
             }
             [void]$sessOut.Add([PSCustomObject]@{
