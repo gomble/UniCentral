@@ -191,9 +191,11 @@ function GetTasks($session) {
         foreach ($t in $tasks) {
             $reason = ''
             try { $reason = [string]$t.Info.Reason } catch {}
+            $status = [string]$t.Status
+            if (-not $status) { $status = [string]$t.Result }
             [void]$out.Add([PSCustomObject]@{
                 name   = [string]$t.Name
-                result = [string]$t.Result
+                result = $status
                 reason = $reason
             })
         }
