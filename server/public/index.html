@@ -800,6 +800,7 @@
                                         <span class="status-badge" :class="veeamResultClass(s.result)" style="flex-shrink:0">{{ s.result || s.state || '–' }}</span>
                                         <span style="font-size:0.82rem;color:var(--text-primary)">{{ formatTime(s.start_time) }}</span>
                                         <span style="font-size:0.75rem;color:var(--text-muted)">{{ s.end_time ? ('bis ' + formatTime(s.end_time)) : s.state }}</span>
+                                        <span v-if="s.reason" style="font-size:0.75rem;color:var(--warning);font-style:italic">{{ s.reason }}</span>
                                         <span v-if="s.tasks && s.tasks.length" style="font-size:0.72rem;color:var(--text-muted);margin-left:auto">
                                             {{ s.tasks.filter(t=>/success/i.test(t.result)).length }}/{{ s.tasks.length }} OK
                                         </span>

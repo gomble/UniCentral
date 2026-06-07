@@ -186,13 +186,22 @@ try {
 # Helper: collect task sessions (per-VM results) for a backup session object.
 function GetTasks($session) {
     $out = New-Object System.Collections.ArrayList
+    $sessReason = ''
+    try { $sessReason = [string]$session.Info.Reason } catch {}
     try {
         $tasks = @($session.GetTaskSessions())
         foreach ($t in $tasks) {
-            $reason = ''
-            try { $reason = [string]$t.Info.Reason } catch {}
             $status = [string]$t.Status
             if (-not $status) { $status = [string]$t.Result }
+            $reason = ''
+            try { $reason = [string]$t.Info.Reason } catch {}
+            if (-not $reason) {
+                try {
+                    $warnLogs = @($t.Logger.GetLog().Updts | Where-Object { $_.Status -ne 'Normal' })
+                    if ($warnLogs.Count -gt 0) { $reason = [string]$warnLogs[-1].Title }
+                } catch {}
+            }
+            if (-not $reason -and $status -ne 'Success' -and $sessReason) { $reason = $sessReason }
             [void]$out.Add([PSCustomObject]@{
                 name   = [string]$t.Name
                 result = $status
@@ -289,6 +298,8 @@ try {
                 $tObj = [PSCustomObject]@{ name = [string]$j.Name; result = [string]$s.Result; reason = '' }
                 $tasksJson = '[' + ($tObj | ConvertTo-Json -Depth 2 -Compress) + ']'
             }
+            $sessReason = ''
+            try { $sessReason = [string]$s.Info.Reason } catch {}
             [void]$sessOut.Add([PSCustomObject]@{
                 job_id     = $jid
                 session_id = [string]$s.Id
@@ -298,6 +309,7 @@ try {
                 start      = IsoOrNull $s.CreationTime
                 end        = IsoOrNull $s.EndTime
                 tasks_json = $tasksJson
+                reason     = $sessReason
             })
         }
     }
@@ -355,6 +367,8 @@ try {
                 $tObj = [PSCustomObject]@{ name = $agentHostName; result = [string]$s.Result; reason = '' }
                 $tasksJson = '[' + ($tObj | ConvertTo-Json -Depth 2 -Compress) + ']'
             }
+            $sessReason = ''
+            try { $sessReason = [string]$s.Info.Reason } catch {}
             [void]$sessOut.Add([PSCustomObject]@{
                 job_id     = $jid
                 session_id = [string]$s.Id
@@ -364,6 +378,7 @@ try {
                 start      = IsoOrNull $s.CreationTime
                 end        = IsoOrNull $s.EndTime
                 tasks_json = $tasksJson
+                reason     = $sessReason
             })
         }
     }
