@@ -199,7 +199,13 @@ func execAddFirewallRule(params map[string]interface{}) Result {
 func execUpdateAgent(params map[string]interface{}) Result {
 	downloadURL, _ := params["download_url"].(string)
 	if downloadURL == "" {
-		return Result{Status: "failed", Output: "no download_url provided"}
+		serverURL, _ := params["server_url"].(string)
+		if serverURL != "" {
+			downloadURL = fmt.Sprintf("%s/api/agent/download/%s/%s", serverURL, runtime.GOOS, runtime.GOARCH)
+		}
+	}
+	if downloadURL == "" {
+		return Result{Status: "failed", Output: "no download URL provided"}
 	}
 
 	err := updater.Update(downloadURL)

@@ -19,7 +19,7 @@ type VersionInfo struct {
 }
 
 func CheckAndUpdate(serverURL, currentVersion string) {
-	url := serverURL + "/api/agent/version"
+	url := fmt.Sprintf("%s/api/agent/version?os=%s&arch=%s", serverURL, runtime.GOOS, runtime.GOARCH)
 	resp, err := http.Get(url)
 	if err != nil {
 		return

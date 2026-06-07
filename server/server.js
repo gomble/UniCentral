@@ -90,13 +90,13 @@ app.get('/api/logs', (req, res) => {
 // Agent version check (used by auto-update)
 app.get('/api/agent/version', (req, res) => {
     const pkg = require(path.join(__dirname, '..', 'package.json'));
-    const baseUrl = getBaseUrl(req);
-    const os = req.query.os || 'windows';
-    const arch = req.query.arch || 'amd64';
-    res.json({
-        version: pkg.version,
-        download_url: `${baseUrl}/api/agent/download/${os}/${arch}`
-    });
+    const os = req.query.os;
+    const arch = req.query.arch;
+    const resp = { version: pkg.version };
+    if (os && arch) {
+        resp.download_url = `${getBaseUrl(req)}/api/agent/download/${os}/${arch}`;
+    }
+    res.json(resp);
 });
 
 // Agent binary download

@@ -98,9 +98,8 @@ router.post('/:machineId/update-agent', requireAdmin, (req, res) => {
     const machine = db.prepare('SELECT * FROM machines WHERE id = ? OR machine_id = ?').get(req.params.machineId, req.params.machineId);
     if (!machine) return res.status(404).json({ error: 'Machine not found' });
 
-    const result = sendCommandToAgent(machine.machine_id, 'update_agent', {
-        download_url: `${req.protocol}://${req.get('host')}/api/agent/download/${machine.os_type}/amd64`
-    });
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const result = sendCommandToAgent(machine.machine_id, 'update_agent', { server_url: baseUrl });
     res.json(result);
 });
 
