@@ -155,6 +155,29 @@ const app = createApp({
         const alerts = ref([]);
         const alertCount = computed(() => alerts.value.filter(a => !a.acknowledged).length);
 
+        const showVnc = ref(false);
+        const vncSrc = ref('');
+        const vncHostname = ref('');
+        const vncPort = ref(5900);
+        let _vncMachineId = '';
+
+        function openVNC(machine, port) {
+            _vncMachineId = machine.machine_id;
+            vncHostname.value = machine.display_name || machine.hostname;
+            vncPort.value = port || 5900;
+            vncSrc.value = `/vnc.html?machineId=${encodeURIComponent(machine.machine_id)}&port=${vncPort.value}&hostname=${encodeURIComponent(vncHostname.value)}`;
+            showVnc.value = true;
+        }
+
+        function closeVnc() {
+            showVnc.value = false;
+            vncSrc.value = '';
+        }
+
+        function reconnectVnc() {
+            vncSrc.value = `/vnc.html?machineId=${encodeURIComponent(_vncMachineId)}&port=${vncPort.value}&hostname=${encodeURIComponent(vncHostname.value)}`;
+        }
+
         const showAddMachine = ref(false);
         const showTokenModal = ref(false);
         const showAddVeeam = ref(false);
@@ -2065,7 +2088,8 @@ const app = createApp({
             localUserColumns, scanResultColumns,
             diskExplorerMachineId, diskExplorerPath, diskExplorerLoading, diskExplorerData, diskExplorerHistory,
             showDiskExplorer, openDiskExplorer, diskExplorerGoTo, startDiskScan, diskExplorerDrillDown, diskExplorerBack,
-            diskExplorerBreadcrumbs, diskExplorerBarWidth, diskExplorerBarColor
+            diskExplorerBreadcrumbs, diskExplorerBarWidth, diskExplorerBarColor,
+            showVnc, vncSrc, vncHostname, vncPort, openVNC, closeVnc, reconnectVnc
         };
     }
 });

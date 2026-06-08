@@ -20,6 +20,7 @@ import (
 	"github.com/unicentral/agent/internal/commands"
 	"github.com/unicentral/agent/internal/config"
 	"github.com/unicentral/agent/internal/updater"
+	"github.com/unicentral/agent/internal/vnc"
 )
 
 type Message struct {
@@ -270,6 +271,18 @@ func (c *Client) handleMessage(raw []byte) {
 }
 
 func (c *Client) executeCommand(cmd CommandPayload) {
+	if cmd.Type == "vnc_relay" {
+		sessionID, _ := cmd.Parameters["session_id"].(string)
+		vncPort := 5900
+		if p, ok := cmd.Parameters["vnc_port"].(float64); ok {
+			vncPort = int(p)
+		}
+		if sessionID != "" {
+			vnc.StartRelay(c.cfg.Server, c.cfg.MachineID, c.cfg.MachineSecret, sessionID, vncPort)
+		}
+		return
+	}
+
 	// Stream intermediate progress so the dashboard shows a running command
 	// with live output instead of appearing stuck until completion.
 	onProgress := func(output string) {

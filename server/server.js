@@ -32,10 +32,12 @@ const sessionMiddleware = session({
 });
 app.use(sessionMiddleware);
 
+app.use('/novnc', express.static(path.join(__dirname, '..', 'node_modules', '@novnc', 'novnc', 'core')));
+
 app.use((req, res, next) => {
     if (req.path.startsWith('/api/') || req.path.startsWith('/ws/') || req.path.startsWith('/auth')) return next();
     if (req.path === '/login.html' || req.path === '/setup.html') return next();
-    if (req.path.startsWith('/css/') || req.path.startsWith('/js/')) return next();
+    if (req.path.startsWith('/css/') || req.path.startsWith('/js/') || req.path.startsWith('/novnc/')) return next();
 
     if (!isSetupComplete() && req.path !== '/setup.html') {
         return res.redirect('/setup.html');

@@ -253,6 +253,7 @@
                                 <span style="color:var(--text-muted);font-size:0.82rem">{{ m._telemetry && m._telemetry.uptime ? formatUptime(m._telemetry.uptime) : '–' }}</span>
                             </template>
                             <template #cell-_actions="{ row: m }">
+                                <button class="btn btn-ghost btn-sm" @click.stop="openVNC(m)" :disabled="m.status !== 'online'" title="Remote Desktop (VNC)">Remote</button>
                                 <button class="btn btn-ghost btn-sm" @click.stop="showToken(m)" title="Install-Befehl">Token</button>
                                 <button class="btn btn-danger btn-sm" @click.stop="deleteMachine(m)" title="Entfernen">✕</button>
                             </template>
@@ -774,6 +775,21 @@
                         <p style="margin-bottom:0.4rem">Noch kein Veeam erkannt.</p>
                         <p style="font-size:0.85rem">Sobald auf einer Maschine mit installiertem Agent ein Veeam Backup &amp; Replication Server läuft, erscheint er hier automatisch (inkl. Jobs, Historie und Repositories). Alternativ kannst du eine externe Veeam-Instanz per REST-API anbinden.</p>
                     </div>
+                </div>
+
+                <!-- VNC Remote Desktop Overlay -->
+                <div v-if="showVnc" style="position:fixed;inset:0;z-index:2000;display:flex;flex-direction:column;background:#111">
+                    <div style="display:flex;align-items:center;gap:0.75rem;padding:0 0.75rem;height:38px;background:var(--bg-secondary);border-bottom:1px solid var(--border);flex-shrink:0">
+                        <span style="font-size:0.85rem;font-weight:600;color:var(--text-primary)">Remote Desktop</span>
+                        <span class="os-badge">{{ vncHostname }}</span>
+                        <span style="font-size:0.78rem;color:var(--text-muted)">Port {{ vncPort }}</span>
+                        <div style="margin-left:auto;display:flex;gap:0.5rem;align-items:center">
+                            <label style="font-size:0.78rem;color:var(--text-muted)">Port</label>
+                            <input type="number" v-model.number="vncPort" min="1" max="65535" style="width:70px;font-size:0.8rem;padding:2px 6px" @change="reconnectVnc">
+                            <button class="btn btn-danger btn-sm" @click="closeVnc">Trennen ✕</button>
+                        </div>
+                    </div>
+                    <iframe :src="vncSrc" style="flex:1;border:none;width:100%" allow="fullscreen"></iframe>
                 </div>
 
                 <!-- Veeam Job History Modal -->

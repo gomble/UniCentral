@@ -6,6 +6,7 @@ const { config } = require('../config');
 const { MSG_TYPES, createMessage, parseMessage } = require('./protocol');
 
 const connectedAgents = new Map();
+const vncSessions = new Map(); // sessionId → { browserWs, agentWs, machineId }
 
 function verifyHmac(machineId, timestamp, signature) {
     const machine = db.prepare('SELECT machine_secret FROM machines WHERE machine_id = ?').get(machineId);
@@ -22,6 +23,7 @@ function generateMachineSecret() {
 
 function initAgentWebSocket(server, sessionMiddleware) {
     const wss = new WebSocket.Server({ noServer: true });
+    const vncWss = new WebSocket.Server({ noServer: true });
 
     server.on('upgrade', (request, socket, head) => {
         const pathname = url.parse(request.url).pathname;
@@ -42,8 +44,32 @@ function initAgentWebSocket(server, sessionMiddleware) {
                     wss.emit('connection', ws, request);
                 });
             });
+        } else if (pathname === '/ws/vnc-browser') {
+            sessionMiddleware(request, {}, () => {
+                if (!request.session || !request.session.authenticated) {
+                    socket.destroy();
+                    return;
+                }
+                vncWss.handleUpgrade(request, socket, head, (ws) => {
+                    ws._isVncBrowser = true;
+                    vncWss.emit('connection', ws, request);
+                });
+            });
+        } else if (pathname === '/ws/vnc-agent') {
+            vncWss.handleUpgrade(request, socket, head, (ws) => {
+                ws._isVncAgent = true;
+                vncWss.emit('connection', ws, request);
+            });
         } else {
             socket.destroy();
+        }
+    });
+
+    vncWss.on('connection', (ws, request) => {
+        if (ws._isVncBrowser) {
+            handleVncBrowserConnection(ws, request);
+        } else {
+            handleVncAgentConnection(ws, request);
         }
     });
 
@@ -581,6 +607,101 @@ function checkOfflineMachines() {
         WHERE status = 'online'
         AND last_seen < datetime('now', '-${threshold} seconds')
     `).run();
+}
+
+// VNC WebSocket bridge handlers
+
+function handleVncBrowserConnection(ws, request) {
+    const params = new URLSearchParams(url.parse(request.url).query);
+    const machineId = params.get('machineId');
+    const vncPort = parseInt(params.get('port') || '5900', 10);
+
+    if (!machineId) { ws.close(1008, 'No machineId'); return; }
+
+    const agentWs = connectedAgents.get(machineId);
+    if (!agentWs || agentWs.readyState !== WebSocket.OPEN) {
+        ws.close(1008, 'Agent not connected');
+        return;
+    }
+
+    const sessionId = crypto.randomUUID();
+    vncSessions.set(sessionId, { browserWs: ws, agentWs: null, machineId });
+
+    agentWs.send(JSON.stringify({
+        type: 'command',
+        timestamp: Date.now(),
+        payload: { command_id: 0, type: 'vnc_relay', parameters: { session_id: sessionId, vnc_port: vncPort } }
+    }));
+
+    ws.on('message', (data, isBinary) => {
+        const sess = vncSessions.get(sessionId);
+        if (sess && sess.agentWs && sess.agentWs.readyState === WebSocket.OPEN) {
+            sess.agentWs.send(data, { binary: isBinary });
+        }
+    });
+
+    ws.on('close', () => {
+        const sess = vncSessions.get(sessionId);
+        if (sess && sess.agentWs && sess.agentWs.readyState === WebSocket.OPEN) {
+            sess.agentWs.close();
+        }
+        vncSessions.delete(sessionId);
+    });
+
+    ws.on('error', () => {
+        const sess = vncSessions.get(sessionId);
+        if (sess && sess.agentWs) sess.agentWs.close();
+        vncSessions.delete(sessionId);
+    });
+
+    setTimeout(() => {
+        const sess = vncSessions.get(sessionId);
+        if (sess && !sess.agentWs && ws.readyState === WebSocket.OPEN) {
+            ws.close(1008, 'VNC relay timeout');
+            vncSessions.delete(sessionId);
+        }
+    }, 15000);
+}
+
+function handleVncAgentConnection(ws, request) {
+    const params = new URLSearchParams(url.parse(request.url).query);
+    const sessionId = params.get('session_id');
+    const machineId = params.get('machine_id');
+    const ts = params.get('ts');
+    const sig = params.get('sig');
+
+    if (!sessionId || !machineId || !verifyHmac(machineId, ts, sig)) {
+        ws.close(1008, 'Unauthorized');
+        return;
+    }
+
+    const sess = vncSessions.get(sessionId);
+    if (!sess || sess.machineId !== machineId) {
+        ws.close(1008, 'Unknown session');
+        return;
+    }
+
+    sess.agentWs = ws;
+    console.log(`[VNC] Agent relay connected for session ${sessionId.slice(0, 8)}`);
+
+    ws.on('message', (data, isBinary) => {
+        const s = vncSessions.get(sessionId);
+        if (s && s.browserWs.readyState === WebSocket.OPEN) {
+            s.browserWs.send(data, { binary: isBinary });
+        }
+    });
+
+    ws.on('close', () => {
+        const s = vncSessions.get(sessionId);
+        if (s && s.browserWs.readyState === WebSocket.OPEN) s.browserWs.close();
+        vncSessions.delete(sessionId);
+    });
+
+    ws.on('error', () => {
+        const s = vncSessions.get(sessionId);
+        if (s && s.browserWs.readyState === WebSocket.OPEN) s.browserWs.close();
+        vncSessions.delete(sessionId);
+    });
 }
 
 // Dashboard WebSocket connections
