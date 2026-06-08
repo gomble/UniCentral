@@ -39,18 +39,29 @@
 
         const params    = new URLSearchParams(location.search);
         const machineId = params.get('machineId') || '';
-        const port      = params.get('port')      || '5900';
         const hostname  = params.get('hostname')  || machineId;
-
-        const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-        const wsUrl = `${proto}://${location.host}/ws/vnc-browser?machineId=${encodeURIComponent(machineId)}&port=${encodeURIComponent(port)}`;
 
         const statusEl  = document.getElementById('status');
         const statusMsg = document.getElementById('status-msg');
+        statusMsg.textContent = `Lade Verbindungsdaten für ${hostname}…`;
+
+        // Fetch VNC credentials from the server (never exposed in the URL).
+        let credentials = { password: '', port: 5900 };
+        try {
+            const r = await fetch(`/api/vnc/credentials/${encodeURIComponent(machineId)}`);
+            if (r.ok) credentials = await r.json();
+        } catch (_) {}
+
+        const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+        const wsUrl = `${proto}://${location.host}/ws/vnc-browser?machineId=${encodeURIComponent(machineId)}&port=${encodeURIComponent(credentials.port || 5900)}`;
+
+        statusMsg.textContent = `Verbinde mit ${hostname}…`;
 
         let rfb;
         try {
-            rfb = new RFB(document.getElementById('screen'), wsUrl);
+            rfb = new RFB(document.getElementById('screen'), wsUrl, {
+                credentials: { password: credentials.password || '' }
+            });
         } catch (e) {
             statusEl.innerHTML = `<h2>Fehler</h2><p>${e.message}</p>`;
             throw e;
@@ -71,16 +82,14 @@
         });
 
         rfb.addEventListener('credentialsrequired', () => {
-            const password = prompt(`VNC-Passwort für ${hostname}:`);
-            rfb.sendCredentials({ password: password || '' });
+            const pwd = prompt(`VNC-Passwort für ${hostname}:`);
+            rfb.sendCredentials({ password: pwd || '' });
         });
 
         rfb.addEventListener('securityfailure', (e) => {
             statusEl.style.display = '';
             statusEl.innerHTML = `<h2>Authentifizierung fehlgeschlagen</h2><p>${(e.detail && e.detail.reason) || ''}</p>`;
         });
-
-        statusMsg.textContent = `Verbinde mit ${hostname}…`;
     </script>
 </body>
 </html>

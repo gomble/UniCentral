@@ -1,0 +1,2 @@
+ALTER TABLE machines ADD COLUMN vnc_password TEXT DEFAULT '';
+ALTER TABLE machines ADD COLUMN vnc_port INTEGER DEFAULT 5900;

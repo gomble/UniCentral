@@ -159,23 +159,53 @@ const app = createApp({
         const vncSrc = ref('');
         const vncHostname = ref('');
         const vncPort = ref(5900);
+        const vncPreparing = ref(false);
+        const vncPrepareStatus = ref('');
         let _vncMachineId = '';
 
-        function openVNC(machine, port) {
+        async function openVNC(machine, port) {
             _vncMachineId = machine.machine_id;
             vncHostname.value = machine.display_name || machine.hostname;
             vncPort.value = port || 5900;
-            vncSrc.value = `/vnc.html?machineId=${encodeURIComponent(machine.machine_id)}&port=${vncPort.value}&hostname=${encodeURIComponent(vncHostname.value)}`;
+            vncSrc.value = '';
+            vncPreparing.value = true;
+            vncPrepareStatus.value = 'VNC wird auf der Maschine eingerichtet…';
             showVnc.value = true;
+
+            try {
+                const r = await apiFetch(`/api/vnc/prepare/${encodeURIComponent(machine.machine_id)}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ port: vncPort.value })
+                });
+                if (!r.ok) {
+                    const e = await r.json().catch(() => ({}));
+                    vncPrepareStatus.value = `Fehler: ${e.error || r.status}`;
+                    return;
+                }
+                vncPrepareStatus.value = 'Starte VNC-Verbindung…';
+            } catch (e) {
+                vncPrepareStatus.value = `Fehler: ${e.message}`;
+                return;
+            }
+
+            // Small delay so the setup command can be processed by the agent,
+            // then open the iframe (the agent relay retries TCP for 90 s).
+            setTimeout(() => {
+                vncPreparing.value = false;
+                vncSrc.value = `/vnc.html?machineId=${encodeURIComponent(machine.machine_id)}&hostname=${encodeURIComponent(vncHostname.value)}`;
+            }, 2000);
         }
 
         function closeVnc() {
             showVnc.value = false;
             vncSrc.value = '';
+            vncPreparing.value = false;
         }
 
         function reconnectVnc() {
-            vncSrc.value = `/vnc.html?machineId=${encodeURIComponent(_vncMachineId)}&port=${vncPort.value}&hostname=${encodeURIComponent(vncHostname.value)}`;
+            vncPreparing.value = false;
+            vncSrc.value = `/vnc.html?machineId=${encodeURIComponent(_vncMachineId)}&hostname=${encodeURIComponent(vncHostname.value)}`;
         }
 
         const showAddMachine = ref(false);
@@ -2089,7 +2119,8 @@ const app = createApp({
             diskExplorerMachineId, diskExplorerPath, diskExplorerLoading, diskExplorerData, diskExplorerHistory,
             showDiskExplorer, openDiskExplorer, diskExplorerGoTo, startDiskScan, diskExplorerDrillDown, diskExplorerBack,
             diskExplorerBreadcrumbs, diskExplorerBarWidth, diskExplorerBarColor,
-            showVnc, vncSrc, vncHostname, vncPort, openVNC, closeVnc, reconnectVnc
+            showVnc, vncSrc, vncHostname, vncPort, vncPreparing, vncPrepareStatus,
+            openVNC, closeVnc, reconnectVnc
         };
     }
 });

@@ -78,6 +78,8 @@ func Execute(cmdType string, params map[string]interface{}, onProgress ProgressF
 		return execLocalDeleteUser(params)
 	case "scan_disk":
 		return execScanDisk(params)
+	case "setup_vnc":
+		return execSetupVNC(params)
 	default:
 		return Result{Status: "failed", Output: fmt.Sprintf("unknown command: %s", cmdType)}
 	}

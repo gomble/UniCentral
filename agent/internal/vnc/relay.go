@@ -22,8 +22,20 @@ func StartRelay(serverURL, machineID, machineSecret, sessionID string, vncPort i
 		return
 	}
 
-	tcpConn, err := net.DialTimeout("tcp", fmt.Sprintf("localhost:%d", vncPort), 10*time.Second)
-	if err != nil {
+	// Retry TCP connection for up to 90 s so the relay works even when
+	// setup_vnc is still installing / starting the VNC service.
+	addr := fmt.Sprintf("localhost:%d", vncPort)
+	var tcpConn net.Conn
+	deadline := time.Now().Add(90 * time.Second)
+	for time.Now().Before(deadline) {
+		var dialErr error
+		tcpConn, dialErr = net.DialTimeout("tcp", addr, 3*time.Second)
+		if dialErr == nil {
+			break
+		}
+		time.Sleep(3 * time.Second)
+	}
+	if tcpConn == nil {
 		return
 	}
 	defer tcpConn.Close()

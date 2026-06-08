@@ -779,17 +779,24 @@
 
                 <!-- VNC Remote Desktop Overlay -->
                 <div v-if="showVnc" style="position:fixed;inset:0;z-index:2000;display:flex;flex-direction:column;background:#111">
+                    <!-- Header bar -->
                     <div style="display:flex;align-items:center;gap:0.75rem;padding:0 0.75rem;height:38px;background:var(--bg-secondary);border-bottom:1px solid var(--border);flex-shrink:0">
                         <span style="font-size:0.85rem;font-weight:600;color:var(--text-primary)">Remote Desktop</span>
                         <span class="os-badge">{{ vncHostname }}</span>
-                        <span style="font-size:0.78rem;color:var(--text-muted)">Port {{ vncPort }}</span>
+                        <span v-if="!vncPreparing" style="font-size:0.78rem;color:var(--text-muted)">Port {{ vncPort }}</span>
                         <div style="margin-left:auto;display:flex;gap:0.5rem;align-items:center">
-                            <label style="font-size:0.78rem;color:var(--text-muted)">Port</label>
-                            <input type="number" v-model.number="vncPort" min="1" max="65535" style="width:70px;font-size:0.8rem;padding:2px 6px" @change="reconnectVnc">
+                            <button v-if="!vncPreparing" class="btn btn-ghost btn-sm" @click="reconnectVnc" title="Neu verbinden">&#8635;</button>
                             <button class="btn btn-danger btn-sm" @click="closeVnc">Trennen ✕</button>
                         </div>
                     </div>
-                    <iframe :src="vncSrc" style="flex:1;border:none;width:100%" allow="fullscreen"></iframe>
+                    <!-- Preparing state -->
+                    <div v-if="vncPreparing" style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1rem;color:#ccc;font-family:sans-serif">
+                        <div style="width:36px;height:36px;border:3px solid #444;border-top-color:#7c9cf8;border-radius:50%;animation:spin 1s linear infinite"></div>
+                        <span style="font-size:0.9rem">{{ vncPrepareStatus }}</span>
+                        <span style="font-size:0.78rem;color:#777">TightVNC wird bei Bedarf automatisch installiert und gestartet</span>
+                    </div>
+                    <!-- noVNC iframe -->
+                    <iframe v-else :src="vncSrc" style="flex:1;border:none;width:100%" allow="fullscreen"></iframe>
                 </div>
 
                 <!-- Veeam Job History Modal -->

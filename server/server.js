@@ -67,6 +67,7 @@ app.use('/api/deploy', require('./routes/deployment'));
 app.use('/api/notifications', require('./routes/notifications'));
 app.use('/api/veeam', require('./routes/veeam'));
 app.use('/api/settings', require('./routes/settings'));
+app.use('/api/vnc', require('./routes/vnc-prep'));
 app.use('/api/updates', require('./routes/updates'));
 app.use('/api/ad', require('./routes/active-directory'));
 
