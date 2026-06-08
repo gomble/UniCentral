@@ -3,6 +3,8 @@ package commands
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
@@ -193,10 +195,21 @@ $probe = Test-VncAuth $port $pass
 Log ("Auth probe: " + $probe)
 `, port, password)
 
+	// Pass the script via a temp file (-File) rather than -Command. The large
+	// quote-heavy script does not survive being passed as a single -Command
+	// argument reliably, which produced empty output and left the password
+	// unset. A UTF-8 BOM makes PowerShell read the file with the right encoding.
+	tmp := filepath.Join(os.TempDir(), "unicentral-vnc-setup.ps1")
+	content := append([]byte{0xEF, 0xBB, 0xBF}, []byte(script)...)
+	if err := os.WriteFile(tmp, content, 0o600); err != nil {
+		return Result{Status: "failed", Output: "cannot write VNC setup script: " + err.Error()}
+	}
+	defer os.Remove(tmp)
+
 	ctx, cancel := context.WithTimeout(context.Background(), 240*time.Second)
 	defer cancel()
 	out, err := runStreaming(ctx, "", "powershell",
-		[]string{"-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script},
+		[]string{"-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", tmp},
 		nil)
 	if err != nil && ctx.Err() != nil {
 		return Result{Status: "failed", Output: out + "\nTimeout"}
