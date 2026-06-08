@@ -95,6 +95,13 @@ Set-ItemProperty -Path $reg -Name 'RfbPort'                -Value $port -Type DW
 Set-ItemProperty -Path $reg -Name 'AllowLoopback'          -Value 1 -Type DWord
 Set-ItemProperty -Path $reg -Name 'LoopbackOnly'           -Value 0 -Type DWord
 Set-ItemProperty -Path $reg -Name 'VideoRecognitionInterval' -Value 3000 -Type DWord
+# Disable IP blacklisting so repeated relay reconnects from 127.0.0.1 are never
+# locked out (failed auth attempts during setup would otherwise block loopback).
+Set-ItemProperty -Path $reg -Name 'BlacklistThreshold'     -Value 1000000 -Type DWord
+Set-ItemProperty -Path $reg -Name 'BlacklistTimeout'       -Value 0 -Type DWord
+# Never query the (often headless) console user to accept incoming connections.
+Set-ItemProperty -Path $reg -Name 'QueryAcceptOnTimeout'   -Value 1 -Type DWord
+Set-ItemProperty -Path $reg -Name 'QueryTimeout'           -Value 1 -Type DWord
 
 $svc = Get-Service -Name 'tvnserver' -ErrorAction SilentlyContinue
 if (-not $svc) {
@@ -118,6 +125,25 @@ if ($svc) {
 Start-Sleep -Seconds 4
 $conn = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue
 if ($conn) { Log "VNC ready on port $port" } else { Log "VNC service starting..." }
+
+# Loopback RFB probe: confirm TightVNC actually answers over 127.0.0.1 and is
+# not silently blocking the loopback connection (greeting should be "RFB 003.00x").
+try {
+    $tc = New-Object System.Net.Sockets.TcpClient
+    $tc.Connect('127.0.0.1', $port)
+    $tc.ReceiveTimeout = 4000
+    $ns = $tc.GetStream()
+    $b = New-Object byte[] 12
+    $rd = $ns.Read($b, 0, 12)
+    if ($rd -gt 0) {
+        Log ("Loopback probe OK: " + ([System.Text.Encoding]::ASCII.GetString($b,0,$rd)).Trim())
+    } else {
+        Log "Loopback probe: connected but received 0 bytes (TightVNC is blocking loopback)"
+    }
+    $tc.Close()
+} catch {
+    Log ("Loopback probe failed: " + $_.Exception.Message)
+}
 `, port, password)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 240*time.Second)
