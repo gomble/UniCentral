@@ -32,7 +32,9 @@ const sessionMiddleware = session({
 });
 app.use(sessionMiddleware);
 
-app.use('/novnc', express.static(path.join(__dirname, '..', 'node_modules', '@novnc', 'novnc', 'core')));
+// Serve the noVNC package at its root so that relative imports inside core/
+// (e.g. "../vendor/pako/...") resolve correctly.
+app.use('/novnc', express.static(path.join(__dirname, '..', 'node_modules', '@novnc', 'novnc')));
 
 app.use((req, res, next) => {
     if (req.path.startsWith('/api/') || req.path.startsWith('/ws/') || req.path.startsWith('/auth')) return next();
