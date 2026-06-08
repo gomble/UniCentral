@@ -638,8 +638,13 @@ function handleVncBrowserConnection(ws, request) {
     ws.on('message', (data, isBinary) => {
         const sess = vncSessions.get(sessionId);
         if (sess && sess.agentWs && sess.agentWs.readyState === WebSocket.OPEN) {
+            if (sess.fromBrowser === 0) {
+                console.log(`[VNC] FIRST browser→agent ${data.length}B bin=${isBinary} session ${sessionId.slice(0, 8)} head=${Buffer.from(data).slice(0, 16).toString('hex')}`);
+            }
             sess.fromBrowser += data.length || 0;
             sess.agentWs.send(data, { binary: isBinary });
+        } else {
+            console.log(`[VNC] browser→? DROP (agentWs not ready) session ${sessionId.slice(0, 8)}`);
         }
     });
 
@@ -694,8 +699,13 @@ function handleVncAgentConnection(ws, request) {
     ws.on('message', (data, isBinary) => {
         const s = vncSessions.get(sessionId);
         if (s && s.browserWs.readyState === WebSocket.OPEN) {
+            if (s.fromAgent === 0) {
+                console.log(`[VNC] FIRST agent→browser ${data.length}B bin=${isBinary} session ${sessionId.slice(0, 8)} head=${Buffer.from(data).slice(0, 16).toString('hex')} ascii=${Buffer.from(data).slice(0, 12).toString('ascii').replace(/[^\x20-\x7e]/g, '.')}`);
+            }
             s.fromAgent += data.length || 0;
             s.browserWs.send(data, { binary: isBinary });
+        } else {
+            console.log(`[VNC] agent→? DROP (browserWs not open, state=${s ? s.browserWs.readyState : 'no-sess'}) session ${sessionId.slice(0, 8)}`);
         }
     });
 
