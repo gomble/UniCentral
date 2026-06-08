@@ -35,14 +35,74 @@ $pass = '%s'
 
 function Log($m) { Write-Output ("[{0}] {1}" -f (Get-Date -Format 'HH:mm:ss'), $m) }
 
-function EncodeVNCPass($p) {
-    $bytes = [System.Text.Encoding]::ASCII.GetBytes($p.PadRight(8,[char]0).Substring(0,8))
-    $enc = $bytes | ForEach-Object {
-        $b = $_; $r = [byte]0
+function ReverseBits([byte[]]$arr) {
+    $out = New-Object byte[] $arr.Length
+    for ($j = 0; $j -lt $arr.Length; $j++) {
+        $b = $arr[$j]; $r = [byte]0
         for ($i = 0; $i -lt 8; $i++) { $r = [byte](($r -shl 1) -bor ($b -band 1)); $b = [byte]($b -shr 1) }
-        $r
+        $out[$j] = $r
     }
-    return [byte[]]$enc
+    return ,$out
+}
+
+function DesEcb([byte[]]$data, [byte[]]$key) {
+    $des = [System.Security.Cryptography.DES]::Create()
+    $des.Mode = [System.Security.Cryptography.CipherMode]::ECB
+    $des.Padding = [System.Security.Cryptography.PaddingMode]::None
+    $des.Key = $key
+    $enc = $des.CreateEncryptor()
+    $out = $enc.TransformFinalBlock($data, 0, $data.Length)
+    $des.Dispose()
+    return ,$out
+}
+
+# TightVNC stores the password as DES(password, fixedKey) using the well-known
+# VNC fixed key. .NET DES reads bits MSB-first while VNC's d3des reads them
+# LSB-first, so we pre-reverse the bits of the fixed key (0x17,0x52,... ->
+# 0xE8,0x4A,...) and encrypt the 8-byte (null-padded) password as-is.
+function EncodeVNCPass($p) {
+    $pw = New-Object byte[] 8
+    $src = [System.Text.Encoding]::ASCII.GetBytes($p)
+    [Array]::Copy($src, 0, $pw, 0, [Math]::Min(8, $src.Length))
+    $key = [byte[]](0xE8,0x4A,0xD6,0x60,0xC4,0x72,0x1A,0xE0)
+    return ,(DesEcb $pw $key)
+}
+
+# Replicate the VNC challenge-response to verify the stored password actually
+# authenticates over loopback. The DES key is the password with each byte's
+# bits reversed (same d3des convention).
+function Test-VncAuth($port, $pass) {
+    try {
+        $tc = New-Object System.Net.Sockets.TcpClient
+        $tc.Connect('127.0.0.1', $port)
+        $tc.ReceiveTimeout = 5000; $tc.SendTimeout = 5000
+        $ns = $tc.GetStream()
+        $ver = New-Object byte[] 12
+        $n = $ns.Read($ver, 0, 12)
+        if ($n -lt 12) { $tc.Close(); return "no version ($n bytes)" }
+        $ns.Write($ver, 0, 12)
+        $cnt = New-Object byte[] 1
+        if ($ns.Read($cnt, 0, 1) -lt 1) { $tc.Close(); return "no sectype count" }
+        if ($cnt[0] -eq 0) { $tc.Close(); return "server sent 0 sectypes (rejected)" }
+        $types = New-Object byte[] $cnt[0]
+        $ns.Read($types, 0, $cnt[0]) | Out-Null
+        $ns.Write([byte[]](2), 0, 1)
+        $ch = New-Object byte[] 16; $r = 0
+        while ($r -lt 16) { $k = $ns.Read($ch, $r, 16 - $r); if ($k -le 0) { break }; $r += $k }
+        if ($r -lt 16) { $tc.Close(); return "no challenge ($r bytes)" }
+        $pw = New-Object byte[] 8
+        $src = [System.Text.Encoding]::ASCII.GetBytes($pass)
+        [Array]::Copy($src, 0, $pw, 0, [Math]::Min(8, $src.Length))
+        $key = ReverseBits $pw
+        $resp = DesEcb $ch $key
+        $ns.Write($resp, 0, 16)
+        $sr = New-Object byte[] 4; $r = 0
+        while ($r -lt 4) { $k = $ns.Read($sr, $r, 4 - $r); if ($k -le 0) { break }; $r += $k }
+        $tc.Close()
+        if ($r -lt 4) { return "no SecurityResult ($r bytes)" }
+        if (($sr[0] -bor $sr[1] -bor $sr[2] -bor $sr[3]) -eq 0) { return "AUTH OK" }
+        return ("AUTH FAILED (result=" + ($sr -join ',') + ")")
+    } catch { return ("probe error: " + $_.Exception.Message) }
 }
 
 $reg = 'HKLM:\SOFTWARE\TightVNC\Server'
@@ -126,24 +186,11 @@ Start-Sleep -Seconds 4
 $conn = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue
 if ($conn) { Log "VNC ready on port $port" } else { Log "VNC service starting..." }
 
-# Loopback RFB probe: confirm TightVNC actually answers over 127.0.0.1 and is
-# not silently blocking the loopback connection (greeting should be "RFB 003.00x").
-try {
-    $tc = New-Object System.Net.Sockets.TcpClient
-    $tc.Connect('127.0.0.1', $port)
-    $tc.ReceiveTimeout = 4000
-    $ns = $tc.GetStream()
-    $b = New-Object byte[] 12
-    $rd = $ns.Read($b, 0, 12)
-    if ($rd -gt 0) {
-        Log ("Loopback probe OK: " + ([System.Text.Encoding]::ASCII.GetString($b,0,$rd)).Trim())
-    } else {
-        Log "Loopback probe: connected but received 0 bytes (TightVNC is blocking loopback)"
-    }
-    $tc.Close()
-} catch {
-    Log ("Loopback probe failed: " + $_.Exception.Message)
-}
+# Verify the stored password actually authenticates over loopback. This runs
+# the full RFB VNC-auth handshake and reports AUTH OK / AUTH FAILED so password
+# encoding problems surface here instead of as a silent browser disconnect.
+$probe = Test-VncAuth $port $pass
+Log ("Auth probe: " + $probe)
 `, port, password)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 240*time.Second)
