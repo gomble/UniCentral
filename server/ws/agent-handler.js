@@ -626,7 +626,7 @@ function handleVncBrowserConnection(ws, request) {
     }
 
     const sessionId = crypto.randomUUID();
-    vncSessions.set(sessionId, { browserWs: ws, agentWs: null, machineId });
+    vncSessions.set(sessionId, { browserWs: ws, agentWs: null, machineId, startTime: Date.now(), fromBrowser: 0, fromAgent: 0 });
     console.log(`[VNC] Browser connected for ${machineId}, session ${sessionId.slice(0, 8)}, sending vnc_relay (port ${vncPort})`);
 
     agentWs.send(JSON.stringify({
@@ -638,14 +638,17 @@ function handleVncBrowserConnection(ws, request) {
     ws.on('message', (data, isBinary) => {
         const sess = vncSessions.get(sessionId);
         if (sess && sess.agentWs && sess.agentWs.readyState === WebSocket.OPEN) {
+            sess.fromBrowser += data.length || 0;
             sess.agentWs.send(data, { binary: isBinary });
         }
     });
 
-    ws.on('close', () => {
+    ws.on('close', (code, reason) => {
         const sess = vncSessions.get(sessionId);
-        if (sess && sess.agentWs && sess.agentWs.readyState === WebSocket.OPEN) {
-            sess.agentWs.close();
+        if (sess) {
+            const dur = ((Date.now() - sess.startTime) / 1000).toFixed(1);
+            console.log(`[VNC] Browser closed session ${sessionId.slice(0, 8)} after ${dur}s code=${code} reason=${reason} browser→agent=${sess.fromBrowser}B agent→browser=${sess.fromAgent}B`);
+            if (sess.agentWs && sess.agentWs.readyState === WebSocket.OPEN) sess.agentWs.close();
         }
         vncSessions.delete(sessionId);
     });
@@ -691,13 +694,18 @@ function handleVncAgentConnection(ws, request) {
     ws.on('message', (data, isBinary) => {
         const s = vncSessions.get(sessionId);
         if (s && s.browserWs.readyState === WebSocket.OPEN) {
+            s.fromAgent += data.length || 0;
             s.browserWs.send(data, { binary: isBinary });
         }
     });
 
-    ws.on('close', () => {
+    ws.on('close', (code, reason) => {
         const s = vncSessions.get(sessionId);
-        if (s && s.browserWs.readyState === WebSocket.OPEN) s.browserWs.close();
+        if (s) {
+            const dur = ((Date.now() - s.startTime) / 1000).toFixed(1);
+            console.log(`[VNC] Agent relay closed session ${sessionId.slice(0, 8)} after ${dur}s code=${code} reason=${reason} browser→agent=${s.fromBrowser}B agent→browser=${s.fromAgent}B`);
+            if (s.browserWs.readyState === WebSocket.OPEN) s.browserWs.close();
+        }
         vncSessions.delete(sessionId);
     });
 
