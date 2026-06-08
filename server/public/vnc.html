@@ -28,11 +28,25 @@
         }
         #status h2 { color: #fff; margin: 0 0 0.5rem; }
         #status p  { margin: 0; color: #aaa; font-size: 0.85rem; }
+        #status .spinner {
+            display: inline-block;
+            width: 24px; height: 24px;
+            border: 3px solid #444;
+            border-top-color: #8ab4f8;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin-bottom: 0.75rem;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
     <div id="screen"></div>
-    <div id="status"><h2>Verbinde…</h2><p id="status-msg"></p></div>
+    <div id="status">
+        <div class="spinner" id="spinner"></div>
+        <h2 id="status-title">Verbinde…</h2>
+        <p id="status-msg"></p>
+    </div>
 
     <script type="module">
         import RFB from '/novnc/rfb.js';
@@ -41,9 +55,17 @@
         const machineId = params.get('machineId') || '';
         const hostname  = params.get('hostname')  || machineId;
 
-        const statusEl  = document.getElementById('status');
-        const statusMsg = document.getElementById('status-msg');
-        statusMsg.textContent = `Lade Verbindungsdaten für ${hostname}…`;
+        const statusEl    = document.getElementById('status');
+        const statusTitle = document.getElementById('status-title');
+        const statusMsg   = document.getElementById('status-msg');
+        const spinner     = document.getElementById('spinner');
+
+        function setStatus(title, msg) {
+            statusTitle.textContent = title;
+            statusMsg.textContent   = msg || '';
+        }
+
+        setStatus('Verbinde…', `Lade Verbindungsdaten für ${hostname}…`);
 
         // Fetch VNC credentials from the server (never exposed in the URL).
         let credentials = { password: '', port: 5900 };
@@ -55,7 +77,25 @@
         const proto = location.protocol === 'https:' ? 'wss' : 'ws';
         const wsUrl = `${proto}://${location.host}/ws/vnc-browser?machineId=${encodeURIComponent(machineId)}&port=${encodeURIComponent(credentials.port || 5900)}`;
 
-        statusMsg.textContent = `Verbinde mit ${hostname}…`;
+        setStatus('Verbinde…', `Starte VNC-Verbindung zu ${hostname}…`);
+
+        // Progressive status messages while waiting for the VNC service to start.
+        // setup_vnc + TCP retry can take up to ~90 s on first install.
+        const progressMessages = [
+            [12, 'VNC-Dienst wird gestartet…'],
+            [25, 'Warte auf VNC-Server (Installation läuft)…'],
+            [50, 'VNC wird installiert, bitte warten…'],
+            [75, 'Fast fertig, VNC-Dienst startet…'],
+        ];
+        let connectStart = Date.now();
+        let progressTimer = setInterval(() => {
+            const elapsed = (Date.now() - connectStart) / 1000;
+            for (const [sec, msg] of progressMessages) {
+                if (elapsed >= sec) {
+                    setStatus('Verbinde…', msg);
+                }
+            }
+        }, 3000);
 
         let rfb;
         try {
@@ -63,7 +103,10 @@
                 credentials: { password: credentials.password || '' }
             });
         } catch (e) {
-            statusEl.innerHTML = `<h2>Fehler</h2><p>${e.message}</p>`;
+            clearInterval(progressTimer);
+            spinner.style.display = 'none';
+            statusTitle.textContent = 'Fehler';
+            statusMsg.textContent = e.message;
             throw e;
         }
 
@@ -71,14 +114,18 @@
         rfb.resizeSession = false;
 
         rfb.addEventListener('connect', () => {
+            clearInterval(progressTimer);
             statusEl.style.display = 'none';
             document.title = `Remote: ${hostname}`;
         });
 
         rfb.addEventListener('disconnect', (e) => {
+            clearInterval(progressTimer);
             statusEl.style.display = '';
+            spinner.style.display = 'none';
             const reason = e.detail && e.detail.reason ? e.detail.reason : 'Verbindung getrennt';
-            statusEl.innerHTML = `<h2>Getrennt</h2><p>${reason}</p>`;
+            statusTitle.textContent = 'Getrennt';
+            statusMsg.textContent = reason;
         });
 
         rfb.addEventListener('credentialsrequired', () => {
@@ -87,8 +134,11 @@
         });
 
         rfb.addEventListener('securityfailure', (e) => {
+            clearInterval(progressTimer);
             statusEl.style.display = '';
-            statusEl.innerHTML = `<h2>Authentifizierung fehlgeschlagen</h2><p>${(e.detail && e.detail.reason) || ''}</p>`;
+            spinner.style.display = 'none';
+            statusTitle.textContent = 'Authentifizierung fehlgeschlagen';
+            statusMsg.textContent = (e.detail && e.detail.reason) || '';
         });
     </script>
 </body>

@@ -654,13 +654,15 @@ function handleVncBrowserConnection(ws, request) {
         vncSessions.delete(sessionId);
     });
 
+    // 30 s to receive the agent back-channel WS (agent connects immediately
+    // in the new relay design before it starts the TCP retry loop).
     setTimeout(() => {
         const sess = vncSessions.get(sessionId);
         if (sess && !sess.agentWs && ws.readyState === WebSocket.OPEN) {
-            ws.close(1008, 'VNC relay timeout');
+            ws.close(1008, 'Agent nicht erreichbar oder veraltet');
             vncSessions.delete(sessionId);
         }
-    }, 15000);
+    }, 30000);
 }
 
 function handleVncAgentConnection(ws, request) {
