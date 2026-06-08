@@ -26,14 +26,15 @@ type VeeamJob struct {
 }
 
 type VeeamSession struct {
-	JobID     string `json:"job_id"`
-	SessionID string `json:"session_id"`
-	JobName   string `json:"job_name"`
-	Result    string `json:"result"`
-	State     string `json:"state"`
-	Start     string `json:"start"`
-	End       string `json:"end"`
-	TasksJSON string `json:"tasks_json"`
+	JobID        string `json:"job_id"`
+	SessionID    string `json:"session_id"`
+	JobName      string `json:"job_name"`
+	Result       string `json:"result"`
+	State        string `json:"state"`
+	Start        string `json:"start"`
+	End          string `json:"end"`
+	TasksJSON    string `json:"tasks_json"`
+	WarningsJSON string `json:"warnings_json"`
 }
 
 type VeeamRepository struct {
@@ -183,6 +184,25 @@ try {
     }
 } catch {}
 
+# Helper: collect attention records (warnings/errors) from a session's log.
+function GetWarnings($session) {
+    $out = New-Object System.Collections.ArrayList
+    try {
+        $recs = @($session.Logger.GetLog().GetAttentionRecords())
+        foreach ($r in $recs) {
+            [void]$out.Add([PSCustomObject]@{
+                status = [string]$r.Status
+                title  = [string]$r.Title
+                time   = IsoOrNull $r.UpdateTime
+            })
+        }
+    } catch {}
+    if ($out.Count -eq 0) { return '[]' }
+    $j = ($out | ConvertTo-Json -Depth 3 -Compress)
+    if ($out.Count -eq 1) { $j = '[' + $j + ']' }
+    return $j
+}
+
 # Helper: collect task sessions (per-VM results) for a backup session object.
 function GetTasks($session) {
     $out = New-Object System.Collections.ArrayList
@@ -300,16 +320,18 @@ try {
             }
             $sessReason = ''
             try { $sessReason = [string]$s.Info.Reason } catch {}
+            $warningsJson = GetWarnings $s
             [void]$sessOut.Add([PSCustomObject]@{
-                job_id     = $jid
-                session_id = [string]$s.Id
-                job_name   = [string]$j.Name
-                result     = [string]$s.Result
-                state      = [string]$s.State
-                start      = IsoOrNull $s.CreationTime
-                end        = IsoOrNull $s.EndTime
-                tasks_json = $tasksJson
-                reason     = $sessReason
+                job_id        = $jid
+                session_id    = [string]$s.Id
+                job_name      = [string]$j.Name
+                result        = [string]$s.Result
+                state         = [string]$s.State
+                start         = IsoOrNull $s.CreationTime
+                end           = IsoOrNull $s.EndTime
+                tasks_json    = $tasksJson
+                reason        = $sessReason
+                warnings_json = $warningsJson
             })
         }
     }
@@ -369,16 +391,18 @@ try {
             }
             $sessReason = ''
             try { $sessReason = [string]$s.Info.Reason } catch {}
+            $warningsJson = GetWarnings $s
             [void]$sessOut.Add([PSCustomObject]@{
-                job_id     = $jid
-                session_id = [string]$s.Id
-                job_name   = [string]$j.Name
-                result     = [string]$s.Result
-                state      = [string]$s.State
-                start      = IsoOrNull $s.CreationTime
-                end        = IsoOrNull $s.EndTime
-                tasks_json = $tasksJson
-                reason     = $sessReason
+                job_id        = $jid
+                session_id    = [string]$s.Id
+                job_name      = [string]$j.Name
+                result        = [string]$s.Result
+                state         = [string]$s.State
+                start         = IsoOrNull $s.CreationTime
+                end           = IsoOrNull $s.EndTime
+                tasks_json    = $tasksJson
+                reason        = $sessReason
+                warnings_json = $warningsJson
             })
         }
     }

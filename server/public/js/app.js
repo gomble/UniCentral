@@ -1103,6 +1103,7 @@ const app = createApp({
             veeamHistorySessions.value = rows.map(s => ({
                 ...s,
                 tasks: (() => { try { return JSON.parse(s.tasks_json || '[]'); } catch { return []; } })(),
+                warnings: (() => { try { return JSON.parse(s.warnings_json || '[]'); } catch { return []; } })(),
                 _open: false
             }));
             veeamHistoryLoading.value = false;
