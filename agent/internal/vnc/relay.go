@@ -47,7 +47,9 @@ func StartRelay(serverURL, machineID, machineSecret, sessionID string, vncPort i
 	// Retry TCP connection to the local VNC server for up to 180 s so that
 	// setup_vnc has time to download, install and start the VNC service even
 	// on a first-time install over a slow connection.
-	addr := fmt.Sprintf("localhost:%d", vncPort)
+	// Use 127.0.0.1 (not "localhost") so we always hit IPv4 — TightVNC binds
+	// to the IPv4 loopback, while "localhost" can resolve to ::1 first.
+	addr := fmt.Sprintf("127.0.0.1:%d", vncPort)
 	var tcpConn net.Conn
 	deadline := time.Now().Add(180 * time.Second)
 	for time.Now().Before(deadline) {

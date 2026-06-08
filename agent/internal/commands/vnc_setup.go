@@ -45,8 +45,11 @@ function EncodeVNCPass($p) {
     return [byte[]]$enc
 }
 
+$reg = 'HKLM:\SOFTWARE\TightVNC\Server'
+$lb = (Get-ItemProperty -Path $reg -Name 'AllowLoopback' -ErrorAction SilentlyContinue).AllowLoopback
 $conn = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue
-if ($conn) { Log "VNC already listening on port $port"; exit 0 }
+if ($conn -and $lb -eq 1) { Log "VNC already listening on port $port (loopback enabled)"; exit 0 }
+if ($conn) { Log "VNC listening but loopback disabled - reconfiguring..." }
 
 $exe = 'C:\Program Files\TightVNC\tvnserver.exe'
 if (-not (Test-Path $exe) -and (Test-Path 'C:\Program Files (x86)\TightVNC\tvnserver.exe')) {
