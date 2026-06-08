@@ -620,12 +620,14 @@ function handleVncBrowserConnection(ws, request) {
 
     const agentWs = connectedAgents.get(machineId);
     if (!agentWs || agentWs.readyState !== WebSocket.OPEN) {
+        console.log(`[VNC] Browser connect for ${machineId} but agent not connected`);
         ws.close(1008, 'Agent not connected');
         return;
     }
 
     const sessionId = crypto.randomUUID();
     vncSessions.set(sessionId, { browserWs: ws, agentWs: null, machineId });
+    console.log(`[VNC] Browser connected for ${machineId}, session ${sessionId.slice(0, 8)}, sending vnc_relay (port ${vncPort})`);
 
     agentWs.send(JSON.stringify({
         type: 'command',
