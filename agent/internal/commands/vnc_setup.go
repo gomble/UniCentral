@@ -164,6 +164,7 @@ Set-ItemProperty -Path $reg -Name 'BlacklistTimeout'       -Value 0 -Type DWord
 # Never query the (often headless) console user to accept incoming connections.
 Set-ItemProperty -Path $reg -Name 'QueryAcceptOnTimeout'   -Value 1 -Type DWord
 Set-ItemProperty -Path $reg -Name 'QueryTimeout'           -Value 1 -Type DWord
+Set-ItemProperty -Path $reg -Name 'RichCursorEnabled'      -Value 1 -Type DWord
 
 $svc = Get-Service -Name 'tvnserver' -ErrorAction SilentlyContinue
 if (-not $svc) {
