@@ -26,6 +26,7 @@ router.post('/prepare/:machineId', requireAuth, (req, res) => {
     if (machine.status !== 'online') return res.status(409).json({ error: 'Machine offline' });
 
     let password = machine.vnc_password;
+    const needsSetup = !password;
     if (!password) {
         password = generateVncPassword();
         db.prepare('UPDATE machines SET vnc_password = ?, vnc_port = ? WHERE machine_id = ?').run(password, port, machineId);
@@ -33,8 +34,12 @@ router.post('/prepare/:machineId', requireAuth, (req, res) => {
         db.prepare('UPDATE machines SET vnc_port = ? WHERE machine_id = ?').run(port, machineId);
     }
 
-    const result = sendCommandToAgent(machineId, 'setup_vnc', { password, port });
-    res.json({ ok: true, command_id: result.command_id || null, port });
+    if (needsSetup) {
+        const result = sendCommandToAgent(machineId, 'setup_vnc', { password, port });
+        res.json({ ok: true, command_id: result.command_id || null, port });
+    } else {
+        res.json({ ok: true, command_id: null, port });
+    }
 });
 
 // Return VNC credentials for a machine (authenticated users only).
