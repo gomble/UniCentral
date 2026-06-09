@@ -10,10 +10,70 @@
             width: 100%; height: 100%;
             background: #1a1a1a;
             overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
         }
+        #toolbar {
+            position: fixed;
+            top: 0; left: 0; right: 0;
+            height: 40px;
+            background: #2d2d2d;
+            border-bottom: 1px solid #444;
+            display: none;
+            align-items: center;
+            padding: 0 8px;
+            gap: 4px;
+            z-index: 1000;
+            overflow-x: auto;
+        }
+        #toolbar.visible { display: flex; }
+        #toolbar button {
+            background: #3a3a3a;
+            color: #e0e0e0;
+            border: 1px solid #555;
+            border-radius: 4px;
+            padding: 4px 10px;
+            font-size: 12px;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: background 0.15s;
+        }
+        #toolbar button:hover { background: #4a4a4a; }
+        #toolbar button:active { background: #555; }
+        #toolbar button.accent {
+            background: #1a5fb4;
+            border-color: #2a7fff;
+        }
+        #toolbar button.accent:hover { background: #2a6fc4; }
+        #toolbar .separator {
+            width: 1px;
+            height: 24px;
+            background: #555;
+            margin: 0 6px;
+        }
+        #toolbar .clipboard-group {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            margin-left: auto;
+        }
+        #toolbar .clipboard-group input {
+            background: #1a1a1a;
+            color: #e0e0e0;
+            border: 1px solid #555;
+            border-radius: 4px;
+            padding: 4px 8px;
+            font-size: 12px;
+            width: 200px;
+        }
+        #toolbar .clipboard-group input::placeholder { color: #777; }
         #screen {
             width: 100%;
+            height: calc(100% - 41px);
+            margin-top: 41px;
+        }
+        #screen.fullscreen {
             height: 100%;
+            margin-top: 0;
         }
         #status {
             position: fixed;
@@ -41,10 +101,32 @@
     </style>
 </head>
 <body>
+    <div id="toolbar">
+        <button id="btn-cad" class="accent" title="Strg+Alt+Entf senden">Strg+Alt+Entf</button>
+        <div class="separator"></div>
+        <button id="btn-tab" title="Tab-Taste senden">Tab</button>
+        <button id="btn-esc" title="Escape-Taste senden">Esc</button>
+        <button id="btn-win" title="Windows/Super-Taste senden">Win</button>
+        <button id="btn-alt-tab" title="Alt+Tab senden">Alt+Tab</button>
+        <button id="btn-alt-f4" title="Alt+F4 senden">Alt+F4</button>
+        <div class="separator"></div>
+        <button id="btn-f11" title="F11 (Vollbild im Gastrechner)">F11</button>
+        <button id="btn-prtsc" title="Druck-Taste senden">Druck</button>
+        <div class="separator"></div>
+        <div class="clipboard-group">
+            <input type="text" id="clipboard-input" placeholder="Text hier eingeben zum Senden..." title="Text eingeben und mit Senden-Button an Remote senden">
+            <button id="btn-paste-send" title="Text aus dem Feld an den Remote-Rechner senden">Senden</button>
+            <button id="btn-paste-clip" title="Zwischenablage direkt an Remote senden">Einfuegen</button>
+            <button id="btn-get-clip" title="Remote-Zwischenablage abholen">Abholen</button>
+        </div>
+        <div class="separator"></div>
+        <button id="btn-fullscreen" title="Toolbar ausblenden (Doppelklick auf oberen Rand zum Wiederherstellen)">Vollbild</button>
+    </div>
+
     <div id="screen"></div>
     <div id="status">
         <div class="spinner" id="spinner"></div>
-        <h2 id="status-title">Verbinde…</h2>
+        <h2 id="status-title">Verbinde...</h2>
         <p id="status-msg"></p>
     </div>
 
@@ -65,9 +147,8 @@
             statusMsg.textContent   = msg || '';
         }
 
-        setStatus('Verbinde…', `Lade Verbindungsdaten für ${hostname}…`);
+        setStatus('Verbinde...', `Lade Verbindungsdaten fuer ${hostname}...`);
 
-        // Fetch VNC credentials from the server (never exposed in the URL).
         let credentials = { password: '', port: 5900 };
         try {
             const r = await fetch(`/api/vnc/credentials/${encodeURIComponent(machineId)}`);
@@ -77,27 +158,27 @@
         const proto = location.protocol === 'https:' ? 'wss' : 'ws';
         const wsUrl = `${proto}://${location.host}/ws/vnc-browser?machineId=${encodeURIComponent(machineId)}&port=${encodeURIComponent(credentials.port || 5900)}`;
 
-        setStatus('Verbinde…', `Starte VNC-Verbindung zu ${hostname}…`);
+        setStatus('Verbinde...', `Starte VNC-Verbindung zu ${hostname}...`);
 
-        // Progressive status messages while waiting for the VNC service to start.
-        // setup_vnc + TCP retry can take up to ~90 s on first install.
         const progressMessages = [
-            [12, 'VNC-Dienst wird gestartet…'],
-            [25, 'Warte auf VNC-Server (Installation läuft)…'],
-            [50, 'VNC wird installiert, bitte warten…'],
-            [75, 'Fast fertig, VNC-Dienst startet…'],
+            [12, 'VNC-Dienst wird gestartet...'],
+            [25, 'Warte auf VNC-Server (Installation laeuft)...'],
+            [50, 'VNC wird installiert, bitte warten...'],
+            [75, 'Fast fertig, VNC-Dienst startet...'],
         ];
         let connectStart = Date.now();
         let progressTimer = setInterval(() => {
             const elapsed = (Date.now() - connectStart) / 1000;
             for (const [sec, msg] of progressMessages) {
                 if (elapsed >= sec) {
-                    setStatus('Verbinde…', msg);
+                    setStatus('Verbinde...', msg);
                 }
             }
         }, 3000);
 
         let rfb;
+        let lastRemoteClipboard = '';
+
         try {
             rfb = new RFB(document.getElementById('screen'), wsUrl, {
                 credentials: { password: credentials.password || '' }
@@ -113,10 +194,126 @@
         rfb.scaleViewport = true;
         rfb.resizeSession = false;
 
+        rfb.addEventListener('clipboard', (e) => {
+            if (e.detail && e.detail.text) {
+                lastRemoteClipboard = e.detail.text;
+                navigator.clipboard.writeText(e.detail.text).catch(() => {});
+            }
+        });
+
         rfb.addEventListener('connect', () => {
             clearInterval(progressTimer);
             statusEl.style.display = 'none';
             document.title = `Remote: ${hostname}`;
+
+            const toolbar = document.getElementById('toolbar');
+            toolbar.classList.add('visible');
+
+            const XK_Control_L = 0xFFE3;
+            const XK_Alt_L     = 0xFFE9;
+            const XK_Delete    = 0xFFFF;
+            const XK_Tab       = 0xFF09;
+            const XK_Escape    = 0xFF1B;
+            const XK_Super_L   = 0xFFEB;
+            const XK_F4        = 0xFFC1;
+            const XK_F11       = 0xFFC8;
+            const XK_Print     = 0xFF61;
+
+            function sendKeyCombo(keys) {
+                keys.forEach(k => rfb.sendKey(k, null, true));
+                keys.slice().reverse().forEach(k => rfb.sendKey(k, null, false));
+            }
+
+            document.getElementById('btn-cad').addEventListener('click', () => {
+                sendKeyCombo([XK_Control_L, XK_Alt_L, XK_Delete]);
+            });
+
+            document.getElementById('btn-tab').addEventListener('click', () => {
+                sendKeyCombo([XK_Tab]);
+            });
+
+            document.getElementById('btn-esc').addEventListener('click', () => {
+                sendKeyCombo([XK_Escape]);
+            });
+
+            document.getElementById('btn-win').addEventListener('click', () => {
+                sendKeyCombo([XK_Super_L]);
+            });
+
+            document.getElementById('btn-alt-tab').addEventListener('click', () => {
+                sendKeyCombo([XK_Alt_L, XK_Tab]);
+            });
+
+            document.getElementById('btn-alt-f4').addEventListener('click', () => {
+                sendKeyCombo([XK_Alt_L, XK_F4]);
+            });
+
+            document.getElementById('btn-f11').addEventListener('click', () => {
+                sendKeyCombo([XK_F11]);
+            });
+
+            document.getElementById('btn-prtsc').addEventListener('click', () => {
+                sendKeyCombo([XK_Print]);
+            });
+
+            document.getElementById('btn-paste-send').addEventListener('click', () => {
+                const text = document.getElementById('clipboard-input').value;
+                if (text) {
+                    rfb.clipboardPasteFrom(text);
+                    document.getElementById('clipboard-input').value = '';
+                }
+            });
+
+            document.getElementById('btn-paste-clip').addEventListener('click', async () => {
+                try {
+                    const text = await navigator.clipboard.readText();
+                    if (text) {
+                        rfb.clipboardPasteFrom(text);
+                    }
+                } catch (e) {
+                    const text = prompt('Zwischenablage konnte nicht gelesen werden.\nText manuell eingeben:');
+                    if (text) rfb.clipboardPasteFrom(text);
+                }
+            });
+
+            document.getElementById('btn-get-clip').addEventListener('click', () => {
+                if (lastRemoteClipboard) {
+                    navigator.clipboard.writeText(lastRemoteClipboard).then(
+                        () => { document.getElementById('clipboard-input').value = lastRemoteClipboard; },
+                        () => { document.getElementById('clipboard-input').value = lastRemoteClipboard; }
+                    );
+                }
+            });
+
+            document.getElementById('btn-fullscreen').addEventListener('click', () => {
+                toolbar.classList.remove('visible');
+                document.getElementById('screen').classList.add('fullscreen');
+                rfb.scaleViewport = true;
+            });
+
+            document.addEventListener('dblclick', (e) => {
+                if (e.clientY < 10 && !toolbar.classList.contains('visible')) {
+                    toolbar.classList.add('visible');
+                    document.getElementById('screen').classList.remove('fullscreen');
+                    rfb.scaleViewport = true;
+                }
+            });
+
+            document.addEventListener('keydown', (e) => {
+                if (e.ctrlKey && e.shiftKey && e.altKey && e.key === 'D') {
+                    e.preventDefault();
+                    toolbar.classList.toggle('visible');
+                    document.getElementById('screen').classList.toggle('fullscreen');
+                    rfb.scaleViewport = true;
+                }
+            });
+
+            document.getElementById('clipboard-input').addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    document.getElementById('btn-paste-send').click();
+                }
+            });
         });
 
         rfb.addEventListener('disconnect', (e) => {
@@ -129,7 +326,7 @@
         });
 
         rfb.addEventListener('credentialsrequired', () => {
-            const pwd = prompt(`VNC-Passwort für ${hostname}:`);
+            const pwd = prompt(`VNC-Passwort fuer ${hostname}:`);
             rfb.sendCredentials({ password: pwd || '' });
         });
 
