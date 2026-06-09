@@ -158,7 +158,13 @@
         const proto = location.protocol === 'https:' ? 'wss' : 'ws';
         const wsUrl = `${proto}://${location.host}/ws/vnc-browser?machineId=${encodeURIComponent(machineId)}&port=${encodeURIComponent(credentials.port || 5900)}`;
 
-        setStatus('Verbinde...', `Starte VNC-Verbindung zu ${hostname}...`);
+        let rfb;
+        let lastRemoteClipboard = '';
+        let connected = false;
+        let retryCount = 0;
+        const maxRetries = 3;
+        let progressTimer = null;
+        let connectStart = Date.now();
 
         const progressMessages = [
             [12, 'VNC-Dienst wird gestartet...'],
@@ -166,46 +172,8 @@
             [50, 'VNC wird installiert, bitte warten...'],
             [75, 'Fast fertig, VNC-Dienst startet...'],
         ];
-        let connectStart = Date.now();
-        let progressTimer = setInterval(() => {
-            const elapsed = (Date.now() - connectStart) / 1000;
-            for (const [sec, msg] of progressMessages) {
-                if (elapsed >= sec) {
-                    setStatus('Verbinde...', msg);
-                }
-            }
-        }, 3000);
 
-        let rfb;
-        let lastRemoteClipboard = '';
-
-        try {
-            rfb = new RFB(document.getElementById('screen'), wsUrl, {
-                credentials: { password: credentials.password || '' }
-            });
-        } catch (e) {
-            clearInterval(progressTimer);
-            spinner.style.display = 'none';
-            statusTitle.textContent = 'Fehler';
-            statusMsg.textContent = e.message;
-            throw e;
-        }
-
-        rfb.scaleViewport = true;
-        rfb.resizeSession = false;
-
-        rfb.addEventListener('clipboard', (e) => {
-            if (e.detail && e.detail.text) {
-                lastRemoteClipboard = e.detail.text;
-                navigator.clipboard.writeText(e.detail.text).catch(() => {});
-            }
-        });
-
-        rfb.addEventListener('connect', () => {
-            clearInterval(progressTimer);
-            statusEl.style.display = 'none';
-            document.title = `Remote: ${hostname}`;
-
+        function setupToolbar() {
             const toolbar = document.getElementById('toolbar');
             toolbar.classList.add('visible');
 
@@ -224,72 +192,44 @@
                 keys.slice().reverse().forEach(k => rfb.sendKey(k, null, false));
             }
 
-            document.getElementById('btn-cad').addEventListener('click', () => {
-                sendKeyCombo([XK_Control_L, XK_Alt_L, XK_Delete]);
-            });
+            document.getElementById('btn-cad').onclick = () => sendKeyCombo([XK_Control_L, XK_Alt_L, XK_Delete]);
+            document.getElementById('btn-tab').onclick = () => sendKeyCombo([XK_Tab]);
+            document.getElementById('btn-esc').onclick = () => sendKeyCombo([XK_Escape]);
+            document.getElementById('btn-win').onclick = () => sendKeyCombo([XK_Super_L]);
+            document.getElementById('btn-alt-tab').onclick = () => sendKeyCombo([XK_Alt_L, XK_Tab]);
+            document.getElementById('btn-alt-f4').onclick = () => sendKeyCombo([XK_Alt_L, XK_F4]);
+            document.getElementById('btn-f11').onclick = () => sendKeyCombo([XK_F11]);
+            document.getElementById('btn-prtsc').onclick = () => sendKeyCombo([XK_Print]);
 
-            document.getElementById('btn-tab').addEventListener('click', () => {
-                sendKeyCombo([XK_Tab]);
-            });
-
-            document.getElementById('btn-esc').addEventListener('click', () => {
-                sendKeyCombo([XK_Escape]);
-            });
-
-            document.getElementById('btn-win').addEventListener('click', () => {
-                sendKeyCombo([XK_Super_L]);
-            });
-
-            document.getElementById('btn-alt-tab').addEventListener('click', () => {
-                sendKeyCombo([XK_Alt_L, XK_Tab]);
-            });
-
-            document.getElementById('btn-alt-f4').addEventListener('click', () => {
-                sendKeyCombo([XK_Alt_L, XK_F4]);
-            });
-
-            document.getElementById('btn-f11').addEventListener('click', () => {
-                sendKeyCombo([XK_F11]);
-            });
-
-            document.getElementById('btn-prtsc').addEventListener('click', () => {
-                sendKeyCombo([XK_Print]);
-            });
-
-            document.getElementById('btn-paste-send').addEventListener('click', () => {
+            document.getElementById('btn-paste-send').onclick = () => {
                 const text = document.getElementById('clipboard-input').value;
-                if (text) {
-                    rfb.clipboardPasteFrom(text);
-                    document.getElementById('clipboard-input').value = '';
-                }
-            });
+                if (text) { rfb.clipboardPasteFrom(text); document.getElementById('clipboard-input').value = ''; }
+            };
 
-            document.getElementById('btn-paste-clip').addEventListener('click', async () => {
+            document.getElementById('btn-paste-clip').onclick = async () => {
                 try {
                     const text = await navigator.clipboard.readText();
-                    if (text) {
-                        rfb.clipboardPasteFrom(text);
-                    }
+                    if (text) rfb.clipboardPasteFrom(text);
                 } catch (e) {
                     const text = prompt('Zwischenablage konnte nicht gelesen werden.\nText manuell eingeben:');
                     if (text) rfb.clipboardPasteFrom(text);
                 }
-            });
+            };
 
-            document.getElementById('btn-get-clip').addEventListener('click', () => {
+            document.getElementById('btn-get-clip').onclick = () => {
                 if (lastRemoteClipboard) {
                     navigator.clipboard.writeText(lastRemoteClipboard).then(
                         () => { document.getElementById('clipboard-input').value = lastRemoteClipboard; },
                         () => { document.getElementById('clipboard-input').value = lastRemoteClipboard; }
                     );
                 }
-            });
+            };
 
-            document.getElementById('btn-fullscreen').addEventListener('click', () => {
+            document.getElementById('btn-fullscreen').onclick = () => {
                 toolbar.classList.remove('visible');
                 document.getElementById('screen').classList.add('fullscreen');
                 rfb.scaleViewport = true;
-            });
+            };
 
             document.addEventListener('dblclick', (e) => {
                 if (e.clientY < 10 && !toolbar.classList.contains('visible')) {
@@ -309,34 +249,91 @@
             });
 
             document.getElementById('clipboard-input').addEventListener('keydown', (e) => {
-                if (e.key === 'Enter') {
-                    e.preventDefault();
-                    document.getElementById('btn-paste-send').click();
+                if (e.key === 'Enter') { e.preventDefault(); document.getElementById('btn-paste-send').click(); }
+            });
+        }
+
+        function startVnc() {
+            setStatus('Verbinde...', retryCount > 0
+                ? `Verbindungsversuch ${retryCount + 1}/${maxRetries + 1} zu ${hostname}...`
+                : `Starte VNC-Verbindung zu ${hostname}...`);
+            statusEl.style.display = '';
+            spinner.style.display = '';
+
+            connectStart = Date.now();
+            if (progressTimer) clearInterval(progressTimer);
+            progressTimer = setInterval(() => {
+                const elapsed = (Date.now() - connectStart) / 1000;
+                for (const [sec, msg] of progressMessages) {
+                    if (elapsed >= sec) setStatus('Verbinde...', msg);
+                }
+            }, 3000);
+
+            document.getElementById('screen').innerHTML = '';
+
+            try {
+                rfb = new RFB(document.getElementById('screen'), wsUrl, {
+                    credentials: { password: credentials.password || '' }
+                });
+            } catch (e) {
+                clearInterval(progressTimer);
+                spinner.style.display = 'none';
+                statusTitle.textContent = 'Fehler';
+                statusMsg.textContent = e.message;
+                return;
+            }
+
+            rfb.scaleViewport = true;
+            rfb.resizeSession = false;
+
+            rfb.addEventListener('clipboard', (e) => {
+                if (e.detail && e.detail.text) {
+                    lastRemoteClipboard = e.detail.text;
+                    navigator.clipboard.writeText(e.detail.text).catch(() => {});
                 }
             });
-        });
 
-        rfb.addEventListener('disconnect', (e) => {
-            clearInterval(progressTimer);
-            statusEl.style.display = '';
-            spinner.style.display = 'none';
-            const reason = e.detail && e.detail.reason ? e.detail.reason : 'Verbindung getrennt';
-            statusTitle.textContent = 'Getrennt';
-            statusMsg.textContent = reason;
-        });
+            rfb.addEventListener('connect', () => {
+                clearInterval(progressTimer);
+                connected = true;
+                retryCount = 0;
+                statusEl.style.display = 'none';
+                document.title = `Remote: ${hostname}`;
+                setupToolbar();
+            });
 
-        rfb.addEventListener('credentialsrequired', () => {
-            const pwd = prompt(`VNC-Passwort fuer ${hostname}:`);
-            rfb.sendCredentials({ password: pwd || '' });
-        });
+            rfb.addEventListener('disconnect', (e) => {
+                clearInterval(progressTimer);
+                if (!connected && retryCount < maxRetries) {
+                    retryCount++;
+                    setStatus('Verbinde...', `Erneuter Verbindungsversuch (${retryCount}/${maxRetries})...`);
+                    setTimeout(startVnc, 2000);
+                    return;
+                }
+                statusEl.style.display = '';
+                spinner.style.display = 'none';
+                connected = false;
+                const reason = e.detail && e.detail.reason ? e.detail.reason : 'Verbindung getrennt';
+                statusTitle.textContent = 'Getrennt';
+                statusMsg.textContent = reason;
+            });
 
-        rfb.addEventListener('securityfailure', (e) => {
-            clearInterval(progressTimer);
-            statusEl.style.display = '';
-            spinner.style.display = 'none';
-            statusTitle.textContent = 'Authentifizierung fehlgeschlagen';
-            statusMsg.textContent = (e.detail && e.detail.reason) || '';
-        });
+            rfb.addEventListener('credentialsrequired', () => {
+                const pwd = prompt(`VNC-Passwort fuer ${hostname}:`);
+                rfb.sendCredentials({ password: pwd || '' });
+            });
+
+            rfb.addEventListener('securityfailure', (e) => {
+                clearInterval(progressTimer);
+                connected = false;
+                statusEl.style.display = '';
+                spinner.style.display = 'none';
+                statusTitle.textContent = 'Authentifizierung fehlgeschlagen';
+                statusMsg.textContent = (e.detail && e.detail.reason) || '';
+            });
+        }
+
+        startVnc();
     </script>
 </body>
 </html>

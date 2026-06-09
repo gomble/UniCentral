@@ -414,6 +414,11 @@ const app = createApp({
             } else if (data.type === 'heartbeat') {
                 const m = machines.value.find(x => x.machine_id === data.machineId);
                 if (m) m.status = 'online';
+            } else if (data.type === 'telemetry') {
+                if (view.value === 'machine-detail' && selectedMachine.value && selectedMachine.value.machine_id === data.machineId) {
+                    loadMachineDetail(selectedMachine.value.id);
+                    rescanLoading.value = false;
+                }
             } else if (data.type === 'command_result') {
                 handleCommandResultEvent(data);
             } else if (data.type === 'veeam_updated') {
@@ -890,6 +895,28 @@ const app = createApp({
         function showToken(m) {
             tokenMachine.value = m;
             showTokenModal.value = true;
+        }
+
+        const rescanLoading = ref(false);
+
+        async function triggerRescan(machine) {
+            if (!machine || machine.status !== 'online') return;
+            rescanLoading.value = true;
+            try {
+                const r = await apiFetch(`/api/commands/${machine.machine_id}/rescan`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({})
+                });
+                if (r.ok) {
+                    toast('Scan gestartet, Daten werden aktualisiert...', 'success');
+                } else {
+                    toast('Scan fehlgeschlagen', 'error');
+                }
+            } catch {
+                toast('Scan fehlgeschlagen', 'error');
+            }
+            setTimeout(() => { rescanLoading.value = false; }, 3000);
         }
 
         async function sendCommand(type) {
@@ -2274,7 +2301,8 @@ const app = createApp({
             showDiskExplorer, openDiskExplorer, diskExplorerGoTo, startDiskScan, diskExplorerDrillDown, diskExplorerBack,
             diskExplorerBreadcrumbs, diskExplorerBarWidth, diskExplorerBarColor,
             showVnc, vncSrc, vncHostname, vncPort, vncPreparing, vncPrepareStatus,
-            openVNC, closeVnc, reconnectVnc
+            openVNC, closeVnc, reconnectVnc,
+            rescanLoading, triggerRescan
         };
     }
 });

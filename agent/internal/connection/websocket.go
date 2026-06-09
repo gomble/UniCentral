@@ -266,6 +266,20 @@ func (c *Client) handleMessage(raw []byte) {
 }
 
 func (c *Client) executeCommand(cmd CommandPayload) {
+	if cmd.Type == "rescan" {
+		c.sendTelemetry()
+		c.send(Message{
+			Type:      "command_result",
+			Timestamp: time.Now().Unix(),
+			Payload: map[string]interface{}{
+				"command_id": cmd.CommandID,
+				"status":     "completed",
+				"result":     "Telemetry data collected and sent",
+			},
+		})
+		return
+	}
+
 	if cmd.Type == "vnc_relay" {
 		sessionID, _ := cmd.Parameters["session_id"].(string)
 		vncPort := 5900

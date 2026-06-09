@@ -44,6 +44,14 @@ router.post('/:machineId/firewall/enable', requireAdmin, (req, res) => {
     res.json(result);
 });
 
+router.post('/:machineId/rescan', (req, res) => {
+    const machine = db.prepare('SELECT * FROM machines WHERE id = ? OR machine_id = ?').get(req.params.machineId, req.params.machineId);
+    if (!machine) return res.status(404).json({ error: 'Machine not found' });
+
+    const result = sendCommandToAgent(machine.machine_id, 'rescan', {});
+    res.json(result);
+});
+
 router.post('/:machineId/firewall/disable', requireAdmin, (req, res) => {
     const machine = db.prepare('SELECT * FROM machines WHERE id = ? OR machine_id = ?').get(req.params.machineId, req.params.machineId);
     if (!machine) return res.status(404).json({ error: 'Machine not found' });
