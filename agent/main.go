@@ -12,6 +12,7 @@ import (
 )
 
 var version = "0.1.0"
+var defaultEnrollmentKey = "a5ecfd6a83c819d63dc94f2c36550b9f1c1dce02e040e0e0"
 
 type program struct {
 	conn *connection.Client
@@ -70,6 +71,9 @@ func main() {
 	}
 
 	config.Get().AgentVersion = version
+	if config.Get().EnrollmentKey == "" {
+		config.Get().EnrollmentKey = defaultEnrollmentKey
+	}
 
 	svcConfig := &service.Config{
 		Name:        "UniCentralAgent",

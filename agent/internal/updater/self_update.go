@@ -18,7 +18,12 @@ type VersionInfo struct {
 	DownloadURL string `json:"download_url"`
 }
 
+var updateFailCount int
+
 func CheckAndUpdate(serverURL, currentVersion string) {
+	if updateFailCount >= 3 {
+		return
+	}
 	url := fmt.Sprintf("%s/api/agent/version?os=%s&arch=%s", serverURL, runtime.GOOS, runtime.GOARCH)
 	resp, err := http.Get(url)
 	if err != nil {
@@ -48,7 +53,8 @@ func CheckAndUpdate(serverURL, currentVersion string) {
 	}
 
 	if err := Update(downloadURL); err != nil {
-		log.Printf("Auto-update failed: %v", err)
+		updateFailCount++
+		log.Printf("Auto-update failed (%d/3): %v", updateFailCount, err)
 	}
 }
 
