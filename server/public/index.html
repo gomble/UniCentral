@@ -508,6 +508,7 @@
                         <h1>{{ selectedMachine.display_name || selectedMachine.hostname }}</h1>
                         <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
                             <button class="btn btn-ghost btn-sm" @click="navigate('machines')">&#8592; Zurück</button>
+                            <button class="btn btn-ghost btn-sm" @click="openVNC(selectedMachine)" :disabled="selectedMachine.status !== 'online'">Remote</button>
                             <button class="btn btn-ghost btn-sm" @click="openEditMachine">Bearbeiten</button>
                             <button class="btn btn-ghost btn-sm" @click="openUserAdmin(selectedMachine)">Benutzer</button>
                             <button class="btn btn-primary btn-sm" @click="updateAgent" :disabled="selectedMachine.status !== 'online'">Agent aktualisieren</button>
