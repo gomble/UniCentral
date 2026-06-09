@@ -697,10 +697,11 @@
                     <!-- ===== Agent-detected Veeam servers ===== -->
                     <div class="card" v-for="server in veeamServers" :key="server.machine_id">
                         <div class="card-header">
-                            <div>
-                                <span style="background:#16a34a;color:#fff;font-size:0.6rem;padding:1px 5px;border-radius:3px;margin-right:6px;vertical-align:middle">VEEAM</span>
-                                <h3 style="display:inline">{{ server.display_name || server.hostname }}</h3>
-                                <span class="status-badge" :class="server.status" style="margin-left:0.5rem">{{ server.status }}</span>
+                            <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap">
+                                <span style="background:#16a34a;color:#fff;font-size:0.6rem;padding:1px 5px;border-radius:3px;vertical-align:middle">VEEAM</span>
+                                <h3 style="display:inline;margin:0">{{ server.display_name || server.hostname }}</h3>
+                                <span class="status-badge" :class="server.status">{{ server.status }}</span>
+                                <button class="btn btn-ghost btn-sm" style="font-size:0.72rem;padding:0.15rem 0.5rem" @click="openVNC(server)" :disabled="server.status !== 'online'">Remote</button>
                             </div>
                             <span style="font-size:0.75rem;color:var(--text-muted)" v-if="server.veeam_version">B&R {{ server.veeam_version }}</span>
                         </div>

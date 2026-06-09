@@ -83,7 +83,7 @@ router.get('/jobs', (req, res) => {
 // repositories embedded plus a small health summary for the dashboard.
 router.get('/servers', (req, res) => {
     const servers = db.prepare(`
-        SELECT machine_id, hostname, display_name, status, veeam_version, last_seen, ip_address
+        SELECT machine_id, hostname, display_name, status, os_type, veeam_version, last_seen, ip_address
         FROM machines
         WHERE is_veeam_server = 1
         ORDER BY COALESCE(NULLIF(display_name, ''), hostname) ASC
