@@ -7,6 +7,7 @@ const { MSG_TYPES, createMessage, parseMessage } = require('./protocol');
 
 const connectedAgents = new Map();
 const vncSessions = new Map(); // sessionId → { browserWs, agentWs, machineId }
+const shellSessions = new Map(); // sessionId → { browserWs, agentWs, machineId }
 
 function verifyHmac(machineId, timestamp, signature) {
     const machine = db.prepare('SELECT machine_secret FROM machines WHERE machine_id = ?').get(machineId);
@@ -60,6 +61,22 @@ function initAgentWebSocket(server, sessionMiddleware) {
                 ws._isVncAgent = true;
                 vncWss.emit('connection', ws, request);
             });
+        } else if (pathname === '/ws/shell-browser') {
+            sessionMiddleware(request, {}, () => {
+                if (!request.session || !request.session.authenticated) {
+                    socket.destroy();
+                    return;
+                }
+                vncWss.handleUpgrade(request, socket, head, (ws) => {
+                    ws._isShellBrowser = true;
+                    vncWss.emit('connection', ws, request);
+                });
+            });
+        } else if (pathname === '/ws/shell-agent') {
+            vncWss.handleUpgrade(request, socket, head, (ws) => {
+                ws._isShellAgent = true;
+                vncWss.emit('connection', ws, request);
+            });
         } else {
             socket.destroy();
         }
@@ -68,6 +85,10 @@ function initAgentWebSocket(server, sessionMiddleware) {
     vncWss.on('connection', (ws, request) => {
         if (ws._isVncBrowser) {
             handleVncBrowserConnection(ws, request);
+        } else if (ws._isShellBrowser) {
+            handleShellBrowserConnection(ws, request);
+        } else if (ws._isShellAgent) {
+            handleShellAgentConnection(ws, request);
         } else {
             handleVncAgentConnection(ws, request);
         }
@@ -722,6 +743,106 @@ function handleVncAgentConnection(ws, request) {
         const s = vncSessions.get(sessionId);
         if (s && s.browserWs.readyState === WebSocket.OPEN) s.browserWs.close();
         vncSessions.delete(sessionId);
+    });
+}
+
+// Shell (SSH-like terminal) relay
+function handleShellBrowserConnection(ws, request) {
+    const params = new URLSearchParams(url.parse(request.url).query);
+    const machineId = params.get('machineId');
+
+    if (!machineId) { ws.close(1008, 'No machineId'); return; }
+
+    const agentWs = connectedAgents.get(machineId);
+    if (!agentWs || agentWs.readyState !== WebSocket.OPEN) {
+        ws.close(1008, 'Agent not connected');
+        return;
+    }
+
+    for (const [oldId, oldSess] of shellSessions.entries()) {
+        if (oldSess.machineId === machineId) {
+            if (oldSess.agentWs && oldSess.agentWs.readyState === WebSocket.OPEN) oldSess.agentWs.close();
+            if (oldSess.browserWs && oldSess.browserWs.readyState === WebSocket.OPEN) oldSess.browserWs.close();
+            shellSessions.delete(oldId);
+        }
+    }
+
+    const sessionId = crypto.randomUUID();
+    shellSessions.set(sessionId, { browserWs: ws, agentWs: null, machineId, startTime: Date.now() });
+    console.log(`[Shell] Browser connected for ${machineId}, session ${sessionId.slice(0, 8)}`);
+
+    agentWs.send(JSON.stringify({
+        type: 'command',
+        timestamp: Date.now(),
+        payload: { command_id: 0, type: 'shell_relay', parameters: { session_id: sessionId } }
+    }));
+
+    ws.on('message', (data, isBinary) => {
+        const sess = shellSessions.get(sessionId);
+        if (sess && sess.agentWs && sess.agentWs.readyState === WebSocket.OPEN) {
+            sess.agentWs.send(data, { binary: isBinary });
+        }
+    });
+
+    ws.on('close', () => {
+        const sess = shellSessions.get(sessionId);
+        if (sess && sess.agentWs && sess.agentWs.readyState === WebSocket.OPEN) sess.agentWs.close();
+        shellSessions.delete(sessionId);
+    });
+
+    ws.on('error', () => {
+        const sess = shellSessions.get(sessionId);
+        if (sess && sess.agentWs) sess.agentWs.close();
+        shellSessions.delete(sessionId);
+    });
+
+    setTimeout(() => {
+        const sess = shellSessions.get(sessionId);
+        if (sess && !sess.agentWs && ws.readyState === WebSocket.OPEN) {
+            ws.close(1008, 'Agent nicht erreichbar');
+            shellSessions.delete(sessionId);
+        }
+    }, 15000);
+}
+
+function handleShellAgentConnection(ws, request) {
+    const params = new URLSearchParams(url.parse(request.url).query);
+    const sessionId = params.get('session_id');
+    const machineId = params.get('machine_id');
+    const ts = params.get('ts');
+    const sig = params.get('sig');
+
+    if (!sessionId || !machineId || !verifyHmac(machineId, ts, sig)) {
+        ws.close(1008, 'Unauthorized');
+        return;
+    }
+
+    const sess = shellSessions.get(sessionId);
+    if (!sess || sess.machineId !== machineId) {
+        ws.close(1008, 'Unknown session');
+        return;
+    }
+
+    sess.agentWs = ws;
+    console.log(`[Shell] Agent relay connected for session ${sessionId.slice(0, 8)}`);
+
+    ws.on('message', (data, isBinary) => {
+        const s = shellSessions.get(sessionId);
+        if (s && s.browserWs.readyState === WebSocket.OPEN) {
+            s.browserWs.send(data, { binary: isBinary });
+        }
+    });
+
+    ws.on('close', () => {
+        const s = shellSessions.get(sessionId);
+        if (s && s.browserWs.readyState === WebSocket.OPEN) s.browserWs.close();
+        shellSessions.delete(sessionId);
+    });
+
+    ws.on('error', () => {
+        const s = shellSessions.get(sessionId);
+        if (s && s.browserWs.readyState === WebSocket.OPEN) s.browserWs.close();
+        shellSessions.delete(sessionId);
     });
 }
 

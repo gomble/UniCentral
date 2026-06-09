@@ -19,6 +19,7 @@ import (
 	"github.com/unicentral/agent/internal/collectors"
 	"github.com/unicentral/agent/internal/commands"
 	"github.com/unicentral/agent/internal/config"
+	"github.com/unicentral/agent/internal/shell"
 	"github.com/unicentral/agent/internal/updater"
 	"github.com/unicentral/agent/internal/vnc"
 )
@@ -279,6 +280,14 @@ func (c *Client) executeCommand(cmd CommandPayload) {
 		}
 		if sessionID != "" {
 			vnc.StartRelay(c.cfg.Server, c.cfg.MachineID, c.cfg.MachineSecret, sessionID, vncPort)
+		}
+		return
+	}
+
+	if cmd.Type == "shell_relay" {
+		sessionID, _ := cmd.Parameters["session_id"].(string)
+		if sessionID != "" {
+			shell.StartRelay(c.cfg.Server, c.cfg.MachineID, c.cfg.MachineSecret, sessionID)
 		}
 		return
 	}

@@ -166,8 +166,14 @@ const app = createApp({
         async function openVNC(machine, port) {
             const machineId = machine.machine_id;
             const name = machine.display_name || machine.hostname;
-            const vncP = port || 5900;
 
+            if (machine.os_type === 'linux') {
+                const shellUrl = `/shell.html?machineId=${encodeURIComponent(machineId)}&hostname=${encodeURIComponent(name)}`;
+                window.open(shellUrl, `shell_${machineId}`, 'width=1000,height=600,menubar=no,toolbar=no,location=no,status=no');
+                return;
+            }
+
+            const vncP = port || 5900;
             try {
                 const r = await apiFetch(`/api/vnc/prepare/${encodeURIComponent(machineId)}`, {
                     method: 'POST',
