@@ -625,6 +625,15 @@ function handleVncBrowserConnection(ws, request) {
         return;
     }
 
+    for (const [oldId, oldSess] of vncSessions.entries()) {
+        if (oldSess.machineId === machineId) {
+            console.log(`[VNC] Closing previous session ${oldId.slice(0, 8)} for ${machineId}`);
+            if (oldSess.agentWs && oldSess.agentWs.readyState === WebSocket.OPEN) oldSess.agentWs.close();
+            if (oldSess.browserWs && oldSess.browserWs.readyState === WebSocket.OPEN) oldSess.browserWs.close();
+            vncSessions.delete(oldId);
+        }
+    }
+
     const sessionId = crypto.randomUUID();
     vncSessions.set(sessionId, { browserWs: ws, agentWs: null, machineId, startTime: Date.now(), fromBrowser: 0, fromAgent: 0 });
     console.log(`[VNC] Browser connected for ${machineId}, session ${sessionId.slice(0, 8)}, sending vnc_relay (port ${vncPort})`);
@@ -638,14 +647,8 @@ function handleVncBrowserConnection(ws, request) {
     ws.on('message', (data, isBinary) => {
         const sess = vncSessions.get(sessionId);
         if (sess && sess.agentWs && sess.agentWs.readyState === WebSocket.OPEN) {
-            sess.browserFrames = (sess.browserFrames || 0) + 1;
-            if (sess.browserFrames <= 10) {
-                console.log(`[VNC] B→A #${sess.browserFrames} ${data.length}B ${sessionId.slice(0, 8)} ${Buffer.from(data).slice(0, 20).toString('hex')}`);
-            }
             sess.fromBrowser += data.length || 0;
             sess.agentWs.send(data, { binary: isBinary });
-        } else {
-            console.log(`[VNC] browser→? DROP (agentWs not ready) session ${sessionId.slice(0, 8)}`);
         }
     });
 
@@ -700,14 +703,8 @@ function handleVncAgentConnection(ws, request) {
     ws.on('message', (data, isBinary) => {
         const s = vncSessions.get(sessionId);
         if (s && s.browserWs.readyState === WebSocket.OPEN) {
-            s.agentFrames = (s.agentFrames || 0) + 1;
-            if (s.agentFrames <= 10) {
-                console.log(`[VNC] A→B #${s.agentFrames} ${data.length}B ${sessionId.slice(0, 8)} ${Buffer.from(data).slice(0, 20).toString('hex')} | ${Buffer.from(data).slice(0, 12).toString('ascii').replace(/[^\x20-\x7e]/g, '.')}`);
-            }
             s.fromAgent += data.length || 0;
             s.browserWs.send(data, { binary: isBinary });
-        } else {
-            console.log(`[VNC] agent→? DROP (browserWs not open, state=${s ? s.browserWs.readyState : 'no-sess'}) session ${sessionId.slice(0, 8)}`);
         }
     });
 

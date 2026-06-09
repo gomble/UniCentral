@@ -9,20 +9,29 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
 )
 
-// StartRelay bridges a local VNC server on vncPort to the UniCentral server
-// via WebSocket. It opens the server WS channel first (keeping the browser
-// connection alive), then waits up to 90 s for the local VNC port to become
-// available (in case setup_vnc is still running), and finally bridges both
-// sides until either closes.
+var (
+	activeRelayMu   sync.Mutex
+	activeRelayStop chan struct{}
+)
+
 func StartRelay(serverURL, machineID, machineSecret, sessionID string, vncPort int) {
 	if sessionID == "" {
 		return
 	}
+
+	activeRelayMu.Lock()
+	if activeRelayStop != nil {
+		close(activeRelayStop)
+	}
+	stop := make(chan struct{})
+	activeRelayStop = stop
+	activeRelayMu.Unlock()
 
 	wsURL := strings.Replace(serverURL, "https://", "wss://", 1)
 	wsURL = strings.Replace(wsURL, "http://", "ws://", 1)
@@ -36,23 +45,21 @@ func StartRelay(serverURL, machineID, machineSecret, sessionID string, vncPort i
 	params.Set("ts", ts)
 	params.Set("sig", sig)
 
-	// Connect to the server bridge first so the 15-second browser-side timeout
-	// is satisfied immediately; TCP retry can then take up to 90 s.
 	wsConn, _, err := websocket.DefaultDialer.Dial(wsURL+"/ws/vnc-agent?"+params.Encode(), nil)
 	if err != nil {
 		return
 	}
 	defer wsConn.Close()
 
-	// Retry TCP connection to the local VNC server for up to 180 s so that
-	// setup_vnc has time to download, install and start the VNC service even
-	// on a first-time install over a slow connection.
-	// Use 127.0.0.1 (not "localhost") so we always hit IPv4 — TightVNC binds
-	// to the IPv4 loopback, while "localhost" can resolve to ::1 first.
 	addr := fmt.Sprintf("127.0.0.1:%d", vncPort)
 	var tcpConn net.Conn
 	deadline := time.Now().Add(180 * time.Second)
 	for time.Now().Before(deadline) {
+		select {
+		case <-stop:
+			return
+		default:
+		}
 		var dialErr error
 		tcpConn, dialErr = net.DialTimeout("tcp", addr, 3*time.Second)
 		if dialErr == nil {
@@ -67,7 +74,7 @@ func StartRelay(serverURL, machineID, machineSecret, sessionID string, vncPort i
 
 	done := make(chan struct{}, 2)
 
-	// TCP → WebSocket
+	// TCP -> WebSocket
 	go func() {
 		defer func() { done <- struct{}{} }()
 		buf := make([]byte, 32*1024)
@@ -82,7 +89,7 @@ func StartRelay(serverURL, machineID, machineSecret, sessionID string, vncPort i
 		}
 	}()
 
-	// WebSocket → TCP
+	// WebSocket -> TCP
 	go func() {
 		defer func() { done <- struct{}{} }()
 		for {
@@ -96,7 +103,12 @@ func StartRelay(serverURL, machineID, machineSecret, sessionID string, vncPort i
 		}
 	}()
 
-	<-done
+	select {
+	case <-done:
+	case <-stop:
+		tcpConn.Close()
+		wsConn.Close()
+	}
 }
 
 func computeHmac(machineID, timestamp, secret string) string {
