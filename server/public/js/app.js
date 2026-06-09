@@ -342,7 +342,17 @@ const app = createApp({
             }
             username.value = auth.username;
 
-            history.replaceState({ view: 'dashboard', id: null }, '', '#dashboard');
+            const hash = location.hash.replace('#', '');
+            let initialView = 'dashboard';
+            let initialId = null;
+            if (hash) {
+                const parts = hash.split('/');
+                initialView = parts[0] || 'dashboard';
+                initialId = parts[1] || null;
+            }
+            history.replaceState({ view: initialView, id: initialId }, '', '#' + initialView + (initialId ? '/' + initialId : ''));
+            navigateInternal(initialView, initialId);
+
             popstateHandler = (e) => {
                 if (e.state && e.state.view) navigateInternal(e.state.view, e.state.id);
                 else navigateInternal('dashboard');
