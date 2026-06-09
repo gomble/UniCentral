@@ -1,6 +1,6 @@
 {
   "name": "unicentral",
-  "version": "0.2.57",
+  "version": "0.2.58",
   "description": "Central web dashboard for managing Windows and Linux machines",
   "main": "server/server.js",
   "scripts": {

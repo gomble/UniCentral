@@ -633,6 +633,9 @@ const app = createApp({
             } else if (target === 'security') {
                 disconnectLogStream();
                 loadSecurityOverview();
+            } else if (target === 'insights') {
+                disconnectLogStream();
+                loadInsights();
             } else {
                 disconnectLogStream();
             }
@@ -1280,6 +1283,49 @@ const app = createApp({
             const res = await apiFetch('/api/commands/history');
             if (res.ok) commandHistory.value = await res.json();
         }
+
+        // Insights tab state
+        const insightsData = ref([]);
+        const insightsSummary = ref({ critical: 0, warning: 0, info: 0, total: 0 });
+        const insightsFilter = ref('all');
+        const insightsCategoryFilter = ref('');
+
+        async function loadInsights() {
+            const res = await apiFetch('/api/monitoring/insights');
+            if (res.ok) {
+                const result = await res.json();
+                insightsData.value = result.insights || [];
+                insightsSummary.value = result.summary || { critical: 0, warning: 0, info: 0, total: 0 };
+            }
+        }
+
+        const insightsCategories = computed(() => {
+            const cats = new Set(insightsData.value.map(i => i.category).filter(Boolean));
+            return [...cats].sort();
+        });
+
+        const insightsFiltered = computed(() => {
+            return insightsData.value.filter(i => {
+                if (insightsFilter.value !== 'all' && i.severity !== insightsFilter.value) return false;
+                if (insightsCategoryFilter.value && i.category !== insightsCategoryFilter.value) return false;
+                return true;
+            });
+        });
+
+        const insightsGrouped = computed(() => {
+            const groups = {};
+            for (const i of insightsFiltered.value) {
+                const cat = i.category || 'Sonstiges';
+                if (!groups[cat]) groups[cat] = { category: cat, items: [], collapsed: false };
+                groups[cat].items.push(i);
+            }
+            const order = ['Sicherheit', 'Speicher', 'Updates', 'Backup', 'Verfuegbarkeit', 'Administration'];
+            return Object.values(groups).sort((a, b) => {
+                const ai = order.indexOf(a.category);
+                const bi = order.indexOf(b.category);
+                return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+            });
+        });
 
         // Security tab state
         const securityData = ref([]);
@@ -2292,6 +2338,8 @@ const app = createApp({
             loadLocalUsers, loadLocalGroups, openCreateLocalUser, openEditLocalUser,
             openDuplicateLocalUser, saveLocalUser, confirmDeleteLocalUser, removeFromLocalGroup,
             toasts, confirmData,
+            insightsData, insightsSummary, insightsFilter, insightsCategoryFilter,
+            insightsCategories, insightsFiltered, insightsGrouped, loadInsights,
             securityData, securityDetailMachine, securityDetail,
             loadSecurityOverview, openSecurityDetail, securityToggleFirewall, securityToggleDefender,
             machineColumns, updatesColumns, commandLogColumns, servicesColumns,
