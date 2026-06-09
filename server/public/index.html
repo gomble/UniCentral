@@ -41,7 +41,7 @@
             <aside class="sidebar" :class="{open: sidebarOpen}">
                 <div class="sidebar-header">
                     <h1>UniCentral</h1>
-                    <small>v0.1.0</small>
+                    <small v-if="stats.agentVersion">Agent v{{ stats.agentVersion }}</small>
                 </div>
                 <nav class="sidebar-nav">
                     <div class="nav-item" :class="{active: view === 'dashboard'}" @click="navigate('dashboard')">
@@ -919,19 +919,64 @@
 
                 <!-- Alerts View -->
                 <div v-if="view === 'alerts'">
-                    <div class="page-header"><h1>Alarme</h1></div>
-                    <div class="card">
-                        <div v-if="alerts.length">
-                            <div v-for="a in alerts" :key="a.id" class="alert-item" style="padding:0.8rem 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
-                                <div>
-                                    <span class="status-badge" :class="a.severity">{{ a.severity }}</span>
-                                    <strong style="margin-left:0.5rem">{{ a.hostname || 'System' }}</strong>: {{ a.message }}
-                                    <div style="font-size:0.75rem;color:var(--text-muted);margin-top:0.2rem">{{ formatTime(a.created_at) }}</div>
+                    <div class="page-header">
+                        <h1>Alarme <span v-if="alertCount" style="font-size:0.8rem;background:var(--danger);color:#fff;border-radius:12px;padding:2px 8px;vertical-align:middle">{{ alertCount }} offen</span></h1>
+                        <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+                            <button class="btn btn-ghost btn-sm" @click="alertAcknowledgeSelected" :disabled="!alertSelected.length">Auswahl best. ({{ alertSelected.length }})</button>
+                            <button class="btn btn-danger btn-sm" @click="alertAcknowledgeAll" :disabled="!alertCount">Alle bestaetigen</button>
+                        </div>
+                    </div>
+
+                    <!-- Quick filter tabs -->
+                    <div style="display:flex;gap:0.5rem;margin-bottom:1rem;flex-wrap:wrap;align-items:center">
+                        <button class="btn btn-sm" :class="alertFilter === 'open' ? 'btn-primary' : 'btn-ghost'" @click="alertFilter = 'open'">Offen ({{ alertCount }})</button>
+                        <button class="btn btn-sm" :class="alertFilter === 'all' ? 'btn-primary' : 'btn-ghost'" @click="alertFilter = 'all'">Alle</button>
+                        <button class="btn btn-sm" :class="alertFilter === 'critical' ? 'btn-primary' : 'btn-ghost'" @click="alertFilter = 'critical'" style="color:var(--danger)">Kritisch</button>
+                        <button class="btn btn-sm" :class="alertFilter === 'warning' ? 'btn-primary' : 'btn-ghost'" @click="alertFilter = 'warning'" style="color:var(--warning)">Warnung</button>
+                        <button class="btn btn-sm" :class="alertFilter === 'info' ? 'btn-primary' : 'btn-ghost'" @click="alertFilter = 'info'">Info</button>
+                        <div style="margin-left:auto;display:flex;gap:0.5rem;align-items:center">
+                            <select v-model="alertGroupFilter" style="background:var(--bg-secondary);color:var(--text-primary);border:1px solid var(--border);border-radius:var(--radius);padding:4px 8px;font-size:0.8rem">
+                                <option value="">Alle Gruppen</option>
+                                <option v-for="g in groups" :key="g.id" :value="g.name">{{ g.name }}</option>
+                            </select>
+                            <select v-model="alertTypeFilter" style="background:var(--bg-secondary);color:var(--text-primary);border:1px solid var(--border);border-radius:var(--radius);padding:4px 8px;font-size:0.8rem">
+                                <option value="">Alle Typen</option>
+                                <option v-for="t in alertTypes" :key="t" :value="t">{{ t }}</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Grouped view -->
+                    <div v-if="alertGroupedEntries.length">
+                        <div v-for="group in alertGroupedEntries" :key="group.label" class="card" style="margin-bottom:0.75rem">
+                            <div class="card-header" style="cursor:pointer" @click="group.collapsed = !group.collapsed">
+                                <h3 style="display:flex;align-items:center;gap:0.5rem">
+                                    <span>{{ group.collapsed ? '▶' : '▼' }}</span>
+                                    {{ group.label }}
+                                    <span style="font-size:0.75rem;background:var(--bg-tertiary);border-radius:10px;padding:1px 8px">{{ group.items.length }}</span>
+                                </h3>
+                                <button class="btn btn-ghost btn-sm" @click.stop="alertAcknowledgeGroup(group.items)">Alle best.</button>
+                            </div>
+                            <div v-show="!group.collapsed">
+                                <div v-for="a in group.items" :key="a.id" style="padding:0.5rem 0.75rem;border-top:1px solid var(--border);display:flex;align-items:center;gap:0.75rem">
+                                    <input type="checkbox" :checked="alertSelected.includes(a.id)" @change="toggleAlertSelect(a.id)" style="cursor:pointer">
+                                    <span class="status-badge" :class="a.severity" style="min-width:55px;text-align:center;font-size:0.7rem;text-transform:uppercase">{{ a.severity }}</span>
+                                    <div style="flex:1;min-width:0">
+                                        <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap">
+                                            <strong style="font-size:0.85rem">{{ a.display_name || a.hostname || 'System' }}</strong>
+                                            <span style="font-size:0.75rem;color:var(--text-muted);background:var(--bg-tertiary);border-radius:3px;padding:0 4px">{{ a.alert_type }}</span>
+                                        </div>
+                                        <div style="font-size:0.82rem;color:var(--text-secondary);margin-top:2px">{{ a.message }}</div>
+                                    </div>
+                                    <span style="font-size:0.72rem;color:var(--text-muted);white-space:nowrap">{{ formatTime(a.created_at) }}</span>
+                                    <button v-if="!a.acknowledged" class="btn btn-ghost btn-sm" @click="acknowledgeAlert(a.id)" style="flex-shrink:0">OK</button>
+                                    <span v-else style="font-size:0.7rem;color:var(--text-muted)">best.</span>
                                 </div>
-                                <button v-if="!a.acknowledged" class="btn btn-ghost btn-sm" @click="acknowledgeAlert(a.id)">OK</button>
                             </div>
                         </div>
-                        <p v-else style="color:var(--text-muted)">Keine Alarme vorhanden.</p>
+                    </div>
+                    <div v-else class="card" style="padding:2rem;text-align:center;color:var(--text-muted)">
+                        Keine Alarme{{ alertFilter !== 'all' ? ' mit diesem Filter' : '' }}.
                     </div>
                 </div>
 

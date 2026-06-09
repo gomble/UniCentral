@@ -1251,8 +1251,81 @@ const app = createApp({
             if (res.ok) commandHistory.value = await res.json();
         }
 
+        const alertFilter = ref('open');
+        const alertGroupFilter = ref('');
+        const alertTypeFilter = ref('');
+        const alertSelected = ref([]);
+
+        const alertTypes = computed(() => {
+            const types = new Set(alerts.value.map(a => a.alert_type).filter(Boolean));
+            return [...types].sort();
+        });
+
+        const alertFilteredList = computed(() => {
+            let list = alerts.value;
+            if (alertFilter.value === 'open') list = list.filter(a => !a.acknowledged);
+            else if (alertFilter.value === 'critical') list = list.filter(a => a.severity === 'critical');
+            else if (alertFilter.value === 'warning') list = list.filter(a => a.severity === 'warning');
+            else if (alertFilter.value === 'info') list = list.filter(a => a.severity === 'info');
+            if (alertGroupFilter.value) list = list.filter(a => a.group_name === alertGroupFilter.value);
+            if (alertTypeFilter.value) list = list.filter(a => a.alert_type === alertTypeFilter.value);
+            return list;
+        });
+
+        const alertGroupedEntries = computed(() => {
+            const map = {};
+            for (const a of alertFilteredList.value) {
+                const key = a.group_name || 'Ohne Gruppe';
+                if (!map[key]) map[key] = { label: key, items: [], collapsed: false };
+                map[key].items.push(a);
+            }
+            const groups = Object.values(map);
+            groups.sort((a, b) => {
+                if (a.label === 'Ohne Gruppe') return 1;
+                if (b.label === 'Ohne Gruppe') return -1;
+                return a.label.localeCompare(b.label);
+            });
+            return groups;
+        });
+
+        function toggleAlertSelect(id) {
+            const idx = alertSelected.value.indexOf(id);
+            if (idx >= 0) alertSelected.value.splice(idx, 1);
+            else alertSelected.value.push(id);
+        }
+
         async function acknowledgeAlert(id) {
             await apiFetch(`/api/monitoring/alerts/${id}/acknowledge`, { method: 'POST' });
+            await loadAlerts();
+            alertSelected.value = alertSelected.value.filter(x => x !== id);
+        }
+
+        async function alertAcknowledgeSelected() {
+            if (!alertSelected.value.length) return;
+            await apiFetch('/api/monitoring/alerts/acknowledge-bulk', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ids: alertSelected.value })
+            });
+            alertSelected.value = [];
+            await loadAlerts();
+        }
+
+        async function alertAcknowledgeAll() {
+            await apiFetch('/api/monitoring/alerts/acknowledge-all', { method: 'POST' });
+            alertSelected.value = [];
+            await loadAlerts();
+        }
+
+        async function alertAcknowledgeGroup(items) {
+            const ids = items.filter(a => !a.acknowledged).map(a => a.id);
+            if (!ids.length) return;
+            await apiFetch('/api/monitoring/alerts/acknowledge-bulk', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ids })
+            });
+            alertSelected.value = alertSelected.value.filter(x => !ids.includes(x));
             await loadAlerts();
         }
 
@@ -2100,6 +2173,9 @@ const app = createApp({
             deployForm, deployResult, deployCommandMap, scanNetwork, toggleAllScan, executeBatchDeploy, executeDeploy,
             addVeeamInstance, deleteVeeamInstance,
             saveSettings, testEmail, regenerateEnrollmentKey, acknowledgeAlert, logout,
+            alertFilter, alertGroupFilter, alertTypeFilter, alertSelected, alertTypes,
+            alertFilteredList, alertGroupedEntries, toggleAlertSelect,
+            alertAcknowledgeSelected, alertAcknowledgeAll, alertAcknowledgeGroup,
             loadTelemetryHistory, formatTime, formatBytes, diskPercent, formatUptime,
             logTab, setLogTab, logEntries, logFilter, logSearch, logAutoScroll, logContainer, filteredLogEntries,
             connectLogStream, formatLogTime, logLineColor, scrollLogsToBottom,

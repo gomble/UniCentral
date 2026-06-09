@@ -38,7 +38,8 @@ router.get('/overview', (req, res) => {
     const clients = db.prepare("SELECT COUNT(*) as count FROM machines WHERE category = 'client'").get().count;
     const activeAlerts = db.prepare("SELECT COUNT(*) as count FROM alerts WHERE acknowledged = 0 AND resolved_at IS NULL").get().count;
 
-    res.json({ total, online, offline, servers, clients, activeAlerts });
+    const pkg = require('../../package.json');
+    res.json({ total, online, offline, servers, clients, activeAlerts, agentVersion: pkg.version });
 });
 
 router.get('/machines/:machineId/disks', (req, res) => {
@@ -131,11 +132,13 @@ router.get('/machines/:machineId/firewall-status', (req, res) => {
 // Alerts
 router.get('/alerts', (req, res) => {
     const alerts = db.prepare(`
-        SELECT a.*, m.hostname, m.display_name
+        SELECT a.*, m.hostname, m.display_name, m.os_type, m.category,
+               g.name as group_name
         FROM alerts a
         LEFT JOIN machines m ON a.machine_id = m.machine_id
+        LEFT JOIN machine_groups g ON m.group_id = g.id
         ORDER BY a.created_at DESC
-        LIMIT 100
+        LIMIT 500
     `).all();
     res.json(alerts);
 });
@@ -143,6 +146,20 @@ router.get('/alerts', (req, res) => {
 router.post('/alerts/:id/acknowledge', (req, res) => {
     db.prepare('UPDATE alerts SET acknowledged = 1 WHERE id = ?').run(req.params.id);
     res.json({ success: true });
+});
+
+router.post('/alerts/acknowledge-bulk', (req, res) => {
+    const { ids } = req.body;
+    if (!ids || !Array.isArray(ids)) return res.status(400).json({ error: 'ids required' });
+    const stmt = db.prepare('UPDATE alerts SET acknowledged = 1 WHERE id = ?');
+    const run = db.transaction((list) => { for (const id of list) stmt.run(id); });
+    run(ids);
+    res.json({ success: true, count: ids.length });
+});
+
+router.post('/alerts/acknowledge-all', (req, res) => {
+    const result = db.prepare('UPDATE alerts SET acknowledged = 1 WHERE acknowledged = 0').run();
+    res.json({ success: true, count: result.changes });
 });
 
 module.exports = router;
