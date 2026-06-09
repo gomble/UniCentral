@@ -9,6 +9,7 @@ type TelemetryData struct {
 	Shares             []ShareInfo    `json:"shares"`
 	Firewall           FirewallStatus `json:"firewall"`
 	Updates            UpdateStatus   `json:"updates"`
+	Defender           DefenderStatus `json:"defender"`
 	IsDomainController bool           `json:"is_domain_controller"`
 	DomainName         string         `json:"domain_name"`
 	HardwareID         string         `json:"hardware_id"`
@@ -28,6 +29,7 @@ func CollectAll() TelemetryData {
 		Shares:             GetShares(),
 		Firewall:           GetFirewallStatus(),
 		Updates:            GetUpdateStatus(),
+		Defender:           GetDefenderStatus(),
 		IsDomainController: dcInfo.IsDomainController,
 		DomainName:         dcInfo.DomainName,
 		HardwareID:         GetHardwareID(),

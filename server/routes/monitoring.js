@@ -129,10 +129,78 @@ router.get('/machines/:machineId/firewall-status', (req, res) => {
     }
 });
 
+// Security overview
+router.get('/security-overview', (req, res) => {
+    const machines = db.prepare(`
+        SELECT m.id, m.machine_id, m.hostname, m.display_name, m.status, m.os_type, m.category, m.ip_address,
+               g.name as group_name
+        FROM machines m
+        LEFT JOIN machine_groups g ON m.group_id = g.id
+        ORDER BY m.hostname
+    `).all();
+
+    const result = machines.map(m => {
+        const tel = db.prepare(`
+            SELECT data_json FROM machine_telemetry
+            WHERE machine_id = ? ORDER BY collected_at DESC LIMIT 1
+        `).get(m.machine_id);
+
+        let firewall = { enabled: false, profiles: [], rules: [], ports: [] };
+        let defender = { installed: false, enabled: false, real_time_enabled: false };
+
+        if (tel && tel.data_json) {
+            try {
+                const data = JSON.parse(tel.data_json);
+                if (data.firewall) firewall = data.firewall;
+                if (data.defender) defender = data.defender;
+            } catch {}
+        }
+
+        return {
+            ...m,
+            firewall_enabled: firewall.enabled,
+            firewall_profiles: firewall.profiles || [],
+            firewall_rules_count: (firewall.rules || []).length,
+            firewall_ports_count: (firewall.ports || []).length,
+            defender_installed: defender.installed,
+            defender_enabled: defender.enabled,
+            defender_realtime: defender.real_time_enabled,
+            defender_last_scan: defender.last_scan_time || '',
+            defender_engine: defender.engine_version || '',
+            defender_definitions: defender.definition_version || ''
+        };
+    });
+
+    res.json(result);
+});
+
+router.get('/machines/:machineId/security-detail', (req, res) => {
+    const machine = db.prepare('SELECT * FROM machines WHERE id = ? OR machine_id = ?').get(req.params.machineId, req.params.machineId);
+    if (!machine) return res.status(404).json({ error: 'Machine not found' });
+
+    const tel = db.prepare(`
+        SELECT data_json FROM machine_telemetry
+        WHERE machine_id = ? ORDER BY collected_at DESC LIMIT 1
+    `).get(machine.machine_id);
+
+    let firewall = { enabled: false, profiles: [], rules: [], ports: [] };
+    let defender = { installed: false, enabled: false, real_time_enabled: false };
+
+    if (tel && tel.data_json) {
+        try {
+            const data = JSON.parse(tel.data_json);
+            if (data.firewall) firewall = data.firewall;
+            if (data.defender) defender = data.defender;
+        } catch {}
+    }
+
+    res.json({ firewall, defender });
+});
+
 // Alerts
 router.get('/alerts', (req, res) => {
     const alerts = db.prepare(`
-        SELECT a.*, m.hostname, m.display_name, m.os_type, m.category,
+        SELECT a.*, m.id as machine_db_id, m.hostname, m.display_name, m.os_type, m.category,
                g.name as group_name
         FROM alerts a
         LEFT JOIN machines m ON a.machine_id = m.machine_id

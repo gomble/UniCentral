@@ -625,6 +625,9 @@ const app = createApp({
                 disconnectLogStream();
                 loadVeeamInstances();
                 loadVeeamServers();
+            } else if (target === 'security') {
+                disconnectLogStream();
+                loadSecurityOverview();
             } else {
                 disconnectLogStream();
             }
@@ -1249,6 +1252,48 @@ const app = createApp({
         async function loadCommandHistory() {
             const res = await apiFetch('/api/commands/history');
             if (res.ok) commandHistory.value = await res.json();
+        }
+
+        // Security tab state
+        const securityData = ref([]);
+        const securityDetailMachine = ref(null);
+        const securityDetail = ref({ firewall: { enabled: false, profiles: [], rules: [], ports: [] }, defender: {} });
+
+        async function loadSecurityOverview() {
+            const res = await apiFetch('/api/monitoring/security-overview');
+            if (res.ok) securityData.value = await res.json();
+        }
+
+        async function openSecurityDetail(machine) {
+            securityDetailMachine.value = machine;
+            const res = await apiFetch(`/api/monitoring/machines/${machine.machine_id}/security-detail`);
+            if (res.ok) securityDetail.value = await res.json();
+        }
+
+        async function securityToggleFirewall(machine) {
+            const action = machine.firewall_enabled ? 'disable_firewall' : 'enable_firewall';
+            const label = machine.firewall_enabled ? 'Firewall deaktivieren' : 'Firewall aktivieren';
+            if (!await confirmDialog(`${label} auf "${machine.display_name || machine.hostname}"?`)) return;
+            const res = await apiFetch(`/api/commands/${machine.machine_id}/${action}`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}'
+            });
+            if (res.ok) {
+                toast('Befehl gesendet.', 'success');
+                setTimeout(() => loadSecurityOverview(), 3000);
+            }
+        }
+
+        async function securityToggleDefender(machine) {
+            const action = machine.defender_realtime ? 'disable_defender' : 'enable_defender';
+            const label = machine.defender_realtime ? 'Defender deaktivieren' : 'Defender aktivieren';
+            if (!await confirmDialog(`${label} auf "${machine.display_name || machine.hostname}"?`)) return;
+            const res = await apiFetch(`/api/commands/${machine.machine_id}/${action}`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}'
+            });
+            if (res.ok) {
+                toast('Befehl gesendet.', 'success');
+                setTimeout(() => loadSecurityOverview(), 3000);
+            }
         }
 
         const alertFilter = ref('open');
@@ -2145,6 +2190,30 @@ const app = createApp({
             { key: 'os_guess', label: 'OS', filter: true },
             { key: 'category', label: 'Kategorie', filter: true, thClass: M, tdClass: M }
         ];
+        const securityColumns = [
+            { key: 'status', label: 'Status', filter: true },
+            { key: 'name', label: 'Maschine', value: m => m.display_name || m.hostname },
+            { key: 'os_type', label: 'OS', filter: true, thClass: M, tdClass: M },
+            { key: 'firewall', label: 'Firewall', value: m => m.firewall_enabled ? 'Aktiv' : 'Inaktiv', filter: true },
+            { key: 'profiles', label: 'Profile', sortable: false, searchable: false, thClass: M, tdClass: M },
+            { key: 'defender', label: 'Defender', value: m => m.os_type === 'windows' ? (m.defender_realtime ? 'Aktiv' : 'Inaktiv') : '–', filter: true },
+            { key: 'ports', label: 'Ports', value: m => m.firewall_ports_count || 0, thClass: M, tdClass: M },
+            { key: 'rules', label: 'Regeln', value: m => m.firewall_rules_count || 0, thClass: M, tdClass: M },
+            { key: '_actions', label: 'Aktionen', sortable: false, searchable: false, stopClick: true }
+        ];
+        const securityPortColumns = [
+            { key: 'port', label: 'Port', sortValue: p => p.port },
+            { key: 'protocol', label: 'Protokoll' },
+            { key: 'address', label: 'Adresse', placeholder: '–' },
+            { key: 'process', label: 'Prozess', placeholder: '–' }
+        ];
+        const securityRuleColumns = [
+            { key: 'name', label: 'Regel' },
+            { key: 'direction', label: 'Richtung', filter: true },
+            { key: 'action', label: 'Aktion', filter: true },
+            { key: 'protocol', label: 'Protokoll', placeholder: '–', thClass: M, tdClass: M },
+            { key: 'port', label: 'Port', placeholder: '*', thClass: M, tdClass: M }
+        ];
 
         return {
             view, sidebarOpen, username, machines, stats, alerts, alertCount,
@@ -2196,9 +2265,11 @@ const app = createApp({
             loadLocalUsers, loadLocalGroups, openCreateLocalUser, openEditLocalUser,
             openDuplicateLocalUser, saveLocalUser, confirmDeleteLocalUser, removeFromLocalGroup,
             toasts, confirmData,
+            securityData, securityDetailMachine, securityDetail,
+            loadSecurityOverview, openSecurityDetail, securityToggleFirewall, securityToggleDefender,
             machineColumns, updatesColumns, commandLogColumns, servicesColumns,
             firewallColumns, sharesColumns, veeamJobColumns, adUserColumns,
-            localUserColumns, scanResultColumns,
+            localUserColumns, scanResultColumns, securityColumns, securityPortColumns, securityRuleColumns,
             diskExplorerMachineId, diskExplorerPath, diskExplorerLoading, diskExplorerData, diskExplorerHistory,
             showDiskExplorer, openDiskExplorer, diskExplorerGoTo, startDiskScan, diskExplorerDrillDown, diskExplorerBack,
             diskExplorerBreadcrumbs, diskExplorerBarWidth, diskExplorerBarColor,

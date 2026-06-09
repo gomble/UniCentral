@@ -78,6 +78,10 @@ func Execute(cmdType string, params map[string]interface{}, onProgress ProgressF
 		return execLocalDeleteUser(params)
 	case "scan_disk":
 		return execScanDisk(params)
+	case "enable_defender":
+		return execDefender(true)
+	case "disable_defender":
+		return execDefender(false)
 	case "setup_vnc":
 		return execSetupVNC(params)
 	default:
@@ -162,6 +166,26 @@ func execFirewall(enable bool) Result {
 		return Result{Status: "failed", Output: string(out) + "\n" + err.Error()}
 	}
 	return Result{Status: "completed", Output: string(out)}
+}
+
+func execDefender(enable bool) Result {
+	if runtime.GOOS != "windows" {
+		return Result{Status: "failed", Output: "Windows Defender is only available on Windows"}
+	}
+	action := "Set-MpPreference -DisableRealtimeMonitoring $false"
+	if !enable {
+		action = "Set-MpPreference -DisableRealtimeMonitoring $true"
+	}
+	cmd := exec.Command("powershell", "-NoProfile", "-Command", action)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return Result{Status: "failed", Output: string(out) + "\n" + err.Error()}
+	}
+	label := "aktiviert"
+	if !enable {
+		label = "deaktiviert"
+	}
+	return Result{Status: "completed", Output: fmt.Sprintf("Windows Defender Echtzeitschutz %s.\n%s", label, string(out))}
 }
 
 func execAddFirewallRule(params map[string]interface{}) Result {

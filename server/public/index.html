@@ -64,6 +64,10 @@
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                         <span>Veeam Backup</span>
                     </div>
+                    <div class="nav-item" :class="{active: view === 'security'}" @click="navigate('security')">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                        <span>Sicherheit</span>
+                    </div>
                     <div class="nav-item" :class="{active: view === 'alerts'}" @click="navigate('alerts')">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
                         <span>Alarme</span>
@@ -917,6 +921,162 @@
                     </div>
                 </div>
 
+                <!-- Security View -->
+                <div v-if="view === 'security'">
+                    <div class="page-header">
+                        <h1>Sicherheit</h1>
+                        <button class="btn btn-ghost btn-sm" @click="loadSecurityOverview()">Aktualisieren</button>
+                    </div>
+
+                    <!-- Summary cards -->
+                    <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(160px, 1fr));gap:0.75rem;margin-bottom:1.5rem">
+                        <div class="stat-card" style="border-left:3px solid var(--success)">
+                            <div class="stat-value" style="font-size:1.5rem;color:var(--success)">{{ securityData.filter(m => m.firewall_enabled).length }}</div>
+                            <div class="stat-label">Firewall aktiv</div>
+                        </div>
+                        <div class="stat-card" style="border-left:3px solid var(--danger)">
+                            <div class="stat-value" style="font-size:1.5rem;color:var(--danger)">{{ securityData.filter(m => !m.firewall_enabled && m.status === 'online').length }}</div>
+                            <div class="stat-label">Firewall inaktiv</div>
+                        </div>
+                        <div class="stat-card" style="border-left:3px solid var(--success)">
+                            <div class="stat-value" style="font-size:1.5rem;color:var(--success)">{{ securityData.filter(m => m.defender_enabled).length }}</div>
+                            <div class="stat-label">Defender aktiv</div>
+                        </div>
+                        <div class="stat-card" style="border-left:3px solid var(--danger)">
+                            <div class="stat-value" style="font-size:1.5rem;color:var(--danger)">{{ securityData.filter(m => m.defender_installed && !m.defender_enabled && m.status === 'online').length }}</div>
+                            <div class="stat-label">Defender inaktiv</div>
+                        </div>
+                    </div>
+
+                    <!-- Machine Security Table -->
+                    <div class="card">
+                        <data-table :rows="securityData" :columns="securityColumns" row-key="machine_id" row-clickable
+                            search-placeholder="Maschinen durchsuchen..." empty-text="Keine Maschinen vorhanden."
+                            @row-click="m => openSecurityDetail(m)">
+                            <template #cell-status="{ row: m }">
+                                <span class="status-badge" :class="m.status">{{ m.status }}</span>
+                            </template>
+                            <template #cell-name="{ row: m }">
+                                <div>
+                                    <strong>{{ m.display_name || m.hostname }}</strong>
+                                    <div style="font-size:0.72rem;color:var(--text-muted)">{{ m.ip_address || '' }}</div>
+                                </div>
+                            </template>
+                            <template #cell-firewall="{ row: m }">
+                                <span class="status-badge" :class="m.firewall_enabled ? 'online' : 'offline'">{{ m.firewall_enabled ? 'Aktiv' : 'Inaktiv' }}</span>
+                            </template>
+                            <template #cell-profiles="{ row: m }">
+                                <div v-if="m.firewall_profiles && m.firewall_profiles.length" style="display:flex;gap:0.3rem;flex-wrap:wrap">
+                                    <span v-for="p in m.firewall_profiles" :key="p.name" :style="{color: p.enabled ? 'var(--success)' : 'var(--text-muted)', fontSize: '0.78rem'}">
+                                        {{ p.name }}<span v-if="p.enabled" style="font-size:0.65rem"> ✓</span>
+                                    </span>
+                                </div>
+                                <span v-else style="color:var(--text-muted);font-size:0.8rem">–</span>
+                            </template>
+                            <template #cell-defender="{ row: m }">
+                                <template v-if="m.os_type === 'windows'">
+                                    <span v-if="!m.defender_installed" style="color:var(--text-muted);font-size:0.8rem">N/A</span>
+                                    <span v-else class="status-badge" :class="m.defender_realtime ? 'online' : 'offline'">{{ m.defender_realtime ? 'Aktiv' : 'Inaktiv' }}</span>
+                                </template>
+                                <span v-else style="color:var(--text-muted);font-size:0.8rem">–</span>
+                            </template>
+                            <template #cell-ports="{ row: m }">
+                                <span style="font-size:0.82rem">{{ m.firewall_ports_count || 0 }}</span>
+                            </template>
+                            <template #cell-rules="{ row: m }">
+                                <span style="font-size:0.82rem">{{ m.firewall_rules_count || 0 }}</span>
+                            </template>
+                            <template #cell-_actions="{ row: m }">
+                                <div style="display:flex;gap:0.3rem;flex-wrap:wrap" @click.stop>
+                                    <button class="btn btn-sm" :class="m.firewall_enabled ? 'btn-danger' : 'btn-success'" @click="securityToggleFirewall(m)" :disabled="m.status !== 'online'" style="font-size:0.72rem;padding:0.2rem 0.4rem">
+                                        FW {{ m.firewall_enabled ? 'Aus' : 'Ein' }}
+                                    </button>
+                                    <button v-if="m.os_type === 'windows' && m.defender_installed" class="btn btn-sm" :class="m.defender_realtime ? 'btn-danger' : 'btn-success'" @click="securityToggleDefender(m)" :disabled="m.status !== 'online'" style="font-size:0.72rem;padding:0.2rem 0.4rem">
+                                        AV {{ m.defender_realtime ? 'Aus' : 'Ein' }}
+                                    </button>
+                                </div>
+                            </template>
+                        </data-table>
+                    </div>
+
+                    <!-- Security Detail Modal -->
+                    <div class="confirm-overlay" v-if="securityDetailMachine" @click.self="securityDetailMachine = null">
+                        <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:1.5rem;width:90%;max-width:900px;max-height:85vh;overflow:auto">
+                            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.2rem">
+                                <h3>Sicherheit: {{ securityDetailMachine.display_name || securityDetailMachine.hostname }}</h3>
+                                <button class="btn btn-ghost btn-sm" @click="securityDetailMachine = null">✕</button>
+                            </div>
+
+                            <!-- Overview cards -->
+                            <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:0.75rem;margin-bottom:1.2rem">
+                                <div class="stat-card">
+                                    <div class="stat-value" :style="{color: securityDetail.firewall.enabled ? 'var(--success)' : 'var(--danger)'}">
+                                        {{ securityDetail.firewall.enabled ? 'Aktiv' : 'Inaktiv' }}
+                                    </div>
+                                    <div class="stat-label">Windows Firewall</div>
+                                    <div v-if="securityDetail.firewall.profiles && securityDetail.firewall.profiles.length" style="margin-top:0.4rem;display:flex;gap:0.5rem;flex-wrap:wrap;justify-content:center">
+                                        <span v-for="p in securityDetail.firewall.profiles" :key="p.name" style="font-size:0.72rem;padding:1px 6px;border-radius:4px"
+                                            :style="{background: p.enabled ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.1)', color: p.enabled ? 'var(--success)' : 'var(--text-muted)'}">
+                                            {{ p.name }}: {{ p.enabled ? 'Ein' : 'Aus' }}
+                                        </span>
+                                    </div>
+                                </div>
+                                <div class="stat-card" v-if="securityDetailMachine.os_type === 'windows'">
+                                    <div class="stat-value" :style="{color: securityDetail.defender.real_time_enabled ? 'var(--success)' : 'var(--danger)'}">
+                                        {{ securityDetail.defender.real_time_enabled ? 'Aktiv' : 'Inaktiv' }}
+                                    </div>
+                                    <div class="stat-label">Windows Defender</div>
+                                    <div v-if="securityDetail.defender.engine_version" style="font-size:0.7rem;color:var(--text-muted);margin-top:0.3rem">
+                                        Engine: {{ securityDetail.defender.engine_version }}
+                                    </div>
+                                    <div v-if="securityDetail.defender.definition_version" style="font-size:0.7rem;color:var(--text-muted)">
+                                        Definitionen: {{ securityDetail.defender.definition_version }}
+                                    </div>
+                                    <div v-if="securityDetail.defender.last_scan_time" style="font-size:0.7rem;color:var(--text-muted)">
+                                        Letzter Scan: {{ formatTime(securityDetail.defender.last_scan_time) }} ({{ securityDetail.defender.last_scan_type || '–' }})
+                                    </div>
+                                </div>
+                                <div class="stat-card">
+                                    <div class="stat-value" style="font-size:1.3rem">{{ (securityDetail.firewall.ports || []).length }}</div>
+                                    <div class="stat-label">Offene Ports</div>
+                                </div>
+                                <div class="stat-card">
+                                    <div class="stat-value" style="font-size:1.3rem">{{ (securityDetail.firewall.rules || []).length }}</div>
+                                    <div class="stat-label">Firewall-Regeln</div>
+                                </div>
+                            </div>
+
+                            <!-- Listening Ports -->
+                            <div style="margin-bottom:1.2rem">
+                                <h4 style="margin-bottom:0.5rem;font-size:0.9rem">Offene Ports (Listening)</h4>
+                                <div v-if="securityDetail.firewall.ports && securityDetail.firewall.ports.length">
+                                    <data-table :rows="securityDetail.firewall.ports" :columns="securityPortColumns" row-key="port"
+                                        search-placeholder="Ports durchsuchen..." empty-text="Keine offenen Ports.">
+                                        <template #cell-port="{ row: p }"><strong>{{ p.port }}</strong></template>
+                                        <template #cell-process="{ row: p }"><span style="color:var(--text-secondary);font-size:0.82rem">{{ p.process || '–' }}</span></template>
+                                    </data-table>
+                                </div>
+                                <p v-else style="color:var(--text-muted);font-size:0.85rem">Keine Port-Daten verfügbar.</p>
+                            </div>
+
+                            <!-- Firewall Rules -->
+                            <div>
+                                <h4 style="margin-bottom:0.5rem;font-size:0.9rem">Firewall-Regeln (Inbound Allow)</h4>
+                                <div v-if="securityDetail.firewall.rules && securityDetail.firewall.rules.length">
+                                    <data-table :rows="securityDetail.firewall.rules" :columns="securityRuleColumns" row-key="name"
+                                        search-placeholder="Regeln durchsuchen..." empty-text="Keine Regeln.">
+                                        <template #cell-name="{ row: r }"><span style="font-size:0.82rem">{{ r.name }}</span></template>
+                                        <template #cell-action="{ row: r }">
+                                            <span :style="{color: r.action === 'allow' ? 'var(--success)' : 'var(--danger)'}">{{ r.action }}</span>
+                                        </template>
+                                    </data-table>
+                                </div>
+                                <p v-else style="color:var(--text-muted);font-size:0.85rem">Keine Regelndaten verfügbar.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Alerts View -->
                 <div v-if="view === 'alerts'">
                     <div class="page-header">
@@ -960,10 +1120,11 @@
                             <div v-show="!group.collapsed">
                                 <div v-for="a in group.items" :key="a.id" style="padding:0.5rem 0.75rem;border-top:1px solid var(--border);display:flex;align-items:center;gap:0.75rem">
                                     <input type="checkbox" :checked="alertSelected.includes(a.id)" @change="toggleAlertSelect(a.id)" style="cursor:pointer">
-                                    <span class="status-badge" :class="a.severity" style="min-width:55px;text-align:center;font-size:0.7rem;text-transform:uppercase">{{ a.severity }}</span>
+                                    <span class="status-badge" :class="a.severity === 'critical' ? 'critical' : a.severity" style="min-width:55px;text-align:center;font-size:0.7rem;text-transform:uppercase">{{ a.severity }}</span>
                                     <div style="flex:1;min-width:0">
                                         <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap">
-                                            <strong style="font-size:0.85rem">{{ a.display_name || a.hostname || 'System' }}</strong>
+                                            <strong v-if="a.machine_db_id" style="font-size:0.85rem;cursor:pointer;color:var(--accent)" @click="navigate('machine-detail', a.machine_db_id)">{{ a.display_name || a.hostname || 'System' }}</strong>
+                                            <strong v-else style="font-size:0.85rem">{{ a.display_name || a.hostname || 'System' }}</strong>
                                             <span style="font-size:0.75rem;color:var(--text-muted);background:var(--bg-tertiary);border-radius:3px;padding:0 4px">{{ a.alert_type }}</span>
                                         </div>
                                         <div style="font-size:0.82rem;color:var(--text-secondary);margin-top:2px">{{ a.message }}</div>
