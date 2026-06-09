@@ -88,24 +88,30 @@ func Update(downloadURL string) error {
 	}
 
 	if runtime.GOOS == "windows" {
-		// Windows: can't replace running binary directly
-		// Rename current to .old, rename .new to current, then restart service
-		oldPath := currentPath + ".old"
-		os.Remove(oldPath)
-		err = os.Rename(currentPath, oldPath)
-		if err != nil {
+		// Windows: can't rename a running binary. Use a helper script that
+		// stops the service, swaps the file, and restarts it.
+		script := fmt.Sprintf(`
+Start-Sleep -Seconds 2
+Stop-Service UniCentralAgent -Force -ErrorAction SilentlyContinue
+Start-Sleep -Seconds 2
+Remove-Item '%s.old' -Force -ErrorAction SilentlyContinue
+Move-Item -Force '%s' '%s.old' -ErrorAction SilentlyContinue
+Move-Item -Force '%s' '%s'
+Start-Service UniCentralAgent
+Remove-Item '%s' -Force -ErrorAction SilentlyContinue
+`, currentPath, currentPath, currentPath, tmpPath, currentPath, filepath.Join(os.TempDir(), "unicentral-update.ps1"))
+
+		scriptPath := filepath.Join(os.TempDir(), "unicentral-update.ps1")
+		if err := os.WriteFile(scriptPath, []byte(script), 0644); err != nil {
 			os.Remove(tmpPath)
-			return fmt.Errorf("cannot rename current binary: %w", err)
+			return fmt.Errorf("cannot write update script: %w", err)
 		}
-		err = os.Rename(tmpPath, currentPath)
-		if err != nil {
-			os.Rename(oldPath, currentPath)
-			return fmt.Errorf("cannot place new binary: %w", err)
-		}
-		// Schedule service restart
+
+		cmd := exec.Command("powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", scriptPath)
+		cmd.Start()
 		go func() {
-			time.Sleep(2 * time.Second)
-			exec.Command("powershell", "-Command", "Restart-Service UniCentralAgent").Run()
+			time.Sleep(1 * time.Second)
+			os.Exit(0)
 		}()
 	} else {
 		// Linux: replace binary, then exit — systemd Restart=always starts the new version
