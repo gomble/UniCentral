@@ -164,37 +164,28 @@ const app = createApp({
         let _vncMachineId = '';
 
         async function openVNC(machine, port) {
-            _vncMachineId = machine.machine_id;
-            vncHostname.value = machine.display_name || machine.hostname;
-            vncPort.value = port || 5900;
-            vncSrc.value = '';
-            vncPreparing.value = true;
-            vncPrepareStatus.value = 'VNC wird auf der Maschine eingerichtet…';
-            showVnc.value = true;
+            const machineId = machine.machine_id;
+            const name = machine.display_name || machine.hostname;
+            const vncP = port || 5900;
 
             try {
-                const r = await apiFetch(`/api/vnc/prepare/${encodeURIComponent(machine.machine_id)}`, {
+                const r = await apiFetch(`/api/vnc/prepare/${encodeURIComponent(machineId)}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ port: vncPort.value })
+                    body: JSON.stringify({ port: vncP })
                 });
                 if (!r.ok) {
                     const e = await r.json().catch(() => ({}));
-                    vncPrepareStatus.value = `Fehler: ${e.error || r.status}`;
+                    toast(`VNC-Fehler: ${e.error || r.status}`, 'error');
                     return;
                 }
-                vncPrepareStatus.value = 'Starte VNC-Verbindung…';
             } catch (e) {
-                vncPrepareStatus.value = `Fehler: ${e.message}`;
+                toast(`VNC-Fehler: ${e.message}`, 'error');
                 return;
             }
 
-            // Small delay so the setup command can be processed by the agent,
-            // then open the iframe (the agent relay retries TCP for 90 s).
-            setTimeout(() => {
-                vncPreparing.value = false;
-                vncSrc.value = `/vnc.html?machineId=${encodeURIComponent(machine.machine_id)}&hostname=${encodeURIComponent(vncHostname.value)}`;
-            }, 2000);
+            const url = `/vnc.html?machineId=${encodeURIComponent(machineId)}&hostname=${encodeURIComponent(name)}`;
+            window.open(url, `vnc_${machineId}`, 'width=1280,height=800,menubar=no,toolbar=no,location=no,status=no');
         }
 
         function closeVnc() {
