@@ -14,18 +14,20 @@
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
         }
         #toolbar {
-            height: 36px;
+            height: 40px;
             background: #2d2d2d;
             border-bottom: 1px solid #444;
             display: flex;
             align-items: center;
-            padding: 0 12px;
-            gap: 8px;
+            padding: 0 10px;
+            gap: 6px;
+            overflow-x: auto;
         }
         #toolbar .title {
             color: #e0e0e0;
             font-size: 13px;
             font-weight: 600;
+            white-space: nowrap;
         }
         #toolbar .host {
             color: #8ab4f8;
@@ -34,6 +36,13 @@
             border: 1px solid #444;
             border-radius: 3px;
             padding: 2px 8px;
+            white-space: nowrap;
+        }
+        #toolbar .separator {
+            width: 1px;
+            height: 22px;
+            background: #555;
+            margin: 0 4px;
         }
         #toolbar .spacer { flex: 1; }
         #toolbar button {
@@ -44,11 +53,59 @@
             padding: 4px 10px;
             font-size: 12px;
             cursor: pointer;
+            white-space: nowrap;
+            transition: background 0.15s;
         }
         #toolbar button:hover { background: #4a4a4a; }
+        #toolbar button:active { background: #555; }
+        #toolbar button.accent { background: #1a5fb4; border-color: #2a7fff; }
+        #toolbar button.accent:hover { background: #2a6fc4; }
+        #toolbar select {
+            background: #3a3a3a;
+            color: #e0e0e0;
+            border: 1px solid #555;
+            border-radius: 4px;
+            padding: 3px 6px;
+            font-size: 12px;
+            cursor: pointer;
+        }
+        #toolbar .font-size-ctrl {
+            display: flex;
+            align-items: center;
+            gap: 2px;
+        }
+        #toolbar .font-size-ctrl span {
+            color: #aaa;
+            font-size: 11px;
+            min-width: 22px;
+            text-align: center;
+        }
+        #toolbar .font-size-ctrl button {
+            padding: 2px 7px;
+            font-size: 14px;
+            line-height: 1;
+        }
+        #toast {
+            position: fixed;
+            bottom: 12px;
+            right: 12px;
+            background: #333;
+            color: #8ab4f8;
+            border: 1px solid #555;
+            border-radius: 6px;
+            padding: 8px 14px;
+            font-size: 12px;
+            opacity: 0;
+            transition: opacity 0.3s;
+            pointer-events: none;
+            z-index: 9000;
+        }
+        #toast.show { opacity: 1; }
         #terminal-container {
             width: 100%;
-            height: calc(100% - 37px);
+            height: calc(100% - 41px);
+            padding: 2px;
+            box-sizing: border-box;
         }
         #status {
             position: fixed;
@@ -68,24 +125,49 @@
             margin-bottom: 0.75rem;
         }
         @keyframes spin { to { transform: rotate(360deg); } }
+        .xterm .xterm-viewport { overflow-y: auto !important; }
     </style>
 </head>
 <body>
     <div id="toolbar">
         <span class="title">Shell</span>
         <span class="host" id="hostname-badge"></span>
+        <div class="separator"></div>
+        <button id="btn-copy" title="Markierten Text kopieren (Strg+Shift+C)">Kopieren</button>
+        <button id="btn-paste" title="Aus Zwischenablage einfuegen (Strg+Shift+V)">Einfuegen</button>
+        <div class="separator"></div>
+        <button id="btn-clear" title="Terminal leeren">Leeren</button>
+        <button id="btn-ctrl-c" title="SIGINT senden">Strg+C</button>
+        <button id="btn-ctrl-d" title="EOF senden">Strg+D</button>
+        <button id="btn-ctrl-z" title="SIGTSTP senden (Prozess pausieren)">Strg+Z</button>
+        <button id="btn-ctrl-l" title="Bildschirm leeren (clear)">Strg+L</button>
+        <div class="separator"></div>
+        <div class="font-size-ctrl">
+            <button id="btn-font-down" title="Schrift kleiner">-</button>
+            <span id="font-size-label">14</span>
+            <button id="btn-font-up" title="Schrift groesser">+</button>
+        </div>
+        <select id="theme-select" title="Farbschema">
+            <option value="dark">Dunkel</option>
+            <option value="light">Hell</option>
+            <option value="monokai">Monokai</option>
+            <option value="solarized">Solarized</option>
+        </select>
         <span class="spacer"></span>
-        <button id="btn-reconnect" title="Neu verbinden">Reconnect</button>
+        <button id="btn-search" title="Im Terminal suchen (Strg+Shift+F)">Suchen</button>
+        <button id="btn-reconnect" class="accent" title="Neu verbinden">Reconnect</button>
     </div>
     <div id="terminal-container"></div>
     <div id="status">
         <div class="spinner"></div>
         <p>Verbinde...</p>
     </div>
+    <div id="toast"></div>
 
     <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-web-links@0.11.0/lib/addon-web-links.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-search@0.15.0/lib/addon-search.min.js"></script>
     <script>
         const params = new URLSearchParams(location.search);
         const machineId = params.get('machineId') || '';
@@ -96,27 +178,52 @@
 
         const statusEl = document.getElementById('status');
         const container = document.getElementById('terminal-container');
+        const toastEl = document.getElementById('toast');
+
+        const themes = {
+            dark: { background: '#1a1a1a', foreground: '#e0e0e0', cursor: '#8ab4f8', selectionBackground: '#3a5a8a',
+                    black: '#1a1a1a', red: '#f28b82', green: '#81c995', yellow: '#fdd663', blue: '#8ab4f8',
+                    magenta: '#c58af9', cyan: '#78d9ec', white: '#e0e0e0' },
+            light: { background: '#fafafa', foreground: '#2d2d2d', cursor: '#1a73e8', selectionBackground: '#c8ddf8',
+                     black: '#2d2d2d', red: '#c5221f', green: '#188038', yellow: '#e37400', blue: '#1a73e8',
+                     magenta: '#9334e6', cyan: '#007b83', white: '#fafafa' },
+            monokai: { background: '#272822', foreground: '#f8f8f2', cursor: '#f8f8f0', selectionBackground: '#49483e',
+                       black: '#272822', red: '#f92672', green: '#a6e22e', yellow: '#f4bf75', blue: '#66d9ef',
+                       magenta: '#ae81ff', cyan: '#a1efe4', white: '#f8f8f2' },
+            solarized: { background: '#002b36', foreground: '#839496', cursor: '#93a1a1', selectionBackground: '#073642',
+                         black: '#073642', red: '#dc322f', green: '#859900', yellow: '#b58900', blue: '#268bd2',
+                         magenta: '#d33682', cyan: '#2aa198', white: '#eee8d5' }
+        };
+
+        let currentFontSize = 14;
+        let currentTheme = 'dark';
 
         const term = new Terminal({
             cursorBlink: true,
-            fontSize: 14,
+            fontSize: currentFontSize,
             fontFamily: "'JetBrains Mono', 'Cascadia Code', 'Fira Code', Consolas, monospace",
-            theme: {
-                background: '#1a1a1a',
-                foreground: '#e0e0e0',
-                cursor: '#8ab4f8',
-                selectionBackground: '#3a5a8a'
-            },
-            scrollback: 10000,
-            convertEol: false
+            theme: themes.dark,
+            scrollback: 50000,
+            convertEol: false,
+            allowProposedApi: true
         });
 
         const fitAddon = new FitAddon.FitAddon();
         const webLinksAddon = new WebLinksAddon.WebLinksAddon();
+        const searchAddon = new SearchAddon.SearchAddon();
         term.loadAddon(fitAddon);
         term.loadAddon(webLinksAddon);
+        term.loadAddon(searchAddon);
 
         let ws = null;
+        let searchOpen = false;
+        let searchInput = null;
+
+        function toast(msg) {
+            toastEl.textContent = msg;
+            toastEl.classList.add('show');
+            setTimeout(() => toastEl.classList.remove('show'), 2000);
+        }
 
         function connect() {
             statusEl.style.display = '';
@@ -128,7 +235,9 @@
 
             ws.onopen = () => {
                 statusEl.style.display = 'none';
-                term.open(container);
+                if (!term.element) {
+                    term.open(container);
+                }
                 fitAddon.fit();
                 sendResize();
                 term.focus();
@@ -155,29 +264,160 @@
 
         function sendResize() {
             if (ws && ws.readyState === WebSocket.OPEN) {
-                const msg = JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows });
-                ws.send(msg);
+                ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
             }
         }
 
-        term.onData((data) => {
+        function sendData(data) {
             if (ws && ws.readyState === WebSocket.OPEN) {
                 ws.send(new TextEncoder().encode(data));
             }
+        }
+
+        term.onData((data) => { sendData(data); });
+        term.onResize(() => { sendResize(); });
+        window.addEventListener('resize', () => { fitAddon.fit(); });
+
+        // Copy: select text in terminal, then Ctrl+Shift+C or button
+        term.attachCustomKeyEventHandler((ev) => {
+            if (ev.type !== 'keydown') return true;
+
+            // Ctrl+Shift+C = copy selection
+            if (ev.ctrlKey && ev.shiftKey && ev.key === 'C') {
+                const sel = term.getSelection();
+                if (sel) {
+                    navigator.clipboard.writeText(sel).then(() => toast('Kopiert'));
+                }
+                return false;
+            }
+            // Ctrl+Shift+V = paste
+            if (ev.ctrlKey && ev.shiftKey && ev.key === 'V') {
+                navigator.clipboard.readText().then(text => { if (text) sendData(text); });
+                return false;
+            }
+            // Ctrl+Shift+F = search
+            if (ev.ctrlKey && ev.shiftKey && ev.key === 'F') {
+                toggleSearch();
+                return false;
+            }
+            return true;
         });
 
-        term.onResize(() => {
+        // Toolbar: Copy
+        document.getElementById('btn-copy').addEventListener('click', () => {
+            const sel = term.getSelection();
+            if (sel) {
+                navigator.clipboard.writeText(sel).then(() => toast('Kopiert'));
+            } else {
+                toast('Nichts markiert');
+            }
+        });
+
+        // Toolbar: Paste
+        document.getElementById('btn-paste').addEventListener('click', async () => {
+            try {
+                const text = await navigator.clipboard.readText();
+                if (text) sendData(text);
+            } catch (e) {
+                const text = prompt('Zwischenablage konnte nicht gelesen werden.\nText manuell eingeben:');
+                if (text) sendData(text);
+            }
+        });
+
+        // Toolbar: Clear
+        document.getElementById('btn-clear').addEventListener('click', () => {
+            term.clear();
+            term.focus();
+        });
+
+        // Toolbar: Ctrl+C
+        document.getElementById('btn-ctrl-c').addEventListener('click', () => {
+            sendData('\x03');
+            term.focus();
+        });
+
+        // Toolbar: Ctrl+D
+        document.getElementById('btn-ctrl-d').addEventListener('click', () => {
+            sendData('\x04');
+            term.focus();
+        });
+
+        // Toolbar: Ctrl+Z
+        document.getElementById('btn-ctrl-z').addEventListener('click', () => {
+            sendData('\x1a');
+            term.focus();
+        });
+
+        // Toolbar: Ctrl+L
+        document.getElementById('btn-ctrl-l').addEventListener('click', () => {
+            sendData('\x0c');
+            term.focus();
+        });
+
+        // Font size
+        document.getElementById('btn-font-up').addEventListener('click', () => {
+            currentFontSize = Math.min(28, currentFontSize + 1);
+            term.options.fontSize = currentFontSize;
+            document.getElementById('font-size-label').textContent = currentFontSize;
+            fitAddon.fit();
             sendResize();
         });
 
-        window.addEventListener('resize', () => {
+        document.getElementById('btn-font-down').addEventListener('click', () => {
+            currentFontSize = Math.max(8, currentFontSize - 1);
+            term.options.fontSize = currentFontSize;
+            document.getElementById('font-size-label').textContent = currentFontSize;
             fitAddon.fit();
+            sendResize();
         });
 
+        // Theme
+        document.getElementById('theme-select').addEventListener('change', (e) => {
+            currentTheme = e.target.value;
+            term.options.theme = themes[currentTheme];
+            document.body.style.background = themes[currentTheme].background;
+            document.getElementById('terminal-container').style.background = themes[currentTheme].background;
+        });
+
+        // Search
+        function toggleSearch() {
+            if (searchOpen && searchInput) {
+                searchInput.parentElement.remove();
+                searchInput = null;
+                searchOpen = false;
+                term.focus();
+                return;
+            }
+            searchOpen = true;
+            const bar = document.createElement('div');
+            bar.style.cssText = 'position:fixed;top:44px;right:10px;display:flex;gap:4px;align-items:center;background:#2d2d2d;border:1px solid #555;border-radius:4px;padding:4px 8px;z-index:9000';
+            bar.innerHTML = '<input type="text" placeholder="Suchen..." style="background:#1a1a1a;color:#e0e0e0;border:1px solid #555;border-radius:3px;padding:3px 6px;font-size:12px;width:180px">'
+                + '<button style="background:#3a3a3a;color:#e0e0e0;border:1px solid #555;border-radius:3px;padding:3px 8px;font-size:11px;cursor:pointer">Weiter</button>'
+                + '<button style="background:#3a3a3a;color:#e0e0e0;border:1px solid #555;border-radius:3px;padding:3px 8px;font-size:11px;cursor:pointer">X</button>';
+            document.body.appendChild(bar);
+            searchInput = bar.querySelector('input');
+            searchInput.focus();
+            searchInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') { searchAddon.findNext(searchInput.value); }
+                if (e.key === 'Escape') { toggleSearch(); }
+            });
+            bar.querySelectorAll('button')[0].addEventListener('click', () => { searchAddon.findNext(searchInput.value); });
+            bar.querySelectorAll('button')[1].addEventListener('click', () => { toggleSearch(); });
+        }
+
+        document.getElementById('btn-search').addEventListener('click', toggleSearch);
+
+        // Reconnect
         document.getElementById('btn-reconnect').addEventListener('click', () => {
             if (ws) { ws.close(); ws = null; }
             term.clear();
             connect();
+        });
+
+        // Right-click paste
+        container.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            navigator.clipboard.readText().then(text => { if (text) sendData(text); }).catch(() => {});
         });
 
         connect();
