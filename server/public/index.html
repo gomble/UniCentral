@@ -1357,22 +1357,31 @@
                         {{ m365CurrentTenant.last_error }}
                     </div>
 
-                    <!-- License overview -->
-                    <div v-if="m365CurrentTenant && m365Skus.length" class="card" style="margin-bottom:1rem;padding:0.8rem 1rem">
-                        <div style="font-size:0.85rem;font-weight:600;margin-bottom:0.6rem">Lizenzen</div>
-                        <div style="display:flex;flex-wrap:wrap;gap:0.5rem">
-                            <div v-for="s in m365Skus" :key="s.sku_id" style="border:1px solid var(--border);border-radius:var(--radius);padding:0.4rem 0.7rem;font-size:0.8rem">
-                                <div style="font-weight:500">{{ s.name }}</div>
-                                <div style="color:var(--text-muted)">{{ s.consumed }} / {{ s.total }} belegt · <span :style="{color: s.available>0 ? '#4ade80' : '#f87171'}">{{ s.available }} frei</span></div>
-                            </div>
-                        </div>
+                    <!-- Tab bar (Benutzer / Verteiler) -->
+                    <div v-if="m365CurrentTenant && m365CurrentTenant.status==='connected'" style="display:flex;gap:0.3rem;border-bottom:1px solid var(--border);margin-bottom:1rem">
+                        <button class="btn btn-sm" :class="m365Tab==='users' ? 'btn-primary':'btn-ghost'" @click="m365Tab='users'">Benutzer</button>
+                        <button class="btn btn-sm" :class="m365Tab==='groups' ? 'btn-primary':'btn-ghost'" @click="m365Tab='groups'">Verteiler &amp; Gruppen</button>
                     </div>
 
-                    <!-- Users table -->
-                    <div v-if="m365CurrentTenant">
+                    <!-- ===== BENUTZER TAB ===== -->
+                    <div v-if="m365CurrentTenant && m365Tab==='users'">
+                        <!-- License overview -->
+                        <div v-if="m365Skus.length" class="card" style="margin-bottom:1rem;padding:0.8rem 1rem">
+                            <div style="font-size:0.85rem;font-weight:600;margin-bottom:0.6rem">Lizenzen</div>
+                            <div style="display:flex;flex-wrap:wrap;gap:0.5rem">
+                                <div v-for="s in m365Skus" :key="s.sku_id" style="border:1px solid var(--border);border-radius:var(--radius);padding:0.4rem 0.7rem;font-size:0.8rem">
+                                    <div style="font-weight:500">{{ s.name }}</div>
+                                    <div style="color:var(--text-muted)">{{ s.consumed }} / {{ s.total }} belegt · <span :style="{color: s.available>0 ? '#4ade80' : '#f87171'}">{{ s.available }} frei</span></div>
+                                </div>
+                            </div>
+                        </div>
+
                         <input v-model="m365UserSearch" placeholder="Benutzer suchen..." style="width:100%;max-width:340px;background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);border-radius:var(--radius);padding:0.45rem 0.75rem;margin-bottom:0.8rem;box-sizing:border-box">
                         <p v-if="m365UsersOutput" style="color:var(--text-muted)">{{ m365UsersOutput }}</p>
                         <data-table v-if="m365Users.length" :rows="m365FilteredUsers" :columns="m365UserColumns" row-key="id" row-clickable :search="false" @row-click="openEditM365User">
+                            <template #cell-account_type="{ row }">
+                                <span style="font-size:0.72rem;padding:1px 6px;border-radius:10px" :style="{background: row.is_shared ? 'rgba(168,85,247,0.15)' : row.user_type==='Guest' ? 'rgba(234,179,8,0.15)' : 'rgba(148,163,184,0.12)', color: row.is_shared ? '#c084fc' : row.user_type==='Guest' ? '#fbbf24' : 'var(--text-muted)'}">{{ row.account_type }}</span>
+                            </template>
                             <template #cell-enabled="{ row }">
                                 <span :style="{color: row.enabled ? '#4ade80' : '#f87171'}">{{ row.enabled ? 'Aktiv' : 'Deaktiviert' }}</span>
                             </template>
@@ -1385,6 +1394,20 @@
                                     <button class="btn btn-ghost btn-sm" @click.stop="openDuplicateM365User(row)" title="Duplizieren">⧉</button>
                                     <button class="btn btn-ghost btn-sm" @click.stop="openM365Password(row)" title="Passwort">🔑</button>
                                 </div>
+                            </template>
+                        </data-table>
+                    </div>
+
+                    <!-- ===== VERTEILER & GRUPPEN TAB ===== -->
+                    <div v-if="m365CurrentTenant && m365Tab==='groups'">
+                        <input v-model="m365GroupSearchList" placeholder="Verteiler / Gruppe suchen..." style="width:100%;max-width:340px;background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);border-radius:var(--radius);padding:0.45rem 0.75rem;margin-bottom:0.8rem;box-sizing:border-box">
+                        <p v-if="!m365Groups.length" style="color:var(--text-muted)">Keine Gruppen geladen.</p>
+                        <data-table v-if="m365Groups.length" :rows="m365GroupsForList" :columns="m365GroupColumns" row-key="id" row-clickable :search="false" @row-click="openM365Group">
+                            <template #cell-type_label="{ row }">
+                                <span style="font-size:0.72rem;padding:1px 6px;border-radius:10px" :style="{background: row.type==='distribution' ? 'rgba(59,130,246,0.15)' : row.type==='unified' ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.12)', color: row.type==='distribution' ? '#60a5fa' : row.type==='unified' ? '#4ade80' : '#f87171'}">{{ row.type_label }}</span>
+                            </template>
+                            <template #cell-_actions="{ row }">
+                                <button class="btn btn-ghost btn-sm" @click.stop="openM365Group(row)">Mitglieder</button>
                             </template>
                         </data-table>
                     </div>
@@ -2139,6 +2162,7 @@
 
                 <div style="display:flex;gap:0.3rem;border-bottom:1px solid var(--border);margin-bottom:1rem">
                     <button class="btn btn-sm" :class="m365UserTab==='general' ? 'btn-primary':'btn-ghost'" @click="m365UserTab='general'">Allgemein</button>
+                    <button class="btn btn-sm" :class="m365UserTab==='contact' ? 'btn-primary':'btn-ghost'" @click="m365UserTab='contact'">Kontakt</button>
                     <button class="btn btn-sm" :class="m365UserTab==='licenses' ? 'btn-primary':'btn-ghost'" @click="m365UserTab='licenses'">Lizenzen<span v-if="m365UserForm.licenses.length" style="margin-left:3px;color:var(--accent)">({{ m365UserForm.licenses.length }})</span></button>
                     <button class="btn btn-sm" :class="m365UserTab==='groups' ? 'btn-primary':'btn-ghost'" @click="m365UserTab='groups'">Gruppen<span v-if="m365UserForm.groups.length" style="margin-left:3px;color:var(--accent)">({{ m365UserForm.groups.length }})</span></button>
                 </div>
@@ -2149,12 +2173,17 @@
                         <div class="form-group"><label>Nachname</label><input v-model="m365UserForm.surname" @input="m365AutoFields"></div>
                     </div>
                     <div class="form-group"><label>Anzeigename *</label><input v-model="m365UserForm.display_name"></div>
-                    <div class="form-group">
+                    <!-- Edit: UPN is read-only and shown in full. Create/Duplicate: split local@domain. -->
+                    <div class="form-group" v-if="m365UserMode==='edit'">
+                        <label>UPN / Anmeldename</label>
+                        <input :value="m365UserForm.upn" disabled style="opacity:0.7">
+                    </div>
+                    <div class="form-group" v-else>
                         <label>UPN / Anmeldename *</label>
                         <div style="display:flex;gap:0.3rem;align-items:center">
-                            <input v-model="m365UserForm.upn_local" @input="m365UpdateUpn" :disabled="m365UserMode==='edit'" placeholder="m.mustermann" style="flex:1">
+                            <input v-model="m365UserForm.upn_local" placeholder="m.mustermann" style="flex:1">
                             <span style="color:var(--text-muted)">@</span>
-                            <select v-model="m365UserForm.upn_domain" @change="m365UpdateUpn" :disabled="m365UserMode==='edit'" style="background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);border-radius:var(--radius);padding:0.45rem 0.5rem">
+                            <select v-model="m365UserForm.upn_domain" style="background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);border-radius:var(--radius);padding:0.45rem 0.5rem">
                                 <option v-for="d in m365Domains" :key="d" :value="d">{{ d }}</option>
                             </select>
                         </div>
@@ -2170,10 +2199,6 @@
                             <input type="checkbox" v-model="m365UserForm.force_change"> Passwort bei erster Anmeldung ändern
                         </label>
                     </div>
-                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem">
-                        <div class="form-group"><label>Position</label><input v-model="m365UserForm.job_title"></div>
-                        <div class="form-group"><label>Abteilung</label><input v-model="m365UserForm.department"></div>
-                    </div>
                     <div class="form-group">
                         <label>Nutzungsstandort (für Lizenzen)</label>
                         <input v-model="m365UserForm.usage_location" placeholder="DE" maxlength="2" style="text-transform:uppercase">
@@ -2181,6 +2206,39 @@
                     <label v-if="m365UserMode==='edit'" style="display:flex;align-items:center;gap:0.6rem;cursor:pointer">
                         <input type="checkbox" v-model="m365UserForm.enabled"> Konto aktiviert
                     </label>
+                </div>
+
+                <div v-if="m365UserTab==='contact'">
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem">
+                        <div class="form-group"><label>Position</label><input v-model="m365UserForm.job_title"></div>
+                        <div class="form-group"><label>Abteilung</label><input v-model="m365UserForm.department"></div>
+                    </div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem">
+                        <div class="form-group"><label>Firma</label><input v-model="m365UserForm.company"></div>
+                        <div class="form-group"><label>Büro</label><input v-model="m365UserForm.office_location"></div>
+                    </div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.8rem">
+                        <div class="form-group"><label>Telefon (geschäftlich)</label><input v-model="m365UserForm.business_phone"></div>
+                        <div class="form-group"><label>Mobiltelefon</label><input v-model="m365UserForm.mobile_phone"></div>
+                        <div class="form-group"><label>Faxnummer</label><input v-model="m365UserForm.fax"></div>
+                    </div>
+                    <div class="form-group"><label>Straße</label><input v-model="m365UserForm.street"></div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem">
+                        <div class="form-group"><label>Ort</label><input v-model="m365UserForm.city"></div>
+                        <div class="form-group"><label>Bundesland / Provinz</label><input v-model="m365UserForm.state"></div>
+                    </div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem">
+                        <div class="form-group"><label>Postleitzahl</label><input v-model="m365UserForm.postal_code"></div>
+                        <div class="form-group"><label>Land oder Region</label><input v-model="m365UserForm.country"></div>
+                    </div>
+                    <div class="form-group">
+                        <label>Manager</label>
+                        <select v-model="m365UserForm.manager_id" style="width:100%;background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);border-radius:var(--radius);padding:0.45rem 0.7rem">
+                            <option value="">— Kein Manager —</option>
+                            <option v-for="u in m365Users" :key="u.id" :value="u.id" :disabled="m365EditingUser && u.id===m365EditingUser.id">{{ u.display_name }} ({{ u.upn }})</option>
+                        </select>
+                        <div v-if="!m365Users.length" style="font-size:0.72rem;color:var(--text-muted);margin-top:0.25rem">Manager-Auswahl benötigt die geladene Benutzerliste.</div>
+                    </div>
                 </div>
 
                 <div v-if="m365UserTab==='licenses'">
@@ -2231,6 +2289,47 @@
                 <div class="modal-actions">
                     <button class="btn btn-ghost" @click="showM365PasswordModal = false">Abbrechen</button>
                     <button class="btn btn-primary" @click="saveM365Password">Zurücksetzen</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- M365 Group Members Modal -->
+        <div class="modal-overlay" v-if="showM365MembersModal" @click.self="showM365MembersModal = false">
+            <div class="modal" style="max-width:620px">
+                <h2 style="margin-bottom:0.25rem">{{ m365SelectedGroup && m365SelectedGroup.display_name }}</h2>
+                <p style="font-size:0.8rem;color:var(--text-muted);margin-bottom:1rem">
+                    {{ m365SelectedGroup && m365SelectedGroup.type_label }}<span v-if="m365SelectedGroup && m365SelectedGroup.mail"> · {{ m365SelectedGroup.mail }}</span>
+                </p>
+
+                <div v-if="m365SelectedGroup && !m365SelectedGroup.manageable" style="margin-bottom:1rem;padding:0.6rem 0.8rem;background:rgba(234,179,8,0.1);border:1px solid rgba(234,179,8,0.3);border-radius:var(--radius);font-size:0.8rem;color:#fbbf24">
+                    <template v-if="m365SelectedGroup.dynamic">Dynamische Gruppe – die Mitgliedschaft wird über Regeln gesteuert und kann hier nicht geändert werden.</template>
+                    <template v-else>Diese Gruppenart (Verteilerliste / E-Mail-Sicherheitsgruppe) wird von Exchange Online verwaltet. Mitglieder können hier angezeigt, aber nicht über Microsoft Graph geändert werden.</template>
+                </div>
+
+                <!-- Add member -->
+                <div v-if="m365SelectedGroup && m365SelectedGroup.manageable" style="display:flex;gap:0.5rem;margin-bottom:1rem">
+                    <select v-model="m365AddMemberId" style="flex:1;background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);border-radius:var(--radius);padding:0.45rem 0.7rem">
+                        <option value="">Benutzer auswählen...</option>
+                        <option v-for="u in m365NonMembers" :key="u.id" :value="u.id">{{ u.display_name }} ({{ u.upn }})</option>
+                    </select>
+                    <button class="btn btn-primary btn-sm" @click="addM365Member" :disabled="!m365AddMemberId">Hinzufügen</button>
+                </div>
+
+                <div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:0.4rem">Mitglieder ({{ m365GroupMembers.length }})</div>
+                <p v-if="m365GroupMembersLoading" style="color:var(--text-muted)">Lade Mitglieder...</p>
+                <div v-else style="border:1px solid var(--border);border-radius:var(--radius);max-height:320px;overflow-y:auto">
+                    <div v-for="m in m365GroupMembers" :key="m.id" style="display:flex;align-items:center;gap:0.6rem;padding:0.45rem 0.7rem;border-bottom:1px solid var(--border)">
+                        <div style="flex:1;min-width:0">
+                            <div style="font-size:0.85rem;font-weight:500">{{ m.display_name }}</div>
+                            <div style="font-size:0.72rem;color:var(--text-muted)">{{ m.upn || m.mail }}</div>
+                        </div>
+                        <button v-if="m365SelectedGroup && m365SelectedGroup.manageable" class="btn btn-ghost btn-sm" @click="removeM365Member(m.id)" title="Entfernen">✕</button>
+                    </div>
+                    <div v-if="!m365GroupMembers.length" style="padding:0.8rem;text-align:center;color:var(--text-muted);font-size:0.85rem">Keine Mitglieder.</div>
+                </div>
+
+                <div class="modal-actions">
+                    <button class="btn btn-ghost" @click="showM365MembersModal = false">Schliessen</button>
                 </div>
             </div>
         </div>

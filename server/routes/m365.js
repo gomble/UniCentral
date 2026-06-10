@@ -117,6 +117,27 @@ router.get('/tenants/:id/users/:userId/licenses', (req, res) => {
     handle(res, m365.getUserLicenseDetails(t, req.params.userId));
 });
 
+router.get('/tenants/:id/users/:userId/manager', (req, res) => {
+    const t = tenantOr404(req, res); if (!t) return;
+    handle(res, m365.getUserManager(t, req.params.userId));
+});
+
+router.get('/tenants/:id/groups/:groupId/members', (req, res) => {
+    const t = tenantOr404(req, res); if (!t) return;
+    handle(res, m365.getGroupMembers(t, req.params.groupId));
+});
+
+router.post('/tenants/:id/groups/:groupId/members', requireAdmin, (req, res) => {
+    const t = tenantOr404(req, res); if (!t) return;
+    if (!req.body.user_id) return res.status(400).json({ error: 'user_id erforderlich' });
+    handle(res, m365.addUserToGroup(t, req.body.user_id, req.params.groupId));
+});
+
+router.delete('/tenants/:id/groups/:groupId/members/:userId', requireAdmin, (req, res) => {
+    const t = tenantOr404(req, res); if (!t) return;
+    handle(res, m365.removeUserFromGroup(t, req.params.userId, req.params.groupId));
+});
+
 // ---- User operations ----
 router.post('/tenants/:id/users', requireAdmin, (req, res) => {
     const t = tenantOr404(req, res); if (!t) return;
@@ -126,6 +147,11 @@ router.post('/tenants/:id/users', requireAdmin, (req, res) => {
 router.patch('/tenants/:id/users/:userId', requireAdmin, (req, res) => {
     const t = tenantOr404(req, res); if (!t) return;
     handle(res, m365.updateUser(t, req.params.userId, req.body));
+});
+
+router.post('/tenants/:id/users/:userId/manager', requireAdmin, (req, res) => {
+    const t = tenantOr404(req, res); if (!t) return;
+    handle(res, m365.setUserManager(t, req.params.userId, req.body.manager_id || null));
 });
 
 router.post('/tenants/:id/users/:userId/password', requireAdmin, (req, res) => {

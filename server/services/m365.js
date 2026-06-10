@@ -130,14 +130,19 @@ async function testConnection(tenant) {
     return { displayName: o.displayName || '', defaultDomain: primary ? primary.name : '' };
 }
 
-async function listUsers(tenant) {
-    const select = 'id,displayName,givenName,surname,userPrincipalName,mail,jobTitle,department,accountEnabled,usageLocation,assignedLicenses';
-    const users = await graphAll(tenant, `/users?$select=${select}&$top=999`);
-    // Map license SKU ids to names per user for quick display in the table.
-    const skus = await listSkus(tenant).catch(() => []);
-    const byId = {};
-    for (const s of skus) byId[s.skuId] = s.name;
-    return users.map(u => ({
+const USER_SELECT = [
+    'id', 'displayName', 'givenName', 'surname', 'userPrincipalName', 'mail',
+    'jobTitle', 'department', 'companyName', 'officeLocation', 'businessPhones',
+    'mobilePhone', 'faxNumber', 'streetAddress', 'city', 'state', 'postalCode',
+    'country', 'accountEnabled', 'usageLocation', 'userType', 'assignedLicenses'
+].join(',');
+
+function mapUser(u, skuById) {
+    const licenseIds = (u.assignedLicenses || []).map(l => l.skuId);
+    // Graph has no shared-mailbox flag; a disabled, unlicensed account that still
+    // has a mailbox is almost always a shared mailbox. Best-effort, flagged as such.
+    const isSharedGuess = !u.accountEnabled && licenseIds.length === 0 && !!u.mail && (u.userType || 'Member') !== 'Guest';
+    return {
         id: u.id,
         display_name: u.displayName || '',
         given_name: u.givenName || '',
@@ -146,10 +151,32 @@ async function listUsers(tenant) {
         mail: u.mail || '',
         job_title: u.jobTitle || '',
         department: u.department || '',
+        company: u.companyName || '',
+        office_location: u.officeLocation || '',
+        business_phone: (u.businessPhones && u.businessPhones[0]) || '',
+        mobile_phone: u.mobilePhone || '',
+        fax: u.faxNumber || '',
+        street: u.streetAddress || '',
+        city: u.city || '',
+        state: u.state || '',
+        postal_code: u.postalCode || '',
+        country: u.country || '',
         enabled: !!u.accountEnabled,
         usage_location: u.usageLocation || '',
-        licenses: (u.assignedLicenses || []).map(l => byId[l.skuId] || l.skuId)
-    }));
+        user_type: u.userType || 'Member',
+        is_shared: isSharedGuess,
+        account_type: u.userType === 'Guest' ? 'Gast' : (isSharedGuess ? 'Shared Mailbox?' : 'Benutzer'),
+        licenses: licenseIds.map(id => (skuById[id] || id))
+    };
+}
+
+async function listUsers(tenant) {
+    const users = await graphAll(tenant, `/users?$select=${USER_SELECT}&$top=999`);
+    // Map license SKU ids to names per user for quick display in the table.
+    const skus = await listSkus(tenant).catch(() => []);
+    const byId = {};
+    for (const s of skus) byId[s.skuId] = s.name;
+    return users.map(u => mapUser(u, byId));
 }
 
 async function getUserGroups(tenant, userId) {
@@ -172,15 +199,48 @@ async function listDomains(tenant) {
         .sort((a, b) => (b.is_default ? 1 : 0) - (a.is_default ? 1 : 0));
 }
 
+function classifyGroup(g) {
+    const types = g.groupTypes || [];
+    const unified = types.includes('Unified');
+    const dynamic = types.includes('DynamicMembership');
+    let type, type_label;
+    if (unified) { type = 'unified'; type_label = 'Microsoft 365-Gruppe'; }
+    else if (g.mailEnabled && g.securityEnabled) { type = 'mail_security'; type_label = 'E-Mail-akt. Sicherheitsgruppe'; }
+    else if (g.mailEnabled) { type = 'distribution'; type_label = 'Verteilerliste'; }
+    else { type = 'security'; type_label = 'Sicherheitsgruppe'; }
+    // Graph can only manage membership of (non-dynamic) security and M365 groups.
+    // Classic distribution lists / mail-enabled security groups are Exchange-managed.
+    const manageable = !dynamic && (type === 'security' || type === 'unified');
+    return { type, type_label, dynamic, manageable };
+}
+
 async function listGroups(tenant) {
-    const groups = await graphAll(tenant, '/groups?$select=id,displayName,description,groupTypes,securityEnabled,mailEnabled&$top=999');
-    return groups.map(g => ({
-        id: g.id,
-        display_name: g.displayName || '',
-        description: g.description || '',
-        security_enabled: !!g.securityEnabled,
-        mail_enabled: !!g.mailEnabled,
-        assignable: !((g.groupTypes || []).includes('DynamicMembership'))
+    const groups = await graphAll(tenant, '/groups?$select=id,displayName,description,mail,groupTypes,securityEnabled,mailEnabled&$top=999');
+    return groups.map(g => {
+        const c = classifyGroup(g);
+        return {
+            id: g.id,
+            display_name: g.displayName || '',
+            description: g.description || '',
+            mail: g.mail || '',
+            security_enabled: !!g.securityEnabled,
+            mail_enabled: !!g.mailEnabled,
+            type: c.type,
+            type_label: c.type_label,
+            dynamic: c.dynamic,
+            manageable: c.manageable,
+            assignable: c.manageable
+        };
+    }).sort((a, b) => a.display_name.localeCompare(b.display_name, 'de'));
+}
+
+async function getGroupMembers(tenant, groupId) {
+    const members = await graphAll(tenant, `/groups/${groupId}/members?$select=id,displayName,userPrincipalName,mail`);
+    return members.map(m => ({
+        id: m.id,
+        display_name: m.displayName || '',
+        upn: m.userPrincipalName || '',
+        mail: m.mail || ''
     })).sort((a, b) => a.display_name.localeCompare(b.display_name, 'de'));
 }
 
@@ -198,48 +258,86 @@ async function listSkus(tenant) {
     })).sort((a, b) => a.name.localeCompare(b.name, 'de'));
 }
 
+// Scalar profile attributes shared by create and update (payload key -> Graph key).
+const PROFILE_MAP = {
+    display_name: 'displayName', given_name: 'givenName', surname: 'surname',
+    job_title: 'jobTitle', department: 'department', company: 'companyName',
+    office_location: 'officeLocation', mobile_phone: 'mobilePhone', fax: 'faxNumber',
+    street: 'streetAddress', city: 'city', state: 'state', postal_code: 'postalCode',
+    country: 'country', usage_location: 'usageLocation'
+};
+
+// Build the Graph body for the writable profile fields. When `forUpdate` is set,
+// only keys present in the payload are included (PATCH semantics).
+function profileBody(payload, forUpdate) {
+    const body = {};
+    for (const [k, gk] of Object.entries(PROFILE_MAP)) {
+        if (forUpdate) { if (payload[k] !== undefined) body[gk] = payload[k]; }
+        else if (payload[k]) body[gk] = payload[k];
+    }
+    // businessPhones is an array in Graph.
+    if (payload.business_phone !== undefined) {
+        body.businessPhones = payload.business_phone ? [payload.business_phone] : [];
+    } else if (!forUpdate && payload.business_phone) {
+        body.businessPhones = [payload.business_phone];
+    }
+    return body;
+}
+
 async function createUser(tenant, payload) {
-    const body = {
+    const body = Object.assign(profileBody(payload, false), {
         accountEnabled: payload.enabled !== false,
-        displayName: payload.display_name,
-        givenName: payload.given_name || undefined,
-        surname: payload.surname || undefined,
         userPrincipalName: payload.upn,
         mailNickname: (payload.upn || '').split('@')[0],
-        jobTitle: payload.job_title || undefined,
-        department: payload.department || undefined,
-        usageLocation: payload.usage_location || undefined,
         passwordProfile: {
             password: payload.password,
             forceChangePasswordNextSignIn: payload.force_change !== false
         }
-    };
+    });
+    if (!body.displayName) body.displayName = payload.display_name;
     const user = await graph(tenant, 'POST', '/users', body);
 
-    // Assign licenses (requires usageLocation to be set, which we do above).
     if (Array.isArray(payload.licenses) && payload.licenses.length) {
         await setUserLicenses(tenant, user.id, payload.licenses, []);
     }
-    // Add to groups.
     if (Array.isArray(payload.groups)) {
         for (const gid of payload.groups) {
             await addUserToGroup(tenant, user.id, gid).catch(() => {});
         }
     }
+    if (payload.manager_id) {
+        await setUserManager(tenant, user.id, payload.manager_id).catch(() => {});
+    }
     return user;
 }
 
 async function updateUser(tenant, userId, payload) {
-    const body = {};
-    const map = {
-        display_name: 'displayName', given_name: 'givenName', surname: 'surname',
-        job_title: 'jobTitle', department: 'department', usage_location: 'usageLocation'
-    };
-    for (const [k, gk] of Object.entries(map)) {
-        if (payload[k] !== undefined) body[gk] = payload[k];
-    }
+    const body = profileBody(payload, true);
     if (payload.enabled !== undefined) body.accountEnabled = !!payload.enabled;
     if (Object.keys(body).length) await graph(tenant, 'PATCH', `/users/${userId}`, body);
+    return { ok: true };
+}
+
+async function getUserManager(tenant, userId) {
+    try {
+        const m = await graph(tenant, 'GET', `/users/${userId}/manager?$select=id,displayName,userPrincipalName`);
+        return { id: m.id, display_name: m.displayName || '', upn: m.userPrincipalName || '' };
+    } catch (err) {
+        if (err.status === 404) return null;
+        throw err;
+    }
+}
+
+async function setUserManager(tenant, userId, managerId) {
+    if (!managerId) {
+        await graph(tenant, 'DELETE', `/users/${userId}/manager/$ref`).catch(err => {
+            if (err.status !== 404) throw err;
+        });
+        return { ok: true };
+    }
+    await graph(tenant, 'PUT', `/users/${userId}/manager/$ref`, {
+        '@odata.id': `${GRAPH}/users/${managerId}`
+    });
     return { ok: true };
 }
 
@@ -276,6 +374,6 @@ async function setUserLicenses(tenant, userId, addSkuIds, removeSkuIds) {
 
 module.exports = {
     getTenantRow, testConnection, listUsers, getUserGroups, getUserLicenseDetails,
-    listGroups, listDomains, listSkus, createUser, updateUser, resetPassword,
-    addUserToGroup, removeUserFromGroup, setUserLicenses, skuName
+    listGroups, getGroupMembers, listDomains, listSkus, createUser, updateUser, resetPassword,
+    getUserManager, setUserManager, addUserToGroup, removeUserFromGroup, setUserLicenses, skuName
 };
