@@ -17,6 +17,10 @@ const server = http.createServer(app);
 app.set('trust proxy', true);
 app.use(compression());
 app.use(express.json());
+app.use('/api', (req, res, next) => {
+    res.set('Cache-Control', 'no-store');
+    next();
+});
 
 const sessionMiddleware = session({
     store: new SQLiteStore(),
