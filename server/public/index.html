@@ -1376,7 +1376,22 @@
                             </div>
                         </div>
 
-                        <input v-model="m365UserSearch" placeholder="Benutzer suchen..." style="width:100%;max-width:340px;background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);border-radius:var(--radius);padding:0.45rem 0.75rem;margin-bottom:0.8rem;box-sizing:border-box">
+                        <div style="display:flex;gap:0.6rem;align-items:center;margin-bottom:0.8rem;flex-wrap:wrap">
+                            <input v-model="m365UserSearch" placeholder="Benutzer suchen..." style="flex:1;min-width:200px;max-width:340px;background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);border-radius:var(--radius);padding:0.45rem 0.75rem;box-sizing:border-box">
+                            <div style="position:relative">
+                                <button class="btn btn-ghost btn-sm" @click="m365ShowColumnPicker=!m365ShowColumnPicker" title="Spalten konfigurieren">&#9776; Spalten</button>
+                                <div v-if="m365ShowColumnPicker" @click.stop style="position:absolute;right:0;top:100%;margin-top:4px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius);padding:0.6rem;z-index:100;min-width:220px;box-shadow:0 4px 12px rgba(0,0,0,0.3);max-height:350px;overflow-y:auto">
+                                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem">
+                                        <span style="font-size:0.8rem;font-weight:600">Sichtbare Spalten</span>
+                                        <button class="btn btn-ghost btn-sm" style="font-size:0.7rem" @click="m365ResetColumns">Standard</button>
+                                    </div>
+                                    <label v-for="col in m365AllUserColumns" :key="col.key" style="display:flex;align-items:center;gap:0.5rem;padding:0.25rem 0;font-size:0.8rem;cursor:pointer">
+                                        <input type="checkbox" :checked="m365ColumnKeys.includes(col.key)" @change="m365ToggleColumn(col.key)">
+                                        {{ col.label }}
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
                         <p v-if="m365UsersOutput" style="color:var(--text-muted)">{{ m365UsersOutput }}</p>
                         <data-table v-if="m365Users.length" :rows="m365FilteredUsers" :columns="m365UserColumns" row-key="id" row-clickable :search="false" @row-click="openEditM365User">
                             <template #cell-account_type="{ row }">
@@ -2436,6 +2451,6 @@
     </div>
 
     <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
-    <script src="/js/app.js?v=036"></script>
+    <script src="/js/app.js?v=038"></script>
 </body>
 </html>

@@ -2123,15 +2123,45 @@ const app = createApp({
         const m365PasswordValue = ref('');
         const m365PasswordForceChange = ref(true);
 
-        const m365UserColumns = [
-            { key: 'display_name', label: 'Name' },
-            { key: 'upn', label: 'UPN' },
-            { key: 'account_type', label: 'Typ', filter: true },
-            { key: 'department', label: 'Abteilung', filter: true },
-            { key: 'enabled', label: 'Status', filter: true, value: r => r.enabled ? 'Aktiv' : 'Deaktiviert' },
-            { key: 'licenses', label: 'Lizenzen', value: r => (r.licenses || []).join(', ') },
-            { key: '_actions', label: '', sortable: false, searchable: false, stopClick: true }
+        const m365AllUserColumns = [
+            { key: 'display_name', label: 'Name', default: true },
+            { key: 'upn', label: 'UPN', default: true },
+            { key: 'mail', label: 'E-Mail' },
+            { key: 'account_type', label: 'Typ', filter: true, default: true },
+            { key: 'given_name', label: 'Vorname' },
+            { key: 'surname', label: 'Nachname' },
+            { key: 'department', label: 'Abteilung', filter: true, default: true },
+            { key: 'job_title', label: 'Position' },
+            { key: 'company', label: 'Firma' },
+            { key: 'office_location', label: 'Büro' },
+            { key: 'business_phone', label: 'Telefon' },
+            { key: 'mobile_phone', label: 'Mobiltelefon' },
+            { key: 'city', label: 'Ort' },
+            { key: 'street', label: 'Straße' },
+            { key: 'postal_code', label: 'PLZ' },
+            { key: 'country', label: 'Land' },
+            { key: 'usage_location', label: 'Nutzungsstandort' },
+            { key: 'enabled', label: 'Status', filter: true, default: true, value: r => r.enabled ? 'Aktiv' : 'Deaktiviert' },
+            { key: 'licenses', label: 'Lizenzen', default: true, value: r => (r.licenses || []).join(', ') },
         ];
+        const m365ColumnKeys = ref(JSON.parse(localStorage.getItem('m365UserCols') || 'null') || m365AllUserColumns.filter(c => c.default).map(c => c.key));
+        const m365ShowColumnPicker = ref(false);
+        function m365ToggleColumn(key) {
+            const idx = m365ColumnKeys.value.indexOf(key);
+            if (idx > -1) m365ColumnKeys.value.splice(idx, 1);
+            else m365ColumnKeys.value.push(key);
+            localStorage.setItem('m365UserCols', JSON.stringify(m365ColumnKeys.value));
+        }
+        function m365ResetColumns() {
+            m365ColumnKeys.value = m365AllUserColumns.filter(c => c.default).map(c => c.key);
+            localStorage.setItem('m365UserCols', JSON.stringify(m365ColumnKeys.value));
+        }
+        const m365UserColumns = computed(() => {
+            const active = m365ColumnKeys.value;
+            const cols = m365AllUserColumns.filter(c => active.includes(c.key));
+            cols.push({ key: '_actions', label: '', sortable: false, searchable: false, stopClick: true });
+            return cols;
+        });
 
         const m365CurrentTenant = computed(() => m365Tenants.value.find(t => t.id === m365SelectedTenant.value) || null);
 
@@ -2867,7 +2897,7 @@ const app = createApp({
             m365UsersLoading, m365UsersOutput, m365Testing, m365Saving, m365UserSearch, m365GroupSearch, m365ShowPassword,
             showM365TenantModal, showM365UserModal, showM365PasswordModal,
             m365TenantForm, m365UserMode, m365UserTab, m365EditingUser, m365DuplicateSource, m365UserForm,
-            m365PasswordUser, m365PasswordValue, m365PasswordForceChange, m365UserColumns,
+            m365PasswordUser, m365PasswordValue, m365PasswordForceChange, m365UserColumns, m365AllUserColumns, m365ColumnKeys, m365ShowColumnPicker, m365ToggleColumn, m365ResetColumns,
             m365CurrentTenant, m365TenantsGrouped, m365FilteredUsers, m365GroupsFiltered,
             loadM365, onM365TenantChange, testM365Tenant, loadM365Users,
             openM365TenantModal, saveM365Tenant, deleteM365Tenant,
