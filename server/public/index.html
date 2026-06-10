@@ -60,6 +60,10 @@
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
                         <span>AD-Verwaltung</span>
                     </div>
+                    <div class="nav-item" :class="{active: view === 'm365'}" @click="navigate('m365')">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg>
+                        <span>Microsoft 365</span>
+                    </div>
                     <div class="nav-item" :class="{active: view === 'veeam'}" @click="navigate('veeam')">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                         <span>Veeam Backup</span>
@@ -1315,6 +1319,78 @@
                     </div>
                 </div>
 
+                <!-- Microsoft 365 View -->
+                <div v-if="view === 'm365'">
+                    <div class="page-header">
+                        <h1>Microsoft 365</h1>
+                        <div style="display:flex;gap:0.5rem">
+                            <button class="btn btn-ghost btn-sm" @click="openM365Groups">Mandantengruppen</button>
+                            <button class="btn btn-primary btn-sm" @click="openM365TenantModal()">+ Mandant verknüpfen</button>
+                        </div>
+                    </div>
+
+                    <p v-if="!m365Tenants.length" style="color:var(--text-muted)">
+                        Noch kein Mandant verknüpft. Lege im Entra-Admin-Center eine App-Registrierung mit Anwendungsberechtigungen
+                        (User.ReadWrite.All, Group.ReadWrite.All, Directory.Read.All, Organization.Read.All) an und verknüpfe sie über „Mandant verknüpfen".
+                    </p>
+
+                    <!-- Tenant selector + status bar -->
+                    <div v-if="m365Tenants.length" style="display:flex;flex-wrap:wrap;gap:0.6rem;align-items:center;margin-bottom:1rem">
+                        <select v-model="m365SelectedTenant" @change="onM365TenantChange" style="background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);border-radius:var(--radius);padding:0.4rem 0.7rem;min-width:260px">
+                            <option :value="null">-- Mandant wählen --</option>
+                            <optgroup v-for="grp in m365TenantsGrouped" :key="grp.id" :label="grp.name">
+                                <option v-for="t in grp.tenants" :key="t.id" :value="t.id">{{ t.name }}</option>
+                            </optgroup>
+                        </select>
+                        <template v-if="m365CurrentTenant">
+                            <span style="font-size:0.78rem;padding:2px 8px;border-radius:10px" :style="{background: m365CurrentTenant.status==='connected' ? 'rgba(34,197,94,0.15)' : m365CurrentTenant.status==='error' ? 'rgba(239,68,68,0.15)' : 'rgba(148,163,184,0.15)', color: m365CurrentTenant.status==='connected' ? '#4ade80' : m365CurrentTenant.status==='error' ? '#f87171' : '#94a3b8'}">
+                                {{ m365CurrentTenant.status === 'connected' ? 'Verbunden' : m365CurrentTenant.status === 'error' ? 'Fehler' : 'Ungeprüft' }}
+                            </span>
+                            <span v-if="m365CurrentTenant.default_domain" style="font-size:0.78rem;color:var(--text-muted)">{{ m365CurrentTenant.default_domain }}</span>
+                            <button class="btn btn-ghost btn-sm" @click="testM365Tenant(m365CurrentTenant)" :disabled="m365Testing">{{ m365Testing ? 'Teste...' : 'Verbindung testen' }}</button>
+                            <button class="btn btn-ghost btn-sm" @click="loadM365Users" :disabled="m365UsersLoading">{{ m365UsersLoading ? 'Lade...' : 'Benutzer laden' }}</button>
+                            <button class="btn btn-ghost btn-sm" @click="openM365TenantModal(m365CurrentTenant)">Bearbeiten</button>
+                            <button class="btn btn-primary btn-sm" @click="openCreateM365User" :disabled="m365CurrentTenant.status!=='connected'">+ Benutzer</button>
+                        </template>
+                    </div>
+
+                    <div v-if="m365CurrentTenant && m365CurrentTenant.last_error" style="margin-bottom:1rem;padding:0.6rem 0.8rem;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);border-radius:var(--radius);font-size:0.82rem;color:#fca5a5">
+                        {{ m365CurrentTenant.last_error }}
+                    </div>
+
+                    <!-- License overview -->
+                    <div v-if="m365CurrentTenant && m365Skus.length" class="card" style="margin-bottom:1rem;padding:0.8rem 1rem">
+                        <div style="font-size:0.85rem;font-weight:600;margin-bottom:0.6rem">Lizenzen</div>
+                        <div style="display:flex;flex-wrap:wrap;gap:0.5rem">
+                            <div v-for="s in m365Skus" :key="s.sku_id" style="border:1px solid var(--border);border-radius:var(--radius);padding:0.4rem 0.7rem;font-size:0.8rem">
+                                <div style="font-weight:500">{{ s.name }}</div>
+                                <div style="color:var(--text-muted)">{{ s.consumed }} / {{ s.total }} belegt · <span :style="{color: s.available>0 ? '#4ade80' : '#f87171'}">{{ s.available }} frei</span></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Users table -->
+                    <div v-if="m365CurrentTenant">
+                        <input v-model="m365UserSearch" placeholder="Benutzer suchen..." style="width:100%;max-width:340px;background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);border-radius:var(--radius);padding:0.45rem 0.75rem;margin-bottom:0.8rem;box-sizing:border-box">
+                        <p v-if="m365UsersOutput" style="color:var(--text-muted)">{{ m365UsersOutput }}</p>
+                        <data-table v-if="m365Users.length" :rows="m365FilteredUsers" :columns="m365UserColumns" row-key="id" row-clickable :search="false" @row-click="openEditM365User">
+                            <template #cell-enabled="{ row }">
+                                <span :style="{color: row.enabled ? '#4ade80' : '#f87171'}">{{ row.enabled ? 'Aktiv' : 'Deaktiviert' }}</span>
+                            </template>
+                            <template #cell-licenses="{ row }">
+                                <span style="font-size:0.78rem">{{ row.licenses.length ? row.licenses.join(', ') : '—' }}</span>
+                            </template>
+                            <template #cell-_actions="{ row }">
+                                <div style="display:flex;gap:0.3rem">
+                                    <button class="btn btn-ghost btn-sm" @click.stop="openEditM365User(row)" title="Bearbeiten">✎</button>
+                                    <button class="btn btn-ghost btn-sm" @click.stop="openDuplicateM365User(row)" title="Duplizieren">⧉</button>
+                                    <button class="btn btn-ghost btn-sm" @click.stop="openM365Password(row)" title="Passwort">🔑</button>
+                                </div>
+                            </template>
+                        </data-table>
+                    </div>
+                </div>
+
                 <!-- Benutzerverwaltung View -->
                 <div v-if="view === 'ad-admin'">
                     <div class="page-header">
@@ -2013,6 +2089,171 @@
 
                 <div class="modal-actions">
                     <button class="btn btn-ghost" @click="showADTemplatesModal = false">Schliessen</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- M365 Tenant Modal -->
+        <div class="modal-overlay" v-if="showM365TenantModal" @click.self="showM365TenantModal = false">
+            <div class="modal" style="max-width:560px">
+                <h2>{{ m365TenantForm.id ? 'Mandant bearbeiten' : 'Mandant verknüpfen' }}</h2>
+                <p style="font-size:0.8rem;color:var(--text-muted);margin-bottom:1rem">App-Registrierung (Entra ID) mit Client-Secret und Anwendungsberechtigungen. Für Passwort-Reset benötigt die App zusätzlich eine privilegierte Rolle (z.B. Benutzeradministrator).</p>
+                <div class="form-group">
+                    <label>Anzeigename *</label>
+                    <input v-model="m365TenantForm.name" placeholder="z.B. Kunde Mustermann GmbH">
+                </div>
+                <div class="form-group">
+                    <label>Mandantengruppe</label>
+                    <select v-model="m365TenantForm.group_id" style="width:100%;background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);border-radius:var(--radius);padding:0.45rem 0.7rem">
+                        <option :value="null">— Keine —</option>
+                        <option v-for="g in m365TenantGroups" :key="g.id" :value="g.id">{{ g.name }}</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Tenant-ID (Verzeichnis-ID) *</label>
+                    <input v-model="m365TenantForm.tenant_id" placeholder="00000000-0000-0000-0000-000000000000">
+                </div>
+                <div class="form-group">
+                    <label>Client-ID (Anwendungs-ID) *</label>
+                    <input v-model="m365TenantForm.client_id" placeholder="00000000-0000-0000-0000-000000000000">
+                </div>
+                <div class="form-group">
+                    <label>Client-Secret {{ m365TenantForm.id ? '(leer = unverändert)' : '*' }}</label>
+                    <input v-model="m365TenantForm.client_secret" type="password" placeholder="Secret-Wert">
+                </div>
+                <div class="modal-actions">
+                    <button v-if="m365TenantForm.id" class="btn btn-danger btn-sm" style="margin-right:auto" @click="deleteM365Tenant(m365TenantForm)">Löschen</button>
+                    <button class="btn btn-ghost" @click="showM365TenantModal = false">Abbrechen</button>
+                    <button class="btn btn-primary" @click="saveM365Tenant">{{ m365TenantForm.id ? 'Speichern' : 'Verknüpfen & testen' }}</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- M365 Tenant Groups Modal -->
+        <div class="modal-overlay" v-if="showM365GroupsModal" @click.self="showM365GroupsModal = false">
+            <div class="modal" style="max-width:520px">
+                <h2>Mandantengruppen</h2>
+                <p style="font-size:0.82rem;color:var(--text-muted);margin-bottom:1rem">Organisiere verknüpfte Mandanten in Gruppen (z.B. nach Standort oder Kundengruppe).</p>
+                <div style="display:flex;gap:0.5rem;margin-bottom:1rem">
+                    <input v-model="m365NewGroupName" placeholder="Neue Gruppe..." style="flex:1;background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);border-radius:var(--radius);padding:0.45rem 0.7rem">
+                    <button class="btn btn-primary btn-sm" @click="addM365Group">Hinzufügen</button>
+                </div>
+                <div v-for="g in m365TenantGroups" :key="g.id" style="display:flex;justify-content:space-between;align-items:center;border:1px solid var(--border);border-radius:var(--radius);padding:0.5rem 0.8rem;margin-bottom:0.4rem">
+                    <div>
+                        <strong>{{ g.name }}</strong>
+                        <span style="font-size:0.78rem;color:var(--text-muted);margin-left:0.5rem">{{ m365Tenants.filter(t => t.group_id === g.id).length }} Mandant(en)</span>
+                    </div>
+                    <button class="btn btn-danger btn-sm" @click="deleteM365Group(g.id)">✕</button>
+                </div>
+                <p v-if="!m365TenantGroups.length" style="color:var(--text-muted)">Noch keine Gruppen.</p>
+                <div class="modal-actions">
+                    <button class="btn btn-ghost" @click="showM365GroupsModal = false">Schliessen</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- M365 User Modal -->
+        <div class="modal-overlay" v-if="showM365UserModal" @click.self="showM365UserModal = false">
+            <div class="modal" style="max-width:680px">
+                <h2>{{ m365UserMode === 'edit' ? 'Benutzer bearbeiten' : m365UserMode === 'duplicate' ? 'Benutzer duplizieren' : 'Benutzer erstellen' }}</h2>
+                <div v-if="m365UserMode === 'duplicate' && m365DuplicateSource" style="margin-bottom:1rem;padding:0.6rem 0.8rem;background:rgba(59,130,246,0.08);border:1px solid rgba(59,130,246,0.25);border-radius:var(--radius);font-size:0.8rem;color:var(--text-muted)">
+                    Vorlage von <strong style="color:var(--text-primary)">{{ m365DuplicateSource.display_name }}</strong>. UPN, Anzeigename und Passwort für den neuen Benutzer anpassen.
+                </div>
+
+                <div style="display:flex;gap:0.3rem;border-bottom:1px solid var(--border);margin-bottom:1rem">
+                    <button class="btn btn-sm" :class="m365UserTab==='general' ? 'btn-primary':'btn-ghost'" @click="m365UserTab='general'">Allgemein</button>
+                    <button class="btn btn-sm" :class="m365UserTab==='licenses' ? 'btn-primary':'btn-ghost'" @click="m365UserTab='licenses'">Lizenzen<span v-if="m365UserForm.licenses.length" style="margin-left:3px;color:var(--accent)">({{ m365UserForm.licenses.length }})</span></button>
+                    <button class="btn btn-sm" :class="m365UserTab==='groups' ? 'btn-primary':'btn-ghost'" @click="m365UserTab='groups'">Gruppen<span v-if="m365UserForm.groups.length" style="margin-left:3px;color:var(--accent)">({{ m365UserForm.groups.length }})</span></button>
+                </div>
+
+                <div v-if="m365UserTab==='general'">
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem">
+                        <div class="form-group"><label>Vorname</label><input v-model="m365UserForm.given_name" @input="m365AutoFields"></div>
+                        <div class="form-group"><label>Nachname</label><input v-model="m365UserForm.surname" @input="m365AutoFields"></div>
+                    </div>
+                    <div class="form-group"><label>Anzeigename *</label><input v-model="m365UserForm.display_name"></div>
+                    <div class="form-group">
+                        <label>UPN / Anmeldename *</label>
+                        <div style="display:flex;gap:0.3rem;align-items:center">
+                            <input v-model="m365UserForm.upn_local" @input="m365UpdateUpn" :disabled="m365UserMode==='edit'" placeholder="m.mustermann" style="flex:1">
+                            <span style="color:var(--text-muted)">@</span>
+                            <select v-model="m365UserForm.upn_domain" @change="m365UpdateUpn" :disabled="m365UserMode==='edit'" style="background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);border-radius:var(--radius);padding:0.45rem 0.5rem">
+                                <option v-for="d in m365Domains" :key="d" :value="d">{{ d }}</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-group" v-if="m365UserMode!=='edit'">
+                        <label>Passwort *</label>
+                        <div style="display:flex;gap:0.4rem">
+                            <input v-model="m365UserForm.password" :type="m365ShowPassword ? 'text':'password'" style="flex:1">
+                            <button type="button" class="btn btn-ghost btn-sm" @click="m365ShowPassword=!m365ShowPassword">{{ m365ShowPassword ? '🙈':'👁' }}</button>
+                            <button type="button" class="btn btn-primary btn-sm" @click="m365GeneratePassword">Generieren</button>
+                        </div>
+                        <label style="display:flex;align-items:center;gap:0.5rem;margin-top:0.5rem;font-size:0.82rem;cursor:pointer">
+                            <input type="checkbox" v-model="m365UserForm.force_change"> Passwort bei erster Anmeldung ändern
+                        </label>
+                    </div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem">
+                        <div class="form-group"><label>Position</label><input v-model="m365UserForm.job_title"></div>
+                        <div class="form-group"><label>Abteilung</label><input v-model="m365UserForm.department"></div>
+                    </div>
+                    <div class="form-group">
+                        <label>Nutzungsstandort (für Lizenzen)</label>
+                        <input v-model="m365UserForm.usage_location" placeholder="DE" maxlength="2" style="text-transform:uppercase">
+                    </div>
+                    <label v-if="m365UserMode==='edit'" style="display:flex;align-items:center;gap:0.6rem;cursor:pointer">
+                        <input type="checkbox" v-model="m365UserForm.enabled"> Konto aktiviert
+                    </label>
+                </div>
+
+                <div v-if="m365UserTab==='licenses'">
+                    <p v-if="!m365Skus.length" style="color:var(--text-muted)">Keine Lizenzen im Mandant gefunden.</p>
+                    <label v-for="s in m365Skus" :key="s.sku_id" style="display:flex;align-items:center;gap:0.6rem;padding:0.45rem 0.6rem;border-bottom:1px solid var(--border);cursor:pointer">
+                        <input type="checkbox" :value="s.sku_id" v-model="m365UserForm.licenses">
+                        <div style="flex:1"><div style="font-size:0.86rem;font-weight:500">{{ s.name }}</div><div style="font-size:0.74rem;color:var(--text-muted)">{{ s.available }} frei von {{ s.total }}</div></div>
+                    </label>
+                    <p v-if="m365UserMode!=='edit'" style="font-size:0.74rem;color:var(--text-muted);margin-top:0.5rem">Hinweis: Lizenzen brauchen einen gesetzten Nutzungsstandort.</p>
+                </div>
+
+                <div v-if="m365UserTab==='groups'">
+                    <input v-model="m365GroupSearch" placeholder="Gruppe suchen..." style="width:100%;background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);border-radius:var(--radius);padding:0.4rem 0.7rem;margin-bottom:0.5rem;box-sizing:border-box">
+                    <div style="border:1px solid var(--border);border-radius:var(--radius);max-height:280px;overflow-y:auto">
+                        <label v-for="g in m365GroupsFiltered" :key="g.id" style="display:flex;align-items:center;gap:0.6rem;padding:0.45rem 0.7rem;border-bottom:1px solid var(--border);cursor:pointer" :title="!g.assignable ? 'Dynamische Gruppe – Mitgliedschaft nicht manuell änderbar' : ''">
+                            <input type="checkbox" :value="g.id" v-model="m365UserForm.groups" :disabled="!g.assignable">
+                            <div style="flex:1;min-width:0"><div style="font-size:0.85rem;font-weight:500">{{ g.display_name }}</div><div v-if="g.description" style="font-size:0.72rem;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ g.description }}</div></div>
+                            <span style="font-size:0.67rem;padding:1px 5px;border-radius:3px" :style="{background: g.security_enabled ? 'rgba(239,68,68,0.12)':'rgba(59,130,246,0.12)', color: g.security_enabled ? '#f87171':'#60a5fa'}">{{ g.security_enabled ? 'Security' : 'M365' }}</span>
+                        </label>
+                        <div v-if="!m365GroupsFiltered.length" style="padding:0.8rem;text-align:center;color:var(--text-muted);font-size:0.85rem">Keine Gruppen.</div>
+                    </div>
+                    <p v-if="m365UserMode==='edit'" style="font-size:0.74rem;color:var(--text-muted);margin-top:0.5rem">Änderungen an Gruppen werden beim Speichern übernommen.</p>
+                </div>
+
+                <div class="modal-actions">
+                    <button class="btn btn-ghost" @click="showM365UserModal = false">Abbrechen</button>
+                    <button class="btn btn-primary" @click="saveM365User" :disabled="m365Saving">{{ m365Saving ? 'Speichert...' : (m365UserMode==='edit' ? 'Aktualisieren':'Erstellen') }}</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- M365 Password Modal -->
+        <div class="modal-overlay" v-if="showM365PasswordModal" @click.self="showM365PasswordModal = false">
+            <div class="modal" style="max-width:460px">
+                <h2>Passwort zurücksetzen</h2>
+                <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:1rem">Für <strong style="color:var(--text-primary)">{{ m365PasswordUser && m365PasswordUser.display_name }}</strong></p>
+                <div class="form-group">
+                    <label>Neues Passwort</label>
+                    <div style="display:flex;gap:0.4rem">
+                        <input v-model="m365PasswordValue" :type="m365ShowPassword ? 'text':'password'" style="flex:1">
+                        <button type="button" class="btn btn-ghost btn-sm" @click="m365ShowPassword=!m365ShowPassword">{{ m365ShowPassword ? '🙈':'👁' }}</button>
+                        <button type="button" class="btn btn-primary btn-sm" @click="m365PasswordValue = m365MakePassword()">Generieren</button>
+                    </div>
+                </div>
+                <label style="display:flex;align-items:center;gap:0.5rem;font-size:0.82rem;cursor:pointer">
+                    <input type="checkbox" v-model="m365PasswordForceChange"> Bei nächster Anmeldung ändern
+                </label>
+                <div class="modal-actions">
+                    <button class="btn btn-ghost" @click="showM365PasswordModal = false">Abbrechen</button>
+                    <button class="btn btn-primary" @click="saveM365Password">Zurücksetzen</button>
                 </div>
             </div>
         </div>

@@ -72,6 +72,7 @@ app.use('/api/settings', require('./routes/settings'));
 app.use('/api/vnc', require('./routes/vnc-prep'));
 app.use('/api/updates', require('./routes/updates'));
 app.use('/api/ad', require('./routes/active-directory'));
+app.use('/api/m365', require('./routes/m365'));
 
 // Live log stream (SSE)
 app.get('/api/logs/stream', (req, res) => {

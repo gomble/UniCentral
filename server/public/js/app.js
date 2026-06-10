@@ -627,6 +627,9 @@ const app = createApp({
             } else if (target === 'logs') {
                 connectLogStream();
                 loadCommandHistory();
+            } else if (target === 'm365') {
+                disconnectLogStream();
+                loadM365();
             } else if (target === 'veeam') {
                 disconnectLogStream();
                 loadVeeamInstances();
@@ -2054,6 +2057,379 @@ const app = createApp({
             navigate('ad-admin');
         }
 
+        // ===== Microsoft 365 =====
+        const m365Tenants = ref([]);
+        const m365TenantGroups = ref([]);
+        const m365SelectedTenant = ref(null);
+        const m365Users = ref([]);
+        const m365Skus = ref([]);
+        const m365Groups = ref([]);
+        const m365Domains = ref([]);
+        const m365UsersLoading = ref(false);
+        const m365UsersOutput = ref('');
+        const m365Testing = ref(false);
+        const m365Saving = ref(false);
+        const m365UserSearch = ref('');
+        const m365GroupSearch = ref('');
+        const m365ShowPassword = ref(false);
+
+        const showM365TenantModal = ref(false);
+        const showM365GroupsModal = ref(false);
+        const showM365UserModal = ref(false);
+        const showM365PasswordModal = ref(false);
+        const m365NewGroupName = ref('');
+
+        const m365TenantForm = reactive({ id: null, name: '', tenant_id: '', client_id: '', client_secret: '', group_id: null });
+        const m365UserMode = ref('create');
+        const m365UserTab = ref('general');
+        const m365EditingUser = ref(null);
+        const m365DuplicateSource = ref(null);
+        const m365UserForm = reactive({
+            given_name: '', surname: '', display_name: '', upn_local: '', upn_domain: '',
+            password: '', force_change: true, job_title: '', department: '',
+            usage_location: 'DE', enabled: true, licenses: [], groups: []
+        });
+        const m365PasswordUser = ref(null);
+        const m365PasswordValue = ref('');
+        const m365PasswordForceChange = ref(true);
+
+        const m365UserColumns = [
+            { key: 'display_name', label: 'Name' },
+            { key: 'upn', label: 'UPN' },
+            { key: 'department', label: 'Abteilung', filter: true },
+            { key: 'enabled', label: 'Status', filter: true, value: r => r.enabled ? 'Aktiv' : 'Deaktiviert' },
+            { key: 'licenses', label: 'Lizenzen', value: r => (r.licenses || []).join(', ') },
+            { key: '_actions', label: '', sortable: false, searchable: false, stopClick: true }
+        ];
+
+        const m365CurrentTenant = computed(() => m365Tenants.value.find(t => t.id === m365SelectedTenant.value) || null);
+
+        const m365TenantsGrouped = computed(() => {
+            const groups = m365TenantGroups.value.map(g => ({
+                id: g.id, name: g.name,
+                tenants: m365Tenants.value.filter(t => t.group_id === g.id)
+            })).filter(g => g.tenants.length);
+            const ungrouped = m365Tenants.value.filter(t => !t.group_id);
+            if (ungrouped.length) groups.push({ id: 0, name: 'Ohne Gruppe', tenants: ungrouped });
+            return groups;
+        });
+
+        const m365FilteredUsers = computed(() => {
+            if (!m365UserSearch.value) return m365Users.value;
+            const q = m365UserSearch.value.toLowerCase();
+            return m365Users.value.filter(u =>
+                (u.display_name || '').toLowerCase().includes(q) ||
+                (u.upn || '').toLowerCase().includes(q) ||
+                (u.mail || '').toLowerCase().includes(q) ||
+                (u.department || '').toLowerCase().includes(q));
+        });
+
+        const m365GroupsFiltered = computed(() => {
+            let groups = m365Groups.value;
+            if (m365GroupSearch.value) {
+                const q = m365GroupSearch.value.toLowerCase();
+                groups = groups.filter(g => (g.display_name || '').toLowerCase().includes(q) || (g.description || '').toLowerCase().includes(q));
+            }
+            return [...groups].sort((a, b) => {
+                const ac = m365UserForm.groups.includes(a.id) ? 0 : 1;
+                const bc = m365UserForm.groups.includes(b.id) ? 0 : 1;
+                if (ac !== bc) return ac - bc;
+                return a.display_name.localeCompare(b.display_name, 'de');
+            });
+        });
+
+        async function loadM365() {
+            const [tg, tn] = await Promise.all([
+                apiFetch('/api/m365/tenant-groups'),
+                apiFetch('/api/m365/tenants')
+            ]);
+            if (tg.ok) m365TenantGroups.value = await tg.json();
+            if (tn.ok) m365Tenants.value = await tn.json();
+        }
+
+        function onM365TenantChange() {
+            m365Users.value = [];
+            m365Skus.value = [];
+            m365Groups.value = [];
+            m365Domains.value = [];
+            m365UsersOutput.value = '';
+            if (m365CurrentTenant.value && m365CurrentTenant.value.status === 'connected') {
+                loadM365Users();
+                loadM365Skus();
+                loadM365Groups();
+                loadM365Domains();
+            }
+        }
+
+        async function testM365Tenant(tenant) {
+            m365Testing.value = true;
+            const res = await apiFetch(`/api/m365/tenants/${tenant.id}/test`, { method: 'POST' });
+            m365Testing.value = false;
+            const data = await res.json().catch(() => ({}));
+            await loadM365();
+            if (res.ok) {
+                toast(`Verbunden mit ${data.displayName || tenant.name}`, 'success');
+                if (m365SelectedTenant.value === tenant.id) onM365TenantChange();
+            } else {
+                toast('Verbindung fehlgeschlagen: ' + (data.error || ''), 'error');
+            }
+        }
+
+        async function loadM365Users() {
+            const t = m365CurrentTenant.value; if (!t) return;
+            m365UsersLoading.value = true;
+            m365UsersOutput.value = 'Lade Benutzer aus Microsoft 365...';
+            const res = await apiFetch(`/api/m365/tenants/${t.id}/users`);
+            m365UsersLoading.value = false;
+            if (res.ok) { m365Users.value = await res.json(); m365UsersOutput.value = ''; }
+            else { const e = await res.json().catch(() => ({})); m365UsersOutput.value = ''; toast('Fehler: ' + (e.error || ''), 'error'); }
+        }
+
+        async function loadM365Skus() {
+            const t = m365CurrentTenant.value; if (!t) return;
+            const res = await apiFetch(`/api/m365/tenants/${t.id}/skus`);
+            if (res.ok) m365Skus.value = await res.json();
+        }
+
+        async function loadM365Groups() {
+            const t = m365CurrentTenant.value; if (!t) return;
+            const res = await apiFetch(`/api/m365/tenants/${t.id}/groups`);
+            if (res.ok) m365Groups.value = await res.json();
+        }
+
+        async function loadM365Domains() {
+            const t = m365CurrentTenant.value; if (!t) return;
+            const res = await apiFetch(`/api/m365/tenants/${t.id}/domains`);
+            if (res.ok) m365Domains.value = (await res.json()).map(d => d.name);
+        }
+
+        function openM365TenantModal(tenant) {
+            if (tenant) {
+                Object.assign(m365TenantForm, { id: tenant.id, name: tenant.name, tenant_id: tenant.tenant_id, client_id: tenant.client_id, client_secret: '', group_id: tenant.group_id || null });
+            } else {
+                Object.assign(m365TenantForm, { id: null, name: '', tenant_id: '', client_id: '', client_secret: '', group_id: null });
+            }
+            showM365TenantModal.value = true;
+        }
+
+        async function saveM365Tenant() {
+            const f = m365TenantForm;
+            if (!f.name || !f.tenant_id || !f.client_id || (!f.id && !f.client_secret)) {
+                toast('Bitte alle Pflichtfelder ausfüllen', 'error');
+                return;
+            }
+            const body = { name: f.name, tenant_id: f.tenant_id, client_id: f.client_id, group_id: f.group_id };
+            if (f.client_secret) body.client_secret = f.client_secret;
+            const url = f.id ? `/api/m365/tenants/${f.id}` : '/api/m365/tenants';
+            const res = await apiFetch(url, { method: f.id ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+            if (!res.ok) { const e = await res.json().catch(() => ({})); toast('Fehler: ' + (e.error || ''), 'error'); return; }
+            const saved = await res.json();
+            showM365TenantModal.value = false;
+            await loadM365();
+            // Auto-test new/updated tenant for immediate feedback.
+            await testM365Tenant(saved);
+            if (!f.id) m365SelectedTenant.value = saved.id;
+        }
+
+        async function deleteM365Tenant(tenant) {
+            if (!await confirmDialog(`Mandant "${tenant.name}" wirklich entfernen?`)) return;
+            await apiFetch(`/api/m365/tenants/${tenant.id}`, { method: 'DELETE' });
+            showM365TenantModal.value = false;
+            if (m365SelectedTenant.value === tenant.id) m365SelectedTenant.value = null;
+            await loadM365();
+            toast('Mandant entfernt', 'success');
+        }
+
+        function openM365Groups() { showM365GroupsModal.value = true; }
+
+        async function addM365Group() {
+            if (!m365NewGroupName.value) return;
+            const res = await apiFetch('/api/m365/tenant-groups', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: m365NewGroupName.value }) });
+            if (res.ok) { m365NewGroupName.value = ''; await loadM365(); }
+            else { const e = await res.json().catch(() => ({})); toast(e.error || 'Fehler', 'error'); }
+        }
+
+        async function deleteM365Group(id) {
+            if (!await confirmDialog('Mandantengruppe löschen? Die Mandanten bleiben erhalten.')) return;
+            await apiFetch(`/api/m365/tenant-groups/${id}`, { method: 'DELETE' });
+            await loadM365();
+        }
+
+        function m365MakePassword() {
+            const words = ['Apfel', 'Sonne', 'Wolke', 'Garten', 'Anker', 'Stern', 'Falke', 'Hafen', 'Kompass', 'Drache', 'Komet', 'Kristall'];
+            const sym = '!?#$%&*+';
+            const w1 = words[Math.floor(Math.random() * words.length)];
+            let w2 = words[Math.floor(Math.random() * words.length)];
+            while (w2 === w1) w2 = words[Math.floor(Math.random() * words.length)];
+            return `${w1}-${w2}${Math.floor(Math.random() * 90 + 10)}${sym[Math.floor(Math.random() * sym.length)]}`;
+        }
+
+        function m365GeneratePassword() { m365UserForm.password = m365MakePassword(); m365ShowPassword.value = true; }
+
+        function m365AutoFields() {
+            const fn = m365UserForm.given_name || '';
+            const sn = m365UserForm.surname || '';
+            m365UserForm.display_name = (fn + ' ' + sn).trim();
+            if (m365UserMode.value !== 'edit' && fn && sn) {
+                m365UserForm.upn_local = (fn[0] + '.' + sn).toLowerCase().replace(/[^a-z0-9.\-]/g, '');
+                m365UpdateUpn();
+            }
+        }
+
+        function m365UpdateUpn() { /* UPN is assembled from local + domain on save */ }
+
+        function m365ResetUserForm() {
+            const dom = m365Domains.value[0] || (m365CurrentTenant.value && m365CurrentTenant.value.default_domain) || '';
+            Object.assign(m365UserForm, {
+                given_name: '', surname: '', display_name: '', upn_local: '', upn_domain: dom,
+                password: '', force_change: true, job_title: '', department: '',
+                usage_location: 'DE', enabled: true, licenses: [], groups: []
+            });
+        }
+
+        function openCreateM365User() {
+            m365UserMode.value = 'create';
+            m365UserTab.value = 'general';
+            m365EditingUser.value = null;
+            m365DuplicateSource.value = null;
+            m365ShowPassword.value = false;
+            m365ResetUserForm();
+            showM365UserModal.value = true;
+        }
+
+        async function openEditM365User(user) {
+            m365UserMode.value = 'edit';
+            m365UserTab.value = 'general';
+            m365EditingUser.value = user;
+            m365DuplicateSource.value = null;
+            const [local, domain] = (user.upn || '').split('@');
+            Object.assign(m365UserForm, {
+                given_name: user.given_name || '', surname: user.surname || '',
+                display_name: user.display_name || '', upn_local: local || '', upn_domain: domain || '',
+                password: '', force_change: false, job_title: user.job_title || '',
+                department: user.department || '', usage_location: user.usage_location || 'DE',
+                enabled: user.enabled !== false, licenses: [], groups: []
+            });
+            showM365UserModal.value = true;
+            // Load current licenses + group memberships for this user.
+            const t = m365CurrentTenant.value;
+            const [lic, grp] = await Promise.all([
+                apiFetch(`/api/m365/tenants/${t.id}/users/${user.id}/licenses`),
+                apiFetch(`/api/m365/tenants/${t.id}/users/${user.id}/groups`)
+            ]);
+            if (lic.ok) m365UserForm.licenses = (await lic.json()).map(l => l.sku_id);
+            if (grp.ok) m365UserForm.groups = (await grp.json()).map(g => g.id);
+            m365EditingUser.value = { ...user, _licenses: [...m365UserForm.licenses], _groups: [...m365UserForm.groups] };
+        }
+
+        async function openDuplicateM365User(user) {
+            m365UserMode.value = 'duplicate';
+            m365UserTab.value = 'general';
+            m365EditingUser.value = null;
+            m365ShowPassword.value = false;
+            const dom = (user.upn || '').split('@')[1] || m365Domains.value[0] || '';
+            Object.assign(m365UserForm, {
+                given_name: '', surname: '', display_name: '', upn_local: '', upn_domain: dom,
+                password: '', force_change: true, job_title: user.job_title || '',
+                department: user.department || '', usage_location: user.usage_location || 'DE',
+                enabled: true, licenses: [], groups: []
+            });
+            m365DuplicateSource.value = user;
+            showM365UserModal.value = true;
+            // Carry over the source user's licenses and groups as a starting point.
+            const t = m365CurrentTenant.value;
+            const [lic, grp] = await Promise.all([
+                apiFetch(`/api/m365/tenants/${t.id}/users/${user.id}/licenses`),
+                apiFetch(`/api/m365/tenants/${t.id}/users/${user.id}/groups`)
+            ]);
+            if (lic.ok) m365UserForm.licenses = (await lic.json()).map(l => l.sku_id);
+            if (grp.ok) m365UserForm.groups = (await grp.json()).map(g => g.id);
+        }
+
+        async function saveM365User() {
+            const f = m365UserForm;
+            const t = m365CurrentTenant.value;
+            if (!f.display_name || !f.upn_local || !f.upn_domain) { toast('Anzeigename und UPN sind erforderlich', 'error'); return; }
+            if (m365UserMode.value !== 'edit' && !f.password) { toast('Passwort ist erforderlich', 'error'); return; }
+            m365Saving.value = true;
+            try {
+                if (m365UserMode.value === 'edit') {
+                    const u = m365EditingUser.value;
+                    const upd = await apiFetch(`/api/m365/tenants/${t.id}/users/${u.id}`, {
+                        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            display_name: f.display_name, given_name: f.given_name, surname: f.surname,
+                            job_title: f.job_title, department: f.department, usage_location: f.usage_location, enabled: f.enabled
+                        })
+                    });
+                    if (!upd.ok) throw new Error((await upd.json()).error || 'Update fehlgeschlagen');
+                    await m365SyncLicensesGroups(t, u.id, u._licenses || [], u._groups || []);
+                    toast('Benutzer aktualisiert', 'success');
+                } else {
+                    const res = await apiFetch(`/api/m365/tenants/${t.id}/users`, {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            display_name: f.display_name, given_name: f.given_name, surname: f.surname,
+                            upn: f.upn_local + '@' + f.upn_domain, password: f.password, force_change: f.force_change,
+                            job_title: f.job_title, department: f.department, usage_location: f.usage_location,
+                            enabled: true, licenses: f.licenses, groups: f.groups
+                        })
+                    });
+                    if (!res.ok) throw new Error((await res.json()).error || 'Erstellen fehlgeschlagen');
+                    toast('Benutzer erstellt', 'success');
+                }
+                showM365UserModal.value = false;
+                await loadM365Users();
+                await loadM365Skus();
+            } catch (e) {
+                toast('Fehler: ' + e.message, 'error');
+            } finally {
+                m365Saving.value = false;
+            }
+        }
+
+        // Apply license and group differences for an existing user.
+        async function m365SyncLicensesGroups(tenant, userId, origLicenses, origGroups) {
+            const addLic = m365UserForm.licenses.filter(l => !origLicenses.includes(l));
+            const remLic = origLicenses.filter(l => !m365UserForm.licenses.includes(l));
+            if (addLic.length || remLic.length) {
+                await apiFetch(`/api/m365/tenants/${tenant.id}/users/${userId}/licenses`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ add: addLic, remove: remLic })
+                });
+            }
+            const addGrp = m365UserForm.groups.filter(g => !origGroups.includes(g));
+            const remGrp = origGroups.filter(g => !m365UserForm.groups.includes(g));
+            for (const gid of addGrp) {
+                await apiFetch(`/api/m365/tenants/${tenant.id}/users/${userId}/groups`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ group_id: gid })
+                });
+            }
+            for (const gid of remGrp) {
+                await apiFetch(`/api/m365/tenants/${tenant.id}/users/${userId}/groups/${gid}`, { method: 'DELETE' });
+            }
+        }
+
+        function openM365Password(user) {
+            m365PasswordUser.value = user;
+            m365PasswordValue.value = m365MakePassword();
+            m365PasswordForceChange.value = true;
+            m365ShowPassword.value = true;
+            showM365PasswordModal.value = true;
+        }
+
+        async function saveM365Password() {
+            const t = m365CurrentTenant.value;
+            const u = m365PasswordUser.value;
+            if (!m365PasswordValue.value) { toast('Passwort erforderlich', 'error'); return; }
+            const res = await apiFetch(`/api/m365/tenants/${t.id}/users/${u.id}/password`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ password: m365PasswordValue.value, force_change: m365PasswordForceChange.value })
+            });
+            if (res.ok) { showM365PasswordModal.value = false; toast('Passwort zurückgesetzt', 'success'); }
+            else { const e = await res.json().catch(() => ({})); toast('Fehler: ' + (e.error || ''), 'error'); }
+        }
+
         // Local user management
         const localMachineId = ref('');
         const localUsers = ref([]);
@@ -2396,6 +2772,16 @@ const app = createApp({
             loadADTemplates, deleteADTemplate, applyADTemplate, saveADTemplateFromForm, adAutoDisplayName, generateADPassword,
             adOUs, adSelectedOU, adShowMoveModal, adMoveUser, adMoveTargetOU, ouTreeFlat, adOuSelectOptions, adUsersForOU,
             loadADOUs, openMoveUser, confirmMoveUser, adAdminTab, openUserAdmin,
+            m365Tenants, m365TenantGroups, m365SelectedTenant, m365Users, m365Skus, m365Groups, m365Domains,
+            m365UsersLoading, m365UsersOutput, m365Testing, m365Saving, m365UserSearch, m365GroupSearch, m365ShowPassword,
+            showM365TenantModal, showM365GroupsModal, showM365UserModal, showM365PasswordModal, m365NewGroupName,
+            m365TenantForm, m365UserMode, m365UserTab, m365EditingUser, m365DuplicateSource, m365UserForm,
+            m365PasswordUser, m365PasswordValue, m365PasswordForceChange, m365UserColumns,
+            m365CurrentTenant, m365TenantsGrouped, m365FilteredUsers, m365GroupsFiltered,
+            loadM365, onM365TenantChange, testM365Tenant, loadM365Users,
+            openM365TenantModal, saveM365Tenant, deleteM365Tenant, openM365Groups, addM365Group, deleteM365Group,
+            openCreateM365User, openEditM365User, openDuplicateM365User, m365AutoFields, m365UpdateUpn,
+            m365GeneratePassword, m365MakePassword, saveM365User, openM365Password, saveM365Password,
             localMachineId, localUsers, localGroups, localUsersLoading, showLocalUserModal,
             localUserFormMode, localUserFormTab, localEditingUser, localUserForm,
             localUserSearch, localGroupSearch, localFilteredUsers, localGroupsFiltered,
