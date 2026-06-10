@@ -2181,9 +2181,9 @@
                     <div class="form-group" v-else>
                         <label>UPN / Anmeldename *</label>
                         <div style="display:flex;gap:0.3rem;align-items:center">
-                            <input v-model="m365UserForm.upn_local" placeholder="m.mustermann" style="flex:1">
+                            <input v-model="m365UserForm.upn_local" placeholder="m.mustermann" style="flex:2;min-width:0">
                             <span style="color:var(--text-muted)">@</span>
-                            <select v-model="m365UserForm.upn_domain" style="background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);border-radius:var(--radius);padding:0.45rem 0.5rem">
+                            <select v-model="m365UserForm.upn_domain" style="flex:1;min-width:0;background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);border-radius:var(--radius);padding:0.45rem 0.5rem">
                                 <option v-for="d in m365Domains" :key="d" :value="d">{{ d }}</option>
                             </select>
                         </div>

@@ -88,7 +88,8 @@ async function graph(tenant, method, path, body) {
         body: body ? JSON.stringify(body) : undefined
     });
     if (res.status === 204) return null;
-    const text = await res.text();
+    const buf = Buffer.from(await res.arrayBuffer());
+    const text = buf.toString('utf8');
     let data = {};
     try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text }; }
     if (!res.ok) {
