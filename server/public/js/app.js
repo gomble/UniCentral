@@ -1673,11 +1673,16 @@ const app = createApp({
             adUserFormTab.value = 'general';
             adEditingUser.value = null;
             adShowPassword.value = false;
+            // Eltern-Container/OU = alles nach dem ersten CN=<Name>-Bestandteil.
+            // Funktioniert sowohl fuer OU=... als auch fuer Container wie CN=Users.
             let ou = '';
             if (user.distinguished_name) {
-                const parts = user.distinguished_name.split(',');
-                const ouStart = parts.findIndex(p => /^(ou|dc)=/i.test(p));
-                if (ouStart > 0) ou = parts.slice(ouStart).join(',');
+                const idx = user.distinguished_name.indexOf(',');
+                if (idx > -1) ou = user.distinguished_name.substring(idx + 1);
+                // Auf die exakte Schreibweise einer geladenen OU normalisieren,
+                // damit das Dropdown den Wert korrekt auswaehlt.
+                const match = adOUs.value.find(o => o.distinguished_name.toLowerCase() === ou.toLowerCase());
+                if (match) ou = match.distinguished_name;
             }
             Object.assign(adUserForm, {
                 sam_account_name: user.sam_account_name || '',
@@ -1975,6 +1980,22 @@ const app = createApp({
             }
             flatten(rootDN, 0);
             return result;
+        });
+
+        // Optionen fuer das OU-Dropdown im Benutzerformular. Enthaelt zusaetzlich
+        // den aktuell gesetzten Wert (z.B. Container CN=Users), falls dieser nicht
+        // in der OU-Liste vorkommt, damit er angezeigt und beibehalten wird.
+        const adOuSelectOptions = computed(() => {
+            const opts = ouTreeFlat.value.map(ou => ({
+                value: ou.distinguished_name,
+                label: '  '.repeat(ou.level) + ou.name
+            }));
+            const cur = adUserForm.ou;
+            if (cur && !opts.some(o => o.value.toLowerCase() === cur.toLowerCase())) {
+                const name = (cur.split(',')[0] || cur).replace(/^(OU|CN)=/i, '');
+                opts.unshift({ value: cur, label: name + ' (aktueller Pfad)' });
+            }
+            return opts;
         });
 
         const adUsersForOU = computed(() => {
@@ -2366,7 +2387,7 @@ const app = createApp({
             loadADDomainControllers, loadADUsers, loadADGroups,
             openCreateADUser, openEditADUser, openDuplicateADUser, saveADUser, confirmDeleteADUser,
             loadADTemplates, deleteADTemplate, applyADTemplate, saveADTemplateFromForm, adAutoDisplayName, generateADPassword,
-            adOUs, adSelectedOU, adShowMoveModal, adMoveUser, adMoveTargetOU, ouTreeFlat, adUsersForOU,
+            adOUs, adSelectedOU, adShowMoveModal, adMoveUser, adMoveTargetOU, ouTreeFlat, adOuSelectOptions, adUsersForOU,
             loadADOUs, openMoveUser, confirmMoveUser, adAdminTab, openUserAdmin,
             localMachineId, localUsers, localGroups, localUsersLoading, showLocalUserModal,
             localUserFormMode, localUserFormTab, localEditingUser, localUserForm,

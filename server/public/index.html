@@ -1908,9 +1908,9 @@
                     </div>
                     <div class="form-group" v-if="adUserFormMode !== 'edit'">
                         <label>Organisationseinheit (OU)</label>
-                        <select v-if="ouTreeFlat.length" v-model="adUserForm.ou" style="width:100%;background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);border-radius:var(--radius);padding:0.45rem 0.7rem;font-size:0.85rem;box-sizing:border-box">
+                        <select v-if="adOuSelectOptions.length" v-model="adUserForm.ou" style="width:100%;background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);border-radius:var(--radius);padding:0.45rem 0.7rem;font-size:0.85rem;box-sizing:border-box">
                             <option value="">Standard-Container (Users)</option>
-                            <option v-for="ou in ouTreeFlat" :key="ou.distinguished_name" :value="ou.distinguished_name">{{ '  '.repeat(ou.level) }}{{ ou.name }}</option>
+                            <option v-for="opt in adOuSelectOptions" :key="opt.value" :value="opt.value">{{ '  '.repeat(0) }}{{ opt.label }}</option>
                         </select>
                         <input v-else v-model="adUserForm.ou" placeholder="OU=Mitarbeiter,DC=domain,DC=local">
                         <div v-if="!ouTreeFlat.length" style="font-size:0.72rem;color:var(--text-muted);margin-top:0.25rem">Keine OUs geladen – auf "Benutzer laden" klicken, um die Liste zu füllen.</div>
