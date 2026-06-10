@@ -1859,14 +1859,18 @@
                             <input v-model="adUserForm.sam_account_name" placeholder="mmustermann" :disabled="adUserFormMode === 'edit'" :style="adUserFormMode === 'edit' ? 'opacity:0.6' : ''">
                         </div>
                     </div>
-                    <div class="form-group" v-if="adUserFormMode !== 'edit'">
-                        <label>Passwort *</label>
+                    <div class="form-group">
+                        <label>{{ adUserFormMode === 'edit' ? 'Neues Passwort' : 'Passwort *' }}</label>
                         <div style="display:flex;gap:0.4rem;align-items:stretch">
-                            <input v-model="adUserForm.password" :type="adShowPassword ? 'text' : 'password'" placeholder="Sicheres Passwort" style="flex:1">
+                            <input v-model="adUserForm.password" :type="adShowPassword ? 'text' : 'password'" :placeholder="adUserFormMode === 'edit' ? 'Leer lassen = unverändert' : 'Sicheres Passwort'" style="flex:1">
                             <button type="button" class="btn btn-ghost btn-sm" @click="adShowPassword = !adShowPassword" :title="adShowPassword ? 'Verbergen' : 'Anzeigen'" style="flex-shrink:0">{{ adShowPassword ? '🙈' : '👁' }}</button>
                             <button type="button" class="btn btn-primary btn-sm" @click="generateADPassword" style="flex-shrink:0;white-space:nowrap">Generieren</button>
                         </div>
-                        <div style="font-size:0.72rem;color:var(--text-muted);margin-top:0.25rem">Erzeugt ein gut lesbares, merkbares Passwort (Wörter + Zahlen + Sonderzeichen).</div>
+                        <div style="font-size:0.72rem;color:var(--text-muted);margin-top:0.25rem">{{ adUserFormMode === 'edit' ? 'Nur ausfüllen, um das Passwort zurückzusetzen. Erzeugt auf Wunsch ein lesbares Passwort.' : 'Erzeugt ein gut lesbares, merkbares Passwort (Wörter + Zahlen + Sonderzeichen).' }}</div>
+                        <label v-if="adUserFormMode === 'edit' && adUserForm.password && !adUserForm.password_never_expires" style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;margin-top:0.5rem;font-size:0.8rem">
+                            <input type="checkbox" v-model="adUserForm.change_password_at_logon">
+                            <span>Benutzer muss Passwort bei nächster Anmeldung ändern</span>
+                        </label>
                     </div>
                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem">
                         <div class="form-group">

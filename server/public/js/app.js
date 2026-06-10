@@ -1728,7 +1728,13 @@ const app = createApp({
                 type = 'ad_update_user';
                 parameters = { ...adUserForm, add_groups: addGroups, remove_groups: removeGroups };
                 delete parameters.groups;
-                delete parameters.password;
+                // Passwort nur uebermitteln, wenn ein neues eingegeben wurde
+                if (!parameters.password) {
+                    delete parameters.password;
+                    delete parameters.change_password_at_logon;
+                } else if (parameters.password_never_expires) {
+                    parameters.change_password_at_logon = false;
+                }
             } else {
                 type = 'ad_create_user';
                 parameters = { ...adUserForm };

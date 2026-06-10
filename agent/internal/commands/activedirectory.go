@@ -230,6 +230,18 @@ func execADUpdateUser(params map[string]interface{}) Result {
 		script += fmt.Sprintf("    Set-ADUser -Identity '%s' -PasswordNeverExpires $%s -ErrorAction Stop\n", escapePS(sam), boolStr(v))
 	}
 
+	if pw, ok := params["password"].(string); ok && pw != "" {
+		script += fmt.Sprintf("    $secPwd = ConvertTo-SecureString '%s' -AsPlainText -Force\n", escapePS(pw))
+		script += fmt.Sprintf("    Set-ADAccountPassword -Identity '%s' -NewPassword $secPwd -Reset -ErrorAction Stop\n", escapePS(sam))
+		if cpal, ok := params["change_password_at_logon"].(bool); ok {
+			pne, _ := params["password_never_expires"].(bool)
+			// ChangePasswordAtLogon ist nur ohne PasswordNeverExpires zulaessig.
+			if cpal && !pne {
+				script += fmt.Sprintf("    Set-ADUser -Identity '%s' -ChangePasswordAtLogon $true -ErrorAction Stop\n", escapePS(sam))
+			}
+		}
+	}
+
 	if addGroups, ok := params["add_groups"].([]interface{}); ok {
 		for _, g := range addGroups {
 			if gn, ok := g.(string); ok && gn != "" {
