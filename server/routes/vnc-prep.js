@@ -26,7 +26,6 @@ router.post('/prepare/:machineId', requireAuth, (req, res) => {
     if (machine.status !== 'online') return res.status(409).json({ error: 'Machine offline' });
 
     let password = machine.vnc_password;
-    const needsSetup = !password;
     if (!password) {
         password = generateVncPassword();
         db.prepare('UPDATE machines SET vnc_password = ?, vnc_port = ? WHERE machine_id = ?').run(password, port, machineId);
@@ -34,12 +33,27 @@ router.post('/prepare/:machineId', requireAuth, (req, res) => {
         db.prepare('UPDATE machines SET vnc_port = ? WHERE machine_id = ?').run(port, machineId);
     }
 
-    if (needsSetup) {
-        const result = sendCommandToAgent(machineId, 'setup_vnc', { password, port });
-        res.json({ ok: true, command_id: result.command_id || null, port });
-    } else {
-        res.json({ ok: true, command_id: null, port });
-    }
+    // Always (re-)run setup. The agent script is idempotent: if TightVNC is
+    // already installed it just reconfigures and restarts the service. This also
+    // ensures a previously failed install (e.g. msiexec 1618) is retried the
+    // next time the user opens the remote session, instead of being skipped
+    // because a password was already stored.
+    const result = sendCommandToAgent(machineId, 'setup_vnc', { password, port });
+    res.json({ ok: true, command_id: result.command_id || null, port });
+});
+
+// Latest setup_vnc result for a machine, so the remote viewer can surface a real
+// install failure instead of spinning on "installing" forever.
+router.get('/setup-status/:machineId', requireAuth, (req, res) => {
+    const { machineId } = req.params;
+    const c = db.prepare(`
+        SELECT status, result, completed_at FROM command_log
+        WHERE machine_id = ? AND command_type = 'setup_vnc'
+        ORDER BY created_at DESC LIMIT 1
+    `).get(machineId);
+    if (!c) return res.json({ status: 'none', failed: false });
+    const failed = c.status === 'failed' || (c.result && /ERROR/i.test(c.result));
+    res.json({ status: c.status, failed: !!failed, result: c.result || '' });
 });
 
 // Return VNC credentials for a machine (authenticated users only).

@@ -136,8 +136,20 @@ if (-not (Test-Path $exe)) {
 
     Log "Installing TightVNC silently..."
     $msiArgs = '/i "{0}" /quiet /norestart ADDLOCAL="Server" SERVER_REGISTER_AS_SERVICE=1 SERVER_ADD_FIREWALL_EXCEPTION=1 SET_USEVNCAUTHENTICATION=1 VALUE_OF_USEVNCAUTHENTICATION=1 SET_PASSWORD=1 VALUE_OF_PASSWORD="{1}" SET_USECONTROLAUTHENTICATION=1 VALUE_OF_USECONTROLAUTHENTICATION=0 SET_ACCEPTHTTPCONNECTIONS=1 VALUE_OF_ACCEPTHTTPCONNECTIONS=0' -f $msi, $pass
-    $proc = Start-Process 'msiexec.exe' -ArgumentList $msiArgs -Wait -PassThru
-    Log ("msiexec exit code: " + $proc.ExitCode)
+    # Exit code 1618 = ERROR_INSTALL_ALREADY_RUNNING: another MSI install is in
+    # progress (common on busy Hyper-V hosts during Windows Update). Wait for the
+    # Windows Installer to free up and retry a few times instead of failing.
+    $exitCode = -1
+    for ($attempt = 1; $attempt -le 6; $attempt++) {
+        $proc = Start-Process 'msiexec.exe' -ArgumentList $msiArgs -Wait -PassThru
+        $exitCode = $proc.ExitCode
+        Log ("msiexec exit code: " + $exitCode + " (Versuch " + $attempt + " von 6)")
+        if ($exitCode -ne 1618) { break }
+        Log "Windows Installer ist belegt (1618) - warte 20s und versuche erneut..."
+        Start-Sleep -Seconds 20
+    }
+    if ($exitCode -eq 1618) { Log "ERROR: Windows Installer dauerhaft belegt (1618) - Installation nicht moeglich"; exit 1 }
+    if ($exitCode -ne 0 -and $exitCode -ne 3010) { Log ("WARNUNG: msiexec meldet Code " + $exitCode) }
     Start-Sleep -Seconds 3
     $exe = 'C:\Program Files\TightVNC\tvnserver.exe'
     if (-not (Test-Path $exe) -and (Test-Path 'C:\Program Files (x86)\TightVNC\tvnserver.exe')) {
