@@ -7,10 +7,26 @@ const m365 = require('../services/m365');
 
 router.use(requireAuth);
 
-// Wrap an async Graph operation so errors return a clean JSON message.
+// Send JSON with non-ASCII characters escaped to \uXXXX for safe transport.
+function escapeNonAscii(str) {
+    return str.replace(/[^\x20-\x7E]/g, ch => {
+        const cp = ch.codePointAt(0);
+        if (cp > 0xFFFF) {
+            const hi = Math.floor((cp - 0x10000) / 0x400) + 0xD800;
+            const lo = ((cp - 0x10000) % 0x400) + 0xDC00;
+            return '\\u' + hi.toString(16).padStart(4, '0') + '\\u' + lo.toString(16).padStart(4, '0');
+        }
+        return '\\u' + cp.toString(16).padStart(4, '0');
+    });
+}
+function sendJson(res, obj) {
+    const json = escapeNonAscii(JSON.stringify(obj));
+    res.set('Content-Type', 'application/json; charset=utf-8');
+    res.send(json);
+}
 function handle(res, promise) {
     promise
-        .then(data => res.json(data === undefined ? { ok: true } : data))
+        .then(data => sendJson(res, data === undefined ? { ok: true } : data))
         .catch(err => res.status(err.status && err.status < 500 ? 400 : 502).json({ error: err.message }));
 }
 

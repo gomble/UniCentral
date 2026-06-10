@@ -83,15 +83,14 @@ async function graph(tenant, method, path, body) {
         headers: {
             Authorization: `Bearer ${token}`,
             'Content-Type': 'application/json',
+            'Accept-Charset': 'utf-8',
             'ConsistencyLevel': 'eventual'
         },
         body: body ? JSON.stringify(body) : undefined
     });
     if (res.status === 204) return null;
-    const buf = Buffer.from(await res.arrayBuffer());
-    const text = buf.toString('utf8');
     let data = {};
-    try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text }; }
+    try { data = await res.json(); } catch { data = {}; }
     if (!res.ok) {
         const msg = (data.error && (data.error.message || data.error.code)) || `Graph-Fehler ${res.status}`;
         const err = new Error(msg);
