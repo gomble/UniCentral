@@ -114,7 +114,17 @@ async function graphAll(tenant, path) {
 }
 
 async function testConnection(tenant) {
-    const org = await graph(tenant, 'GET', '/organization?$select=displayName,verifiedDomains');
+    let org;
+    try {
+        org = await graph(tenant, 'GET', '/organization?$select=displayName,verifiedDomains');
+    } catch (err) {
+        // A valid token but a 403 here means the app has no consented application
+        // permissions. Point the admin at the actual fix.
+        if (err.status === 403 || /privilege/i.test(err.message)) {
+            throw new Error('Token gültig, aber fehlende Berechtigungen. Bitte in der App-Registrierung die Microsoft-Graph-Anwendungsberechtigungen (Organization.Read.All, User.ReadWrite.All, Group.ReadWrite.All, Directory.Read.All) hinzufügen und "Administratorzustimmung erteilen".');
+        }
+        throw err;
+    }
     const o = (org.value && org.value[0]) || {};
     const primary = (o.verifiedDomains || []).find(d => d.isDefault) || (o.verifiedDomains || [])[0];
     return { displayName: o.displayName || '', defaultDomain: primary ? primary.name : '' };
