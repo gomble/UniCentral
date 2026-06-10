@@ -1324,7 +1324,6 @@
                     <div class="page-header">
                         <h1>Microsoft 365</h1>
                         <div style="display:flex;gap:0.5rem">
-                            <button class="btn btn-ghost btn-sm" @click="openM365Groups">Mandantengruppen</button>
                             <button class="btn btn-primary btn-sm" @click="openM365TenantModal()">+ Mandant verknüpfen</button>
                         </div>
                     </div>
@@ -2103,11 +2102,12 @@
                     <input v-model="m365TenantForm.name" placeholder="z.B. Kunde Mustermann GmbH">
                 </div>
                 <div class="form-group">
-                    <label>Mandantengruppe</label>
+                    <label>Gruppe</label>
                     <select v-model="m365TenantForm.group_id" style="width:100%;background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);border-radius:var(--radius);padding:0.45rem 0.7rem">
                         <option :value="null">— Keine —</option>
-                        <option v-for="g in m365TenantGroups" :key="g.id" :value="g.id">{{ g.name }}</option>
+                        <option v-for="g in groups" :key="g.id" :value="g.id">{{ g.name }}</option>
                     </select>
+                    <div style="font-size:0.72rem;color:var(--text-muted);margin-top:0.25rem">Gruppen werden zentral verwaltet (gleiche wie bei den Maschinen).</div>
                 </div>
                 <div class="form-group">
                     <label>Tenant-ID (Verzeichnis-ID) *</label>
@@ -2125,29 +2125,6 @@
                     <button v-if="m365TenantForm.id" class="btn btn-danger btn-sm" style="margin-right:auto" @click="deleteM365Tenant(m365TenantForm)">Löschen</button>
                     <button class="btn btn-ghost" @click="showM365TenantModal = false">Abbrechen</button>
                     <button class="btn btn-primary" @click="saveM365Tenant">{{ m365TenantForm.id ? 'Speichern' : 'Verknüpfen & testen' }}</button>
-                </div>
-            </div>
-        </div>
-
-        <!-- M365 Tenant Groups Modal -->
-        <div class="modal-overlay" v-if="showM365GroupsModal" @click.self="showM365GroupsModal = false">
-            <div class="modal" style="max-width:520px">
-                <h2>Mandantengruppen</h2>
-                <p style="font-size:0.82rem;color:var(--text-muted);margin-bottom:1rem">Organisiere verknüpfte Mandanten in Gruppen (z.B. nach Standort oder Kundengruppe).</p>
-                <div style="display:flex;gap:0.5rem;margin-bottom:1rem">
-                    <input v-model="m365NewGroupName" placeholder="Neue Gruppe..." style="flex:1;background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);border-radius:var(--radius);padding:0.45rem 0.7rem">
-                    <button class="btn btn-primary btn-sm" @click="addM365Group">Hinzufügen</button>
-                </div>
-                <div v-for="g in m365TenantGroups" :key="g.id" style="display:flex;justify-content:space-between;align-items:center;border:1px solid var(--border);border-radius:var(--radius);padding:0.5rem 0.8rem;margin-bottom:0.4rem">
-                    <div>
-                        <strong>{{ g.name }}</strong>
-                        <span style="font-size:0.78rem;color:var(--text-muted);margin-left:0.5rem">{{ m365Tenants.filter(t => t.group_id === g.id).length }} Mandant(en)</span>
-                    </div>
-                    <button class="btn btn-danger btn-sm" @click="deleteM365Group(g.id)">✕</button>
-                </div>
-                <p v-if="!m365TenantGroups.length" style="color:var(--text-muted)">Noch keine Gruppen.</p>
-                <div class="modal-actions">
-                    <button class="btn btn-ghost" @click="showM365GroupsModal = false">Schliessen</button>
                 </div>
             </div>
         </div>

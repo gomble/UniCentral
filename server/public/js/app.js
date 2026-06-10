@@ -2059,7 +2059,6 @@ const app = createApp({
 
         // ===== Microsoft 365 =====
         const m365Tenants = ref([]);
-        const m365TenantGroups = ref([]);
         const m365SelectedTenant = ref(null);
         const m365Users = ref([]);
         const m365Skus = ref([]);
@@ -2074,10 +2073,8 @@ const app = createApp({
         const m365ShowPassword = ref(false);
 
         const showM365TenantModal = ref(false);
-        const showM365GroupsModal = ref(false);
         const showM365UserModal = ref(false);
         const showM365PasswordModal = ref(false);
-        const m365NewGroupName = ref('');
 
         const m365TenantForm = reactive({ id: null, name: '', tenant_id: '', client_id: '', client_secret: '', group_id: null });
         const m365UserMode = ref('create');
@@ -2105,13 +2102,13 @@ const app = createApp({
         const m365CurrentTenant = computed(() => m365Tenants.value.find(t => t.id === m365SelectedTenant.value) || null);
 
         const m365TenantsGrouped = computed(() => {
-            const groups = m365TenantGroups.value.map(g => ({
+            const grouped = groups.value.map(g => ({
                 id: g.id, name: g.name,
                 tenants: m365Tenants.value.filter(t => t.group_id === g.id)
             })).filter(g => g.tenants.length);
             const ungrouped = m365Tenants.value.filter(t => !t.group_id);
-            if (ungrouped.length) groups.push({ id: 0, name: 'Ohne Gruppe', tenants: ungrouped });
-            return groups;
+            if (ungrouped.length) grouped.push({ id: 0, name: 'Ohne Gruppe', tenants: ungrouped });
+            return grouped;
         });
 
         const m365FilteredUsers = computed(() => {
@@ -2139,11 +2136,9 @@ const app = createApp({
         });
 
         async function loadM365() {
-            const [tg, tn] = await Promise.all([
-                apiFetch('/api/m365/tenant-groups'),
-                apiFetch('/api/m365/tenants')
-            ]);
-            if (tg.ok) m365TenantGroups.value = await tg.json();
+            const tasks = [apiFetch('/api/m365/tenants')];
+            if (!groups.value.length) tasks.push(loadGroups());
+            const [tn] = await Promise.all(tasks);
             if (tn.ok) m365Tenants.value = await tn.json();
         }
 
@@ -2238,21 +2233,6 @@ const app = createApp({
             if (m365SelectedTenant.value === tenant.id) m365SelectedTenant.value = null;
             await loadM365();
             toast('Mandant entfernt', 'success');
-        }
-
-        function openM365Groups() { showM365GroupsModal.value = true; }
-
-        async function addM365Group() {
-            if (!m365NewGroupName.value) return;
-            const res = await apiFetch('/api/m365/tenant-groups', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: m365NewGroupName.value }) });
-            if (res.ok) { m365NewGroupName.value = ''; await loadM365(); }
-            else { const e = await res.json().catch(() => ({})); toast(e.error || 'Fehler', 'error'); }
-        }
-
-        async function deleteM365Group(id) {
-            if (!await confirmDialog('Mandantengruppe löschen? Die Mandanten bleiben erhalten.')) return;
-            await apiFetch(`/api/m365/tenant-groups/${id}`, { method: 'DELETE' });
-            await loadM365();
         }
 
         function m365MakePassword() {
@@ -2772,14 +2752,14 @@ const app = createApp({
             loadADTemplates, deleteADTemplate, applyADTemplate, saveADTemplateFromForm, adAutoDisplayName, generateADPassword,
             adOUs, adSelectedOU, adShowMoveModal, adMoveUser, adMoveTargetOU, ouTreeFlat, adOuSelectOptions, adUsersForOU,
             loadADOUs, openMoveUser, confirmMoveUser, adAdminTab, openUserAdmin,
-            m365Tenants, m365TenantGroups, m365SelectedTenant, m365Users, m365Skus, m365Groups, m365Domains,
+            m365Tenants, m365SelectedTenant, m365Users, m365Skus, m365Groups, m365Domains,
             m365UsersLoading, m365UsersOutput, m365Testing, m365Saving, m365UserSearch, m365GroupSearch, m365ShowPassword,
-            showM365TenantModal, showM365GroupsModal, showM365UserModal, showM365PasswordModal, m365NewGroupName,
+            showM365TenantModal, showM365UserModal, showM365PasswordModal,
             m365TenantForm, m365UserMode, m365UserTab, m365EditingUser, m365DuplicateSource, m365UserForm,
             m365PasswordUser, m365PasswordValue, m365PasswordForceChange, m365UserColumns,
             m365CurrentTenant, m365TenantsGrouped, m365FilteredUsers, m365GroupsFiltered,
             loadM365, onM365TenantChange, testM365Tenant, loadM365Users,
-            openM365TenantModal, saveM365Tenant, deleteM365Tenant, openM365Groups, addM365Group, deleteM365Group,
+            openM365TenantModal, saveM365Tenant, deleteM365Tenant,
             openCreateM365User, openEditM365User, openDuplicateM365User, m365AutoFields, m365UpdateUpn,
             m365GeneratePassword, m365MakePassword, saveM365User, openM365Password, saveM365Password,
             localMachineId, localUsers, localGroups, localUsersLoading, showLocalUserModal,

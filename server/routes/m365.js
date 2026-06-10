@@ -22,36 +22,6 @@ function publicTenant(t) {
     };
 }
 
-// ---- Tenant groups (Mandantengruppen) ----
-router.get('/tenant-groups', (req, res) => {
-    res.json(db.prepare('SELECT * FROM m365_tenant_groups ORDER BY name ASC').all());
-});
-
-router.post('/tenant-groups', requireAdmin, (req, res) => {
-    const { name, description } = req.body;
-    if (!name) return res.status(400).json({ error: 'Name erforderlich' });
-    try {
-        const r = db.prepare('INSERT INTO m365_tenant_groups (name, description) VALUES (?, ?)').run(name, description || '');
-        res.status(201).json(db.prepare('SELECT * FROM m365_tenant_groups WHERE id = ?').get(r.lastInsertRowid));
-    } catch (e) {
-        res.status(400).json({ error: 'Gruppe existiert bereits' });
-    }
-});
-
-router.put('/tenant-groups/:id', requireAdmin, (req, res) => {
-    const { name, description } = req.body;
-    const g = db.prepare('SELECT * FROM m365_tenant_groups WHERE id = ?').get(req.params.id);
-    if (!g) return res.status(404).json({ error: 'Gruppe nicht gefunden' });
-    db.prepare('UPDATE m365_tenant_groups SET name = ?, description = ? WHERE id = ?')
-        .run(name !== undefined ? name : g.name, description !== undefined ? description : g.description, req.params.id);
-    res.json(db.prepare('SELECT * FROM m365_tenant_groups WHERE id = ?').get(req.params.id));
-});
-
-router.delete('/tenant-groups/:id', requireAdmin, (req, res) => {
-    db.prepare('DELETE FROM m365_tenant_groups WHERE id = ?').run(req.params.id);
-    res.json({ success: true });
-});
-
 // ---- Tenants ----
 router.get('/tenants', (req, res) => {
     const tenants = db.prepare('SELECT * FROM m365_tenants ORDER BY name ASC').all();
