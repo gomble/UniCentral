@@ -59,7 +59,7 @@ router.get('/logs/:machineId', (req, res) => {
     const logs = db.prepare(`
         SELECT id, command_type, status, result, created_at, completed_at
         FROM command_log
-        WHERE machine_id = ? AND command_type IN ('trigger_updates', 'trigger_updates_reboot')
+        WHERE machine_id = ? AND command_type IN ('trigger_updates', 'trigger_updates_reboot', 'install_defender_updates')
         ORDER BY created_at DESC LIMIT 20
     `).all(machine.machine_id);
 

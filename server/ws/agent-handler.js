@@ -9,6 +9,48 @@ const connectedAgents = new Map();
 const vncSessions = new Map(); // sessionId → { browserWs, agentWs, machineId }
 const shellSessions = new Map(); // sessionId → { browserWs, agentWs, machineId }
 
+// Tracks the last time Security Intelligence updates were auto-triggered per
+// machine, so a frequent telemetry cycle doesn't fire the command repeatedly.
+const defenderAutoCooldown = new Map();
+const DEFENDER_AUTO_COOLDOWN_MS = 30 * 60 * 1000;
+
+// A pending update title identifies a Windows Defender "Security Intelligence"
+// (virus definition) update. These never require a reboot. Match English and
+// German wording plus the canonical KB.
+function isSecurityIntelligenceUpdate(title) {
+    const t = (title || '').toLowerCase();
+    return t.includes('security intelligence') ||
+           t.includes('sicherheitsintelligenz') ||
+           t.includes('kb2267602') ||
+           (t.includes('defender') && t.includes('antivirus'));
+}
+
+// Auto-installs Defender Security Intelligence updates the moment they show up
+// in telemetry, since they are reboot-free. Throttled per machine and skipped
+// while an install is already in flight.
+function maybeAutoInstallDefenderUpdates(machineId, payload) {
+    if (config.autoInstallDefenderUpdates === false) return;
+    const pending = payload && payload.updates && Array.isArray(payload.updates.pending)
+        ? payload.updates.pending : [];
+    if (!pending.some(isSecurityIntelligenceUpdate)) return;
+
+    if (Date.now() - (defenderAutoCooldown.get(machineId) || 0) < DEFENDER_AUTO_COOLDOWN_MS) return;
+
+    const inFlight = db.prepare(`
+        SELECT 1 FROM command_log
+        WHERE machine_id = ? AND command_type = 'install_defender_updates'
+          AND status IN ('sent', 'running')
+        LIMIT 1
+    `).get(machineId);
+    if (inFlight) return;
+
+    const r = sendCommandToAgent(machineId, 'install_defender_updates', {});
+    if (r && r.success) {
+        defenderAutoCooldown.set(machineId, Date.now());
+        console.log(`[Defender] Auto-installing Security Intelligence updates on ${machineId}`);
+    }
+}
+
 function verifyHmac(machineId, timestamp, signature) {
     const machine = db.prepare('SELECT machine_secret FROM machines WHERE machine_id = ?').get(machineId);
     if (!machine || !machine.machine_secret) return false;
@@ -479,6 +521,8 @@ function handleTelemetry(machineId, payload) {
         }
     }
 
+    maybeAutoInstallDefenderUpdates(machineId, payload);
+
     broadcastToDashboards({ type: 'telemetry', machineId, data: payload });
 }
 
@@ -615,6 +659,27 @@ function handleCommandResult(machineId, payload) {
             }
         } catch (err) {
             console.error('[WS] Error clearing update count:', err.message);
+        }
+    }
+
+    // After a Defender Security Intelligence install, drop only those entries
+    // from the stored pending list so the Updates tab reflects it right away.
+    if (status === 'completed' && commandType === 'install_defender_updates') {
+        try {
+            const latestTel = db.prepare(
+                'SELECT id, data_json FROM machine_telemetry WHERE machine_id = ? ORDER BY collected_at DESC LIMIT 1'
+            ).get(machineId);
+            if (latestTel) {
+                const data = JSON.parse(latestTel.data_json || '{}');
+                if (data.updates && Array.isArray(data.updates.pending)) {
+                    data.updates.pending = data.updates.pending.filter(t => !isSecurityIntelligenceUpdate(t));
+                    data.updates.available = data.updates.pending.length;
+                    db.prepare('UPDATE machine_telemetry SET data_json = ? WHERE id = ?')
+                        .run(JSON.stringify(data), latestTel.id);
+                }
+            }
+        } catch (err) {
+            console.error('[WS] Error pruning defender updates:', err.message);
         }
     }
 

@@ -318,7 +318,8 @@ const app = createApp({
             smtpTls: true,
             heartbeatInterval: 30,
             telemetryInterval: 300,
-            offlineThreshold: 90
+            offlineThreshold: 90,
+            autoInstallDefenderUpdates: true
         });
 
         const toasts = ref([]);
@@ -492,7 +493,7 @@ const app = createApp({
             };
 
             // On terminal status: refresh the updates machine list row + logs if open
-            const isUpdateCmd = ['trigger_updates', 'trigger_updates_reboot'].includes(p.command_type);
+            const isUpdateCmd = ['trigger_updates', 'trigger_updates_reboot', 'install_defender_updates'].includes(p.command_type);
             if (isUpdateCmd && (p.status === 'completed' || p.status === 'failed')) {
                 loadUpdatesMachines();
                 if (updatesLogMachine.value && updatesLogMachine.value.machine_id === data.machineId) {

@@ -44,6 +44,8 @@ func Execute(cmdType string, params map[string]interface{}, onProgress ProgressF
 		return runUpdates(false, onProgress)
 	case "trigger_updates_reboot":
 		return runUpdates(true, onProgress)
+	case "install_defender_updates":
+		return runDefenderUpdates(onProgress)
 	case "schedule_updates":
 		return execScheduleUpdates(params)
 	case "deploy_neighbor":
@@ -371,6 +373,64 @@ func runUpdates(reboot bool, onProgress ProgressFunc) Result {
 
 	if ctx.Err() == context.DeadlineExceeded {
 		return Result{Status: "failed", Output: out + fmt.Sprintf("\n[Timeout nach %s - Vorgang abgebrochen]", updateTimeout)}
+	}
+	if err != nil {
+		return Result{Status: "failed", Output: out + "\n" + err.Error()}
+	}
+	return Result{Status: "completed", Output: out}
+}
+
+// runDefenderUpdates installs Windows Defender "Security Intelligence" updates
+// (virus/spyware definition updates). These never require a reboot, so they can
+// be applied immediately without scheduling. Uses Update-MpSignature, which
+// respects the machine's configured update source order (WSUS, Microsoft Update,
+// MMPC) and is far lighter than a full Windows Update run.
+func runDefenderUpdates(onProgress ProgressFunc) Result {
+	if runtime.GOOS != "windows" {
+		return Result{Status: "failed", Output: "Security Intelligence-Updates sind nur unter Windows verfuegbar"}
+	}
+
+	var mu sync.Mutex
+	var acc strings.Builder
+	onLine := func(line string) {
+		mu.Lock()
+		acc.WriteString(line)
+		acc.WriteByte('\n')
+		out := acc.String()
+		mu.Unlock()
+		if onProgress != nil {
+			onProgress(out)
+		}
+	}
+
+	script := `$ErrorActionPreference = 'Stop'
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$ProgressPreference = 'SilentlyContinue'
+function Log($m) { Write-Output ("[{0}] {1}" -f (Get-Date -Format 'HH:mm:ss'), $m) }
+try {
+    $before = (Get-MpComputerStatus -ErrorAction Stop).AntivirusSignatureVersion
+    Log ("Aktuelle Signaturversion: " + $before)
+    Log "Aktualisiere Security Intelligence (Defender-Definitionen)..."
+    Update-MpSignature -ErrorAction Stop
+    $after = (Get-MpComputerStatus -ErrorAction Stop).AntivirusSignatureVersion
+    Log ("Neue Signaturversion: " + $after)
+    if ($before -eq $after) { Log "Bereits aktuell." } else { Log "Security Intelligence aktualisiert." }
+} catch {
+    Log ("FEHLER: " + $_.Exception.Message)
+    exit 1
+}`
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
+	defer cancel()
+
+	out, err := runStreaming(ctx, updateLogPath(), "powershell",
+		[]string{"-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script}, onLine)
+	if onProgress != nil {
+		onProgress(out)
+	}
+
+	if ctx.Err() == context.DeadlineExceeded {
+		return Result{Status: "failed", Output: out + "\n[Timeout - Vorgang abgebrochen]"}
 	}
 	if err != nil {
 		return Result{Status: "failed", Output: out + "\n" + err.Error()}

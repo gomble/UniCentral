@@ -13,6 +13,7 @@ const defaults = {
     heartbeatInterval: 30,
     telemetryInterval: 300,
     offlineThreshold: 90,
+    autoInstallDefenderUpdates: true,
     smtpHost: '',
     smtpPort: 587,
     smtpUser: '',

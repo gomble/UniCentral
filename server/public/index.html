@@ -1307,6 +1307,10 @@
                                 <input v-model.number="settingsForm.offlineThreshold" type="number">
                             </div>
                         </div>
+                        <label style="display:flex;align-items:center;gap:0.7rem;cursor:pointer;margin:0.5rem 0 1rem">
+                            <input type="checkbox" v-model="settingsForm.autoInstallDefenderUpdates">
+                            <div><div>Security Intelligence-Updates automatisch installieren</div><div style="font-size:0.75rem;color:var(--text-muted)">Defender-Definitionsupdates werden sofort eingespielt (kein Neustart erforderlich)</div></div>
+                        </label>
                         <button class="btn btn-primary" @click="saveSettings">Speichern</button>
                     </div>
                 </div>

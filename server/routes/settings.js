@@ -17,7 +17,8 @@ router.get('/', (req, res) => {
         smtpTls: config.smtpTls,
         heartbeatInterval: config.heartbeatInterval,
         telemetryInterval: config.telemetryInterval,
-        offlineThreshold: config.offlineThreshold
+        offlineThreshold: config.offlineThreshold,
+        autoInstallDefenderUpdates: config.autoInstallDefenderUpdates !== false
     });
 });
 
@@ -30,7 +31,7 @@ router.post('/regenerate-enrollment-key', (req, res) => {
 
 router.post('/', (req, res) => {
     const allowed = ['enrollmentKey', 'smtpHost', 'smtpPort', 'smtpUser', 'smtpPassword', 'smtpFrom', 'smtpTls',
-                     'heartbeatInterval', 'telemetryInterval', 'offlineThreshold'];
+                     'heartbeatInterval', 'telemetryInterval', 'offlineThreshold', 'autoInstallDefenderUpdates'];
 
     for (const key of allowed) {
         if (req.body[key] !== undefined) {
