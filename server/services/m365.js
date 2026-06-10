@@ -272,10 +272,12 @@ const PROFILE_MAP = {
 function profileBody(payload, forUpdate) {
     const body = {};
     for (const [k, gk] of Object.entries(PROFILE_MAP)) {
-        if (forUpdate) { if (payload[k] !== undefined) body[gk] = payload[k]; }
-        else if (payload[k]) body[gk] = payload[k];
+        if (forUpdate) {
+            if (payload[k] !== undefined) body[gk] = payload[k] || null;
+        } else if (payload[k]) {
+            body[gk] = payload[k];
+        }
     }
-    // businessPhones is an array in Graph.
     if (payload.business_phone !== undefined) {
         body.businessPhones = payload.business_phone ? [payload.business_phone] : [];
     } else if (!forUpdate && payload.business_phone) {
