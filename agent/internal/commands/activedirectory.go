@@ -114,6 +114,11 @@ func execADCreateUser(params map[string]interface{}) Result {
 	}
 	pne, _ := params["password_never_expires"].(bool)
 	cpal, _ := params["change_password_at_logon"].(bool)
+	// AD verbietet die Kombination PasswordNeverExpires=true und
+	// ChangePasswordAtLogon=true. PasswordNeverExpires hat Vorrang.
+	if pne {
+		cpal = false
+	}
 
 	script := fmt.Sprintf(`
 try {

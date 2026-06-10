@@ -1727,6 +1727,8 @@ const app = createApp({
             } else {
                 type = 'ad_create_user';
                 parameters = { ...adUserForm };
+                // AD verbietet ChangePasswordAtLogon zusammen mit PasswordNeverExpires
+                if (parameters.password_never_expires) parameters.change_password_at_logon = false;
             }
 
             const res = await apiFetch(`/api/ad/${adSelectedDC.value}/command`, {

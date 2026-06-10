@@ -1926,9 +1926,9 @@
                         <input type="checkbox" v-model="adUserForm.password_never_expires">
                         <div><div>Passwort läuft nie ab</div><div style="font-size:0.75rem;color:var(--text-muted)">Passwort-Ablaufrichtlinie deaktivieren</div></div>
                     </label>
-                    <label v-if="adUserFormMode !== 'edit'" style="display:flex;align-items:center;gap:0.7rem;cursor:pointer">
-                        <input type="checkbox" v-model="adUserForm.change_password_at_logon">
-                        <div><div>Passwort bei Anmeldung ändern</div><div style="font-size:0.75rem;color:var(--text-muted)">Benutzer muss Passwort beim ersten Login setzen</div></div>
+                    <label v-if="adUserFormMode !== 'edit'" style="display:flex;align-items:center;gap:0.7rem;cursor:pointer" :style="adUserForm.password_never_expires ? 'opacity:0.5;cursor:not-allowed' : ''">
+                        <input type="checkbox" v-model="adUserForm.change_password_at_logon" :disabled="adUserForm.password_never_expires">
+                        <div><div>Passwort bei Anmeldung ändern</div><div style="font-size:0.75rem;color:var(--text-muted)">{{ adUserForm.password_never_expires ? 'Nicht möglich, wenn Passwort nie abläuft' : 'Benutzer muss Passwort beim ersten Login setzen' }}</div></div>
                     </label>
                     <label style="display:flex;align-items:center;gap:0.7rem;cursor:pointer">
                         <input type="checkbox" v-model="adUserForm.cannot_change_password">
