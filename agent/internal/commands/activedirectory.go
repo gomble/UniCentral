@@ -29,7 +29,7 @@ func execADListUsers(_ map[string]interface{}) Result {
 	script := `
 try {
     Import-Module ActiveDirectory -ErrorAction Stop
-    $users = Get-ADUser -Filter * -Properties GivenName,Surname,DisplayName,EmailAddress,Department,Title,Company,Description,OfficePhone,MobilePhone,Enabled,PasswordNeverExpires,CannotChangePassword,MemberOf -ErrorAction Stop
+    $users = Get-ADUser -Filter * -Properties GivenName,Surname,DisplayName,UserPrincipalName,EmailAddress,Department,Title,Company,Description,OfficePhone,MobilePhone,Enabled,PasswordNeverExpires,CannotChangePassword,MemberOf -ErrorAction Stop
     $arr = @($users | ForEach-Object {
         $groups = @($_.MemberOf | ForEach-Object { try { ($_ -split ',')[0].Substring(3) } catch { '' } } | Where-Object { $_ -ne '' })
         [PSCustomObject]@{
@@ -37,6 +37,7 @@ try {
             given_name             = [string]$_.GivenName
             surname                = [string]$_.Surname
             display_name           = [string]$_.DisplayName
+            upn                    = [string]$_.UserPrincipalName
             email                  = [string]$_.EmailAddress
             department             = [string]$_.Department
             title                  = [string]$_.Title
@@ -191,6 +192,7 @@ func execADUpdateUser(params map[string]interface{}) Result {
 		{"title", "Title", "title"},
 		{"company", "Company", "company"},
 		{"description", "Description", "description"},
+		{"upn", "UserPrincipalName", "userPrincipalName"},
 		{"email", "EmailAddress", "mail"},
 		{"office_phone", "OfficePhone", "telephoneNumber"},
 		{"mobile_phone", "MobilePhone", "mobile"},

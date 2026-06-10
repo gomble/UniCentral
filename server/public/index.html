@@ -1333,8 +1333,8 @@
                                     <option value="">-- DC auswählen --</option>
                                     <option v-for="dc in adDomainControllers" :key="dc.machine_id" :value="dc.machine_id">{{ dc.display_name || dc.hostname }}{{ dc.domain_name ? ' (' + dc.domain_name + ')' : '' }}{{ dc.status !== 'online' ? ' [Offline]' : '' }}</option>
                                 </select>
-                                <button class="btn btn-primary btn-sm" @click="loadADUsers(); loadADOUs()" :disabled="!adSelectedDC || adUsersLoading">{{ adUsersLoading ? 'Laden...' : 'Benutzer laden' }}</button>
-                                <button class="btn btn-ghost btn-sm" @click="loadADGroups" :disabled="!adSelectedDC">Gruppen laden</button>
+                                <button class="btn btn-primary btn-sm" @click="loadADUsers(); loadADOUs(); loadADGroups()" :disabled="!adSelectedDC || adUsersLoading">{{ adUsersLoading ? 'Laden...' : 'Benutzer laden' }}</button>
+                                <button class="btn btn-ghost btn-sm" @click="loadADGroups" :disabled="!adSelectedDC">Gruppen neu laden</button>
                                 <span v-if="adGroups.length" style="font-size:0.8rem;color:var(--text-muted)">{{ adGroups.length }} Gruppen</span>
                             </div>
                             <p v-else style="color:var(--text-muted)">Kein DC erkannt. Sobald ein Agent auf einem DC läuft und Telemetrie sendet, erscheint er hier.</p>
@@ -1820,6 +1820,10 @@
             <div class="modal" style="max-width:720px">
                 <h2>{{ adUserFormMode === 'edit' ? 'Benutzer bearbeiten' : adUserFormMode === 'duplicate' ? 'Benutzer duplizieren' : 'Benutzer erstellen' }}</h2>
 
+                <div v-if="adUserFormMode === 'duplicate' && adDuplicateSource" style="margin-bottom:1rem;padding:0.6rem 0.8rem;background:rgba(59,130,246,0.08);border:1px solid rgba(59,130,246,0.25);border-radius:var(--radius);font-size:0.8rem;color:var(--text-muted)">
+                    Vorlage übernommen von <strong style="color:var(--text-primary)">{{ adDuplicateSource.display_name || adDuplicateSource.sam_account_name }}</strong>. Felder sind als Beispiel vorausgefüllt – Benutzername, UPN, E-Mail und Passwort für den neuen Benutzer anpassen.
+                </div>
+
                 <div v-if="adUserFormMode !== 'edit' && adTemplates.length" style="display:flex;align-items:center;gap:0.5rem;margin-bottom:1rem;padding-bottom:0.8rem;border-bottom:1px solid var(--border)">
                     <span style="font-size:0.82rem;color:var(--text-muted)">Vorlage:</span>
                     <select @change="applyADTemplate($event.target.value)" style="background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);border-radius:var(--radius);padding:0.3rem 0.6rem;font-size:0.82rem">
@@ -1857,7 +1861,12 @@
                     </div>
                     <div class="form-group" v-if="adUserFormMode !== 'edit'">
                         <label>Passwort *</label>
-                        <input v-model="adUserForm.password" type="password" placeholder="Sicheres Passwort">
+                        <div style="display:flex;gap:0.4rem;align-items:stretch">
+                            <input v-model="adUserForm.password" :type="adShowPassword ? 'text' : 'password'" placeholder="Sicheres Passwort" style="flex:1">
+                            <button type="button" class="btn btn-ghost btn-sm" @click="adShowPassword = !adShowPassword" :title="adShowPassword ? 'Verbergen' : 'Anzeigen'" style="flex-shrink:0">{{ adShowPassword ? '🙈' : '👁' }}</button>
+                            <button type="button" class="btn btn-primary btn-sm" @click="generateADPassword" style="flex-shrink:0;white-space:nowrap">Generieren</button>
+                        </div>
+                        <div style="font-size:0.72rem;color:var(--text-muted);margin-top:0.25rem">Erzeugt ein gut lesbares, merkbares Passwort (Wörter + Zahlen + Sonderzeichen).</div>
                     </div>
                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem">
                         <div class="form-group">
@@ -1898,8 +1907,13 @@
                         <input v-model="adUserForm.description" placeholder="Optionale Beschreibung">
                     </div>
                     <div class="form-group" v-if="adUserFormMode !== 'edit'">
-                        <label>OU-Pfad (optional)</label>
-                        <input v-model="adUserForm.ou" placeholder="OU=Mitarbeiter,DC=domain,DC=local">
+                        <label>Organisationseinheit (OU)</label>
+                        <select v-if="ouTreeFlat.length" v-model="adUserForm.ou" style="width:100%;background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);border-radius:var(--radius);padding:0.45rem 0.7rem;font-size:0.85rem;box-sizing:border-box">
+                            <option value="">Standard-Container (Users)</option>
+                            <option v-for="ou in ouTreeFlat" :key="ou.distinguished_name" :value="ou.distinguished_name">{{ '  '.repeat(ou.level) }}{{ ou.name }}</option>
+                        </select>
+                        <input v-else v-model="adUserForm.ou" placeholder="OU=Mitarbeiter,DC=domain,DC=local">
+                        <div v-if="!ouTreeFlat.length" style="font-size:0.72rem;color:var(--text-muted);margin-top:0.25rem">Keine OUs geladen – auf "Benutzer laden" klicken, um die Liste zu füllen.</div>
                     </div>
                 </div>
 

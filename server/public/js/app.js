@@ -1522,6 +1522,8 @@ const app = createApp({
         const adUserFormMode = ref('create');
         const adUserFormTab = ref('general');
         const adEditingUser = ref(null);
+        const adDuplicateSource = ref(null);
+        const adShowPassword = ref(false);
         const adUserForm = reactive({
             sam_account_name: '', given_name: '', surname: '', display_name: '',
             password: '', email: '', upn: '', department: '', title: '', company: '',
@@ -1632,6 +1634,8 @@ const app = createApp({
                 cannot_change_password: false, groups: []
             });
             adEditingUser.value = null;
+            adDuplicateSource.value = null;
+            adShowPassword.value = false;
             showADUserModal.value = true;
         }
 
@@ -1639,6 +1643,7 @@ const app = createApp({
             adUserFormMode.value = 'edit';
             adUserFormTab.value = 'general';
             adEditingUser.value = user;
+            adDuplicateSource.value = null;
             Object.assign(adUserForm, {
                 sam_account_name: user.sam_account_name || '',
                 given_name: user.given_name || '',
@@ -1667,6 +1672,7 @@ const app = createApp({
             adUserFormMode.value = 'duplicate';
             adUserFormTab.value = 'general';
             adEditingUser.value = null;
+            adShowPassword.value = false;
             let ou = '';
             if (user.distinguished_name) {
                 const parts = user.distinguished_name.split(',');
@@ -1674,19 +1680,27 @@ const app = createApp({
                 if (ouStart > 0) ou = parts.slice(ouStart).join(',');
             }
             Object.assign(adUserForm, {
-                sam_account_name: '', given_name: '', surname: '', display_name: '',
-                password: '', email: '', upn: '',
+                sam_account_name: user.sam_account_name || '',
+                given_name: user.given_name || '',
+                surname: user.surname || '',
+                display_name: user.display_name || '',
+                password: '',
+                email: user.email || '',
+                upn: user.upn || '',
                 department: user.department || '',
                 title: user.title || '',
                 company: user.company || '',
                 description: user.description || '',
-                office_phone: '', mobile_phone: '', ou,
+                office_phone: user.office_phone || '',
+                mobile_phone: user.mobile_phone || '',
+                ou,
                 enabled: user.enabled !== false,
                 password_never_expires: user.password_never_expires || false,
                 change_password_at_logon: true,
                 cannot_change_password: user.cannot_change_password || false,
                 groups: Array.isArray(user.groups) ? [...user.groups] : []
             });
+            adDuplicateSource.value = user;
             showADUserModal.value = true;
         }
 
@@ -1908,6 +1922,26 @@ const app = createApp({
             if (t.includes('[WS]')) return '#93c5fd';
             if (t.includes('[DB]')) return '#c4b5fd';
             return '#cbd5e1';
+        }
+
+        const adPasswordWords = [
+            'Apfel', 'Brücke', 'Sonne', 'Wolke', 'Garten', 'Feder', 'Anker', 'Lampe',
+            'Berg', 'Fluss', 'Stern', 'Blume', 'Tiger', 'Adler', 'Falke', 'Pinguin',
+            'Kompass', 'Hammer', 'Schlüssel', 'Fenster', 'Kerze', 'Spiegel', 'Hafen',
+            'Wald', 'Insel', 'Brunnen', 'Turm', 'Segel', 'Donner', 'Regen', 'Kristall',
+            'Drache', 'Phönix', 'Komet', 'Planet', 'Magnet', 'Pinsel', 'Trommel', 'Gitarre'
+        ];
+
+        function generateADPassword() {
+            const symbols = '!?#$%&*+';
+            const w1 = adPasswordWords[Math.floor(Math.random() * adPasswordWords.length)];
+            let w2 = adPasswordWords[Math.floor(Math.random() * adPasswordWords.length)];
+            while (w2 === w1) w2 = adPasswordWords[Math.floor(Math.random() * adPasswordWords.length)];
+            const num = Math.floor(Math.random() * 90 + 10); // 10–99
+            const sym = symbols[Math.floor(Math.random() * symbols.length)];
+            // z.B. "Sonne-Anker42!" – gut lesbar und leicht zu merken
+            adUserForm.password = `${w1}-${w2}${num}${sym}`;
+            adShowPassword.value = true;
         }
 
         function adAutoDisplayName() {
@@ -2325,11 +2359,11 @@ const app = createApp({
             cmdLogDetail, openCmdDetail, formatCmdParams, copyText,
             adDomainControllers, adSelectedDC, adUsers, adGroups, adUsersLoading, adUsersOutput,
             adTemplates, showADUserModal, showADTemplatesModal, adUserSearch, adUserFormMode,
-            adUserFormTab, adEditingUser, adUserForm, adTemplateForm, adFilteredUsers,
+            adUserFormTab, adEditingUser, adDuplicateSource, adShowPassword, adUserForm, adTemplateForm, adFilteredUsers,
             adGroupSearch, adGroupsFiltered, removeFromADGroup,
             loadADDomainControllers, loadADUsers, loadADGroups,
             openCreateADUser, openEditADUser, openDuplicateADUser, saveADUser, confirmDeleteADUser,
-            loadADTemplates, deleteADTemplate, applyADTemplate, saveADTemplateFromForm, adAutoDisplayName,
+            loadADTemplates, deleteADTemplate, applyADTemplate, saveADTemplateFromForm, adAutoDisplayName, generateADPassword,
             adOUs, adSelectedOU, adShowMoveModal, adMoveUser, adMoveTargetOU, ouTreeFlat, adUsersForOU,
             loadADOUs, openMoveUser, confirmMoveUser, adAdminTab, openUserAdmin,
             localMachineId, localUsers, localGroups, localUsersLoading, showLocalUserModal,
