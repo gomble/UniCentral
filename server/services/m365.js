@@ -137,11 +137,9 @@ const USER_SELECT = [
     'country', 'accountEnabled', 'usageLocation', 'userType', 'assignedLicenses'
 ].join(',');
 
-function mapUser(u, skuById) {
+function mapUser(u, skuById, sharedIds) {
     const licenseIds = (u.assignedLicenses || []).map(l => l.skuId);
-    // Graph has no shared-mailbox flag; a disabled, unlicensed account that still
-    // has a mailbox is almost always a shared mailbox. Best-effort, flagged as such.
-    const isSharedGuess = !u.accountEnabled && licenseIds.length === 0 && !!u.mail && (u.userType || 'Member') !== 'Guest';
+    const isShared = sharedIds ? sharedIds.has(u.id) : false;
     return {
         id: u.id,
         display_name: u.displayName || '',
@@ -164,19 +162,42 @@ function mapUser(u, skuById) {
         enabled: !!u.accountEnabled,
         usage_location: u.usageLocation || '',
         user_type: u.userType || 'Member',
-        is_shared: isSharedGuess,
-        account_type: u.userType === 'Guest' ? 'Gast' : (isSharedGuess ? 'Shared Mailbox?' : 'Benutzer'),
+        is_shared: isShared,
+        account_type: u.userType === 'Guest' ? 'Gast' : (isShared ? 'Freigegebenes Postfach' : 'Benutzer'),
         licenses: licenseIds.map(id => (skuById[id] || id))
     };
 }
 
 async function listUsers(tenant) {
     const users = await graphAll(tenant, `/users?$select=${USER_SELECT}&$top=999`);
-    // Map license SKU ids to names per user for quick display in the table.
     const skus = await listSkus(tenant).catch(() => []);
     const byId = {};
     for (const s of skus) byId[s.skuId] = s.name;
-    return users.map(u => mapUser(u, byId));
+
+    const sharedIds = await detectSharedMailboxes(tenant, users);
+    return users.map(u => mapUser(u, byId, sharedIds));
+}
+
+async function detectSharedMailboxes(tenant, users) {
+    const ids = new Set();
+    const BATCH_SIZE = 20;
+    for (let i = 0; i < users.length; i += BATCH_SIZE) {
+        const batch = users.slice(i, i + BATCH_SIZE);
+        const requests = batch.map((u, idx) => ({
+            id: String(idx),
+            method: 'GET',
+            url: `/users/${u.id}/mailboxSettings`
+        }));
+        try {
+            const res = await graph(tenant, 'POST', '/$batch', { requests });
+            for (const r of (res.responses || [])) {
+                if (r.body && r.body.userPurpose === 'shared') {
+                    ids.add(batch[parseInt(r.id)].id);
+                }
+            }
+        } catch { /* ignore batch errors */ }
+    }
+    return ids;
 }
 
 async function getUserGroups(tenant, userId) {
