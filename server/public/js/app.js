@@ -26,7 +26,7 @@ const DataTable = {
         searchPlaceholder: { type: String, default: 'Suchen...' },
         initialSortKey: { type: String, default: '' },
         initialSortDir: { type: String, default: 'asc' },
-        emptyText: { type: String, default: 'Keine Eintraege vorhanden.' },
+        emptyText: { type: String, default: 'Keine Einträge vorhanden.' },
         tableClass: { type: String, default: 'machine-table' },
         tableStyle: { type: [String, Object], default: '' }
     },
@@ -928,7 +928,7 @@ const app = createApp({
 
         async function sendCommand(type) {
             if (!selectedMachine.value) return;
-            if (!await confirmDialog(type === 'restart' ? 'Neustart ausfuehren?' : 'Herunterfahren ausfuehren?')) return;
+            if (!await confirmDialog(type === 'restart' ? 'Neustart ausführen?' : 'Herunterfahren ausführen?')) return;
 
             await apiFetch(`/api/commands/${selectedMachine.value.machine_id}/${type}`, {
                 method: 'POST',
@@ -977,13 +977,13 @@ const app = createApp({
 
         async function scheduleUpdates() {
             if (!selectedMachine.value || !scheduleTime.value) return;
-            if (!await confirmDialog('Updates + Neustart fuer ' + scheduleTime.value + ' Uhr planen?')) return;
+            if (!await confirmDialog('Updates + Neustart für ' + scheduleTime.value + ' Uhr planen?')) return;
             await apiFetch(`/api/commands/${selectedMachine.value.machine_id}/schedule-updates`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ time: scheduleTime.value })
             });
-            toast(`Update geplant fuer ${scheduleTime.value} Uhr.`, 'success');
+            toast(`Update geplant für ${scheduleTime.value} Uhr.`, 'success');
         }
 
         async function updateAgent() {
@@ -1006,7 +1006,7 @@ const app = createApp({
                     body: JSON.stringify({ machine_id: selectedMachine.value.machine_id })
                 });
                 const manData = await manRes.json();
-                toast('Agent unterstuetzt Remote-Update noch nicht. Manueller Befehl in Konsole kopiert.', 'warning');
+                toast('Agent unterstützt Remote-Update noch nicht. Manueller Befehl in Konsole kopiert.', 'warning');
                 navigator.clipboard.writeText(manData.command).catch(() => {});
             } else {
                 toast(data.error || 'Update fehlgeschlagen', 'error');
@@ -1023,7 +1023,7 @@ const app = createApp({
         }
 
         async function testEmail() {
-            const to = prompt('Email-Adresse fuer Testmail:');
+            const to = prompt('Email-Adresse für Testmail:');
             if (!to) return;
             const res = await apiFetch('/api/settings/test-email', {
                 method: 'POST',
@@ -1142,7 +1142,7 @@ const app = createApp({
             });
             const data = await res.json();
             if (data.success) {
-                deployResult.value = { success: true, message: 'Deploy-Befehl gesendet! Maschine erscheint in Kuerze.' };
+                deployResult.value = { success: true, message: 'Deploy-Befehl gesendet! Maschine erscheint in Kürze.' };
             } else {
                 deployResult.value = { success: false, message: data.error || 'Deploy fehlgeschlagen' };
             }
@@ -1162,7 +1162,7 @@ const app = createApp({
 
         async function addVeeamInstance() {
             if (!newVeeam.name || !newVeeam.base_url || !newVeeam.username || !newVeeam.password) {
-                toast('Alle Felder ausfuellen', 'error'); return;
+                toast('Alle Felder ausfüllen', 'error'); return;
             }
             const res = await apiFetch('/api/veeam/instances', {
                 method: 'POST',
@@ -1175,7 +1175,7 @@ const app = createApp({
                 await loadVeeamInstances();
             } else {
                 const err = await res.json();
-                toast(err.error || 'Fehler beim Hinzufuegen', 'error');
+                toast(err.error || 'Fehler beim Hinzufügen', 'error');
             }
         }
 
@@ -1229,7 +1229,7 @@ const app = createApp({
         }
 
         async function regenerateEnrollmentKey() {
-            if (!await confirmDialog('Enrollment Key neu generieren? Bestehende Install-Befehle werden ungueltig.')) return;
+            if (!await confirmDialog('Enrollment Key neu generieren? Bestehende Install-Befehle werden ungültig.')) return;
             const res = await apiFetch('/api/settings/regenerate-enrollment-key', { method: 'POST' });
             const data = await res.json();
             if (data.enrollmentKey) {
@@ -1250,8 +1250,8 @@ const app = createApp({
                 const m = machines.value.find(x => x.machine_id === mid);
                 return m && m.status === 'online';
             });
-            if (!online.length) { toast('Keine der ausgewaehlten Maschinen ist online.', 'error'); return; }
-            if (!await confirmDialog(type + ' auf ' + online.length + ' Maschine(n) ausfuehren?')) return;
+            if (!online.length) { toast('Keine der ausgewählten Maschinen ist online.', 'error'); return; }
+            if (!await confirmDialog(type + ' auf ' + online.length + ' Maschine(n) ausführen?')) return;
 
             for (const mid of online) {
                 await apiFetch(`/api/commands/${mid}/${type}`, {
@@ -1269,7 +1269,7 @@ const app = createApp({
                 const m = machines.value.find(x => x.machine_id === mid);
                 return m && m.status === 'online';
             });
-            if (!online.length) { toast('Keine der ausgewaehlten Maschinen ist online.', 'error'); return; }
+            if (!online.length) { toast('Keine der ausgewählten Maschinen ist online.', 'error'); return; }
 
             for (const mid of online) {
                 await apiFetch(`/api/commands/${mid}/install-software`, {
@@ -1323,7 +1323,7 @@ const app = createApp({
                 if (!groups[cat]) groups[cat] = { category: cat, items: [], collapsed: false };
                 groups[cat].items.push(i);
             }
-            const order = ['Sicherheit', 'Speicher', 'Updates', 'Backup', 'Verfuegbarkeit', 'Administration'];
+            const order = ['Sicherheit', 'Speicher', 'Updates', 'Backup', 'Verfügbarkeit', 'Administration'];
             return Object.values(groups).sort((a, b) => {
                 const ai = order.indexOf(a.category);
                 const bi = order.indexOf(b.category);
@@ -2363,9 +2363,14 @@ const app = createApp({
             m365EditingUser.value = null;
             m365ShowPassword.value = false;
             m365ResetUserForm();
-            m365UserForm.upn_domain = (user.upn || '').split('@')[1] || m365Domains.value[0] || '';
-            // Carry over org/address fields so a new colleague starts pre-filled.
-            // Personal data (name, UPN, phones, password) stays empty.
+            const [local, domain] = (user.upn || '').split('@');
+            Object.assign(m365UserForm, {
+                given_name: user.given_name || '', surname: user.surname || '',
+                display_name: user.display_name || '', upn_local: local || '',
+                upn_domain: domain || m365Domains.value[0] || '',
+                business_phone: user.business_phone || '', mobile_phone: user.mobile_phone || '',
+                fax: user.fax || ''
+            });
             m365CopyContactFields(user);
             m365DuplicateSource.value = user;
             showM365UserModal.value = true;
@@ -2755,8 +2760,8 @@ const app = createApp({
             { key: 'job_name', label: 'Job' },
             { key: 'job_type', label: 'Typ', filter: true, placeholder: '–' },
             { key: 'last_run_status', label: 'Letzter Status', filter: true, placeholder: 'Unbekannt' },
-            { key: 'last_run_time', label: 'Letzte Ausfuehrung', value: j => formatTime(j.last_run_time), sortValue: j => j.last_run_time || '', thClass: M, tdClass: M },
-            { key: 'next_run_time', label: 'Naechster Lauf', value: j => formatTime(j.next_run_time), sortValue: j => j.next_run_time || '', thClass: M, tdClass: M }
+            { key: 'last_run_time', label: 'Letzte Ausführung', value: j => formatTime(j.last_run_time), sortValue: j => j.last_run_time || '', thClass: M, tdClass: M },
+            { key: 'next_run_time', label: 'Nächster Lauf', value: j => formatTime(j.next_run_time), sortValue: j => j.next_run_time || '', thClass: M, tdClass: M }
         ];
         const veeamServerJobColumns = [
             { key: 'job_name', label: 'Job' },

@@ -19,7 +19,7 @@
                 <p>{{ confirmData.message }}</p>
                 <div class="confirm-actions">
                     <button class="btn btn-ghost" @click="confirmData.resolve(false); confirmData = null">Abbrechen</button>
-                    <button class="btn btn-primary" @click="confirmData.resolve(true); confirmData = null">Bestaetigen</button>
+                    <button class="btn btn-primary" @click="confirmData.resolve(true); confirmData = null">Bestätigen</button>
                 </div>
             </div>
         </div>
@@ -205,7 +205,7 @@
                             <button class="btn btn-ghost btn-sm" @click="navigate('command-history')">Befehlshistorie</button>
                             <button class="btn btn-ghost btn-sm" @click="showDeployModal = true">Remote Deploy</button>
                             <button class="btn btn-ghost btn-sm" @click="showGroupsModal = true">Gruppen</button>
-                            <button class="btn btn-primary btn-sm" @click="showAddMachine = true">+ Hinzufuegen</button>
+                            <button class="btn btn-primary btn-sm" @click="showAddMachine = true">+ Hinzufügen</button>
                         </div>
                     </div>
 
@@ -218,7 +218,7 @@
 
                     <!-- Batch Action Bar -->
                     <div v-if="selectedMachines.length" class="card batch-bar" style="display:flex;align-items:center;gap:0.5rem;padding:0.8rem 1.2rem;margin-bottom:1rem;border-color:var(--accent)">
-                        <span style="font-size:0.85rem"><strong>{{ selectedMachines.length }}</strong> ausgewaehlt</span>
+                        <span style="font-size:0.85rem"><strong>{{ selectedMachines.length }}</strong> ausgewählt</span>
                         <button class="btn btn-ghost btn-sm" @click="batchCommand('restart')">Neustart</button>
                         <button class="btn btn-ghost btn-sm" @click="batchCommand('shutdown')">Herunterfahren</button>
                         <button class="btn btn-ghost btn-sm" @click="batchCommand('trigger_updates')">Updates</button>
@@ -494,11 +494,11 @@
                 <div v-if="view === 'command-history'">
                     <div class="page-header">
                         <h1>Befehlshistorie</h1>
-                        <button class="btn btn-ghost btn-sm" @click="navigate('machines')">← Zurueck</button>
+                        <button class="btn btn-ghost btn-sm" @click="navigate('machines')">← Zurück</button>
                     </div>
                     <div class="card">
                         <data-table :rows="commandHistory" :columns="commandLogColumns" row-key="id" row-clickable
-                            search-placeholder="Befehle durchsuchen..." empty-text="Keine Befehle ausgefuehrt."
+                            search-placeholder="Befehle durchsuchen..." empty-text="Keine Befehle ausgeführt."
                             @row-click="openCmdDetail">
                             <template #cell-command_type="{ row: c }"><span class="os-badge">{{ c.command_type }}</span></template>
                             <template #cell-status="{ row: c }">
@@ -575,7 +575,7 @@
                             <span v-if="machineUpdates.reboot_required" class="status-badge warning">Neustart erforderlich</span>
                         </div>
                         <div v-if="machineUpdates.available > 0">
-                            <p style="margin-bottom:0.5rem;color:var(--warning)">{{ machineUpdates.available }} Update(s) verfuegbar</p>
+                            <p style="margin-bottom:0.5rem;color:var(--warning)">{{ machineUpdates.available }} Update(s) verfügbar</p>
                             <ul style="list-style:none;padding:0;max-height:150px;overflow-y:auto">
                                 <li v-for="(u, i) in machineUpdates.pending" :key="i" style="padding:0.3rem 0;border-bottom:1px solid var(--border);font-size:0.85rem">{{ u }}</li>
                             </ul>
@@ -620,7 +620,7 @@
                                 </div>
                             </div>
                         </div>
-                        <p v-else style="color:var(--text-muted)">Keine Laufwerksdaten verfuegbar</p>
+                        <p v-else style="color:var(--text-muted)">Keine Laufwerksdaten verfügbar</p>
                     </div>
 
                     <div class="card">
@@ -644,7 +644,7 @@
                         <div v-if="telemetryHistory.length" style="position:relative;height:200px">
                             <canvas ref="telemetryCanvas"></canvas>
                         </div>
-                        <p v-else style="color:var(--text-muted)">Keine Verlaufsdaten verfuegbar</p>
+                        <p v-else style="color:var(--text-muted)">Keine Verlaufsdaten verfügbar</p>
                     </div>
 
                     <div class="card">
@@ -654,7 +654,7 @@
                         </div>
                         <div v-show="!detailServicesClosed">
                             <data-table :rows="machineServices" :columns="servicesColumns" row-key="id"
-                                search-placeholder="Dienste durchsuchen..." empty-text="Keine Dienstdaten verfuegbar"
+                                search-placeholder="Dienste durchsuchen..." empty-text="Keine Dienstdaten verfügbar"
                                 table-style="max-height:none">
                                 <template #cell-status="{ row: s }">
                                     <span class="status-badge" :class="s.status === 'running' ? 'online' : 'offline'">{{ s.status }}</span>
@@ -921,7 +921,7 @@
                                 <input type="checkbox" v-model="logAutoScroll" @change="logAutoScroll && scrollLogsToBottom()"> Auto-Scroll
                             </label>
                             <button class="btn btn-ghost btn-sm" @click="logEntries = []">Leeren</button>
-                            <span style="font-size:0.78rem;color:var(--text-muted)">{{ filteredLogEntries.length }} Eintraege</span>
+                            <span style="font-size:0.78rem;color:var(--text-muted)">{{ filteredLogEntries.length }} Einträge</span>
                         </div>
                         <div class="card" style="padding:0;overflow:hidden">
                             <div ref="logContainer" style="background:#0d1117;height:600px;overflow-y:auto;overflow-x:hidden;font-family:monospace;font-size:0.775rem;padding:0.6rem 0.8rem;line-height:1.55">
@@ -930,7 +930,7 @@
                                     <span style="flex-shrink:0;width:2.2rem;text-align:right;font-weight:600;user-select:none" :style="{color: e.level==='error'?'#f87171':e.level==='warn'?'#fbbf24':'#6b7280'}">{{ e.level === 'error' ? 'ERR' : e.level === 'warn' ? 'WRN' : 'INF' }}</span>
                                     <span style="flex:1;min-width:0;word-break:break-all;overflow-wrap:anywhere">{{ e.text }}</span>
                                 </div>
-                                <div v-if="!filteredLogEntries.length" style="color:#475569;padding:1rem 0;text-align:center">Keine Log-Eintraege vorhanden.</div>
+                                <div v-if="!filteredLogEntries.length" style="color:#475569;padding:1rem 0;text-align:center">Keine Log-Einträge vorhanden.</div>
                             </div>
                         </div>
                     </div>
@@ -1132,7 +1132,7 @@
                     </div>
 
                     <div v-if="!insightsFiltered.length && insightsData.length" style="text-align:center;padding:2rem;color:var(--text-muted)">
-                        Keine Eintraege fuer diesen Filter.
+                        Keine Einträge für diesen Filter.
                     </div>
                     <div v-else-if="!insightsData.length" style="text-align:center;padding:3rem;color:var(--text-muted)">
                         <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-bottom:0.5rem;opacity:0.5"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
@@ -1166,7 +1166,7 @@
                         <h1>Alarme <span v-if="alertCount" style="font-size:0.8rem;background:var(--danger);color:#fff;border-radius:12px;padding:2px 8px;vertical-align:middle">{{ alertCount }} offen</span></h1>
                         <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
                             <button class="btn btn-ghost btn-sm" @click="alertAcknowledgeSelected" :disabled="!alertSelected.length">Auswahl best. ({{ alertSelected.length }})</button>
-                            <button class="btn btn-danger btn-sm" @click="alertAcknowledgeAll" :disabled="!alertCount">Alle bestaetigen</button>
+                            <button class="btn btn-danger btn-sm" @click="alertAcknowledgeAll" :disabled="!alertCount">Alle bestätigen</button>
                         </div>
                     </div>
 
@@ -1234,7 +1234,7 @@
                             <button class="btn btn-ghost btn-sm" @click="regenerateEnrollmentKey">Key neu generieren</button>
                         </div>
                         <p style="color:var(--text-secondary);margin-bottom:0.8rem;font-size:0.85rem">
-                            Mit diesem Key koennen sich Maschinen selbst registrieren. Die Verbindung wird nach Registrierung per HMAC-Signatur gesichert.
+                            Mit diesem Key können sich Maschinen selbst registrieren. Die Verbindung wird nach Registrierung per HMAC-Signatur gesichert.
                         </p>
                         <div class="form-group">
                             <label>Enrollment Key</label>
@@ -1572,7 +1572,7 @@
         <!-- Add Machine Modal -->
         <div class="modal-overlay" v-if="showAddMachine" @click.self="showAddMachine = false">
             <div class="modal">
-                <h2>Maschine hinzufuegen</h2>
+                <h2>Maschine hinzufügen</h2>
                 <div class="form-group">
                     <label>Hostname</label>
                     <input v-model="newMachine.hostname" placeholder="server01.domain.local">
@@ -1595,11 +1595,11 @@
                 </div>
                 <div class="form-group">
                     <label>Anzeigename (optional)</label>
-                    <input v-model="newMachine.display_name" placeholder="z.B. Domaenencontroller">
+                    <input v-model="newMachine.display_name" placeholder="z.B. Domänencontroller">
                 </div>
                 <div class="modal-actions">
                     <button class="btn btn-ghost" @click="showAddMachine = false">Abbrechen</button>
-                    <button class="btn btn-primary" @click="addMachine">Hinzufuegen</button>
+                    <button class="btn btn-primary" @click="addMachine">Hinzufügen</button>
                 </div>
             </div>
         </div>
@@ -1608,7 +1608,7 @@
         <div class="modal-overlay" v-if="showTokenModal" @click.self="showTokenModal = false">
             <div class="modal">
                 <h2>Agent-Installation</h2>
-                <p style="margin-bottom:1rem;color:var(--text-secondary)">Fuehre folgenden Befehl auf der Zielmaschine aus:</p>
+                <p style="margin-bottom:1rem;color:var(--text-secondary)">Führe folgenden Befehl auf der Zielmaschine aus:</p>
                 <div v-if="tokenMachine.os_type === 'windows'">
                     <label style="font-size:0.8rem;color:var(--text-muted)">Windows (PowerShell als Admin):</label>
                     <div class="token-display">powershell -Command "iwr {{ baseUrl }}/api/agent/install-script/windows -UseBasicParsing | iex" -Token {{ tokenMachine.registration_token }}</div>
@@ -1632,7 +1632,7 @@
                     <span style="color:var(--text-muted)">Status</span><span><span class="status-badge" :class="cmdLogDetail.status === 'completed' ? 'online' : cmdLogDetail.status === 'failed' ? 'offline' : 'warning'">{{ cmdLogDetail.status }}</span></span>
                     <span style="color:var(--text-muted)">Gestartet</span><span>{{ formatTime(cmdLogDetail.created_at) }}</span>
                     <span style="color:var(--text-muted)">Abgeschlossen</span><span>{{ cmdLogDetail.completed_at ? formatTime(cmdLogDetail.completed_at) : '–' }}</span>
-                    <span v-if="cmdLogDetail.issued_by" style="color:var(--text-muted)">Ausgefuehrt von</span><span v-if="cmdLogDetail.issued_by">{{ cmdLogDetail.issued_by }}</span>
+                    <span v-if="cmdLogDetail.issued_by" style="color:var(--text-muted)">Ausgeführt von</span><span v-if="cmdLogDetail.issued_by">{{ cmdLogDetail.issued_by }}</span>
                 </div>
 
                 <div v-if="cmdLogDetail.parameters && cmdLogDetail.parameters !== '{}'" style="margin-bottom:1rem">
@@ -1660,14 +1660,14 @@
 
                 <div style="background:rgba(251,191,36,0.08);border:1px solid rgba(251,191,36,0.3);border-radius:var(--radius);padding:0.5rem 0.8rem;font-size:0.8rem;color:#fde68a;margin-bottom:1rem">
                     <strong>Voraussetzung:</strong> WinRM muss auf den Zielrechnern aktiv sein.<br>
-                    Als Admin auf dem Ziel ausfuehren: <code style="background:rgba(0,0,0,0.3);padding:1px 4px;border-radius:3px">Enable-PSRemoting -Force</code>
+                    Als Admin auf dem Ziel ausführen: <code style="background:rgba(0,0,0,0.3);padding:1px 4px;border-radius:3px">Enable-PSRemoting -Force</code>
                 </div>
 
                 <!-- Step 1: Select relay and scan -->
                 <div class="form-group">
-                    <label>Relay-Agent (fuehrt Scan + Installation aus)</label>
+                    <label>Relay-Agent (führt Scan + Installation aus)</label>
                     <select v-model="deployForm.relay_machine_id" @change="scanResults = []; scanDone = false">
-                        <option value="">-- Waehlen --</option>
+                        <option value="">-- Wählen --</option>
                         <option v-for="m in onlineAgents" :key="m.machine_id" :value="m.machine_id">{{ m.display_name || m.hostname }} ({{ m.os_type }})</option>
                     </select>
                 </div>
@@ -1704,7 +1704,7 @@
                 <!-- Step 3: Credentials + Deploy -->
                 <div v-if="deployTargets.length > 0">
                     <div style="border-top:1px solid var(--border);padding-top:1rem;margin-top:0.5rem">
-                        <p style="font-size:0.85rem;color:var(--text-secondary);margin-bottom:0.8rem"><strong>{{ deployTargets.length }}</strong> Ziel(e) ausgewaehlt</p>
+                        <p style="font-size:0.85rem;color:var(--text-secondary);margin-bottom:0.8rem"><strong>{{ deployTargets.length }}</strong> Ziel(e) ausgewählt</p>
                         <div class="form-group">
                             <label>Benutzername (Admin auf allen Zielen)</label>
                             <input v-model="deployForm.username" placeholder="Administrator oder DOMAIN\\User">
@@ -1764,7 +1764,7 @@
                 </div>
                 <div style="display:flex;gap:0.5rem;margin-top:1rem">
                     <input v-model="newGroupName" placeholder="Neue Gruppe..." style="flex:1;background:var(--bg-secondary);border:1px solid var(--border);color:var(--text-primary);border-radius:var(--radius);padding:0.5rem;font-size:0.85rem">
-                    <button class="btn btn-primary btn-sm" @click="addGroup">Hinzufuegen</button>
+                    <button class="btn btn-primary btn-sm" @click="addGroup">Hinzufügen</button>
                 </div>
                 <div style="border-top:1px solid var(--border);margin-top:1rem;padding-top:1rem">
                     <h3 style="font-size:0.9rem;margin-bottom:0.5rem">Maschinen zuweisen</h3>
@@ -1785,7 +1785,7 @@
         <!-- Add Veeam Modal -->
         <div class="modal-overlay" v-if="showAddVeeam" @click.self="showAddVeeam = false">
             <div class="modal">
-                <h2>Veeam Instanz hinzufuegen</h2>
+                <h2>Veeam Instanz hinzufügen</h2>
                 <div class="form-group">
                     <label>Name</label>
                     <input v-model="newVeeam.name" placeholder="z.B. Veeam Hauptserver">
@@ -1817,7 +1817,7 @@
                 </div>
                 <div class="modal-actions">
                     <button class="btn btn-ghost" @click="showAddVeeam = false">Abbrechen</button>
-                    <button class="btn btn-primary" @click="addVeeamInstance">Hinzufuegen</button>
+                    <button class="btn btn-primary" @click="addVeeamInstance">Hinzufügen</button>
                 </div>
             </div>
         </div>
@@ -2338,7 +2338,7 @@
         <div class="modal-overlay" v-if="showBatchInstall" @click.self="showBatchInstall = false">
             <div class="modal">
                 <h2>Software installieren</h2>
-                <p style="color:var(--text-secondary);margin-bottom:1rem;font-size:0.85rem">Wird auf {{ selectedMachines.length }} Maschine(n) ausgefuehrt.</p>
+                <p style="color:var(--text-secondary);margin-bottom:1rem;font-size:0.85rem">Wird auf {{ selectedMachines.length }} Maschine(n) ausgeführt.</p>
                 <div class="form-group">
                     <label>Paketname</label>
                     <input v-model="batchInstallPkg" placeholder="z.B. 7zip, notepad++, htop">

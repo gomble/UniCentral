@@ -116,7 +116,7 @@
         <div class="clipboard-group">
             <input type="text" id="clipboard-input" placeholder="Text hier eingeben zum Senden..." title="Text eingeben und mit Senden-Button an Remote senden">
             <button id="btn-paste-send" title="Text aus dem Feld an den Remote-Rechner senden">Senden</button>
-            <button id="btn-paste-clip" title="Zwischenablage direkt an Remote senden">Einfuegen</button>
+            <button id="btn-paste-clip" title="Zwischenablage direkt an Remote senden">Einfügen</button>
             <button id="btn-get-clip" title="Remote-Zwischenablage abholen">Abholen</button>
         </div>
         <div class="separator"></div>
@@ -147,7 +147,7 @@
             statusMsg.textContent   = msg || '';
         }
 
-        setStatus('Verbinde...', `Lade Verbindungsdaten fuer ${hostname}...`);
+        setStatus('Verbinde...', `Lade Verbindungsdaten für ${hostname}...`);
 
         let credentials = { password: '', port: 5900 };
         try {
@@ -197,7 +197,7 @@
 
         const progressMessages = [
             [12, 'VNC-Dienst wird gestartet...'],
-            [25, 'Warte auf VNC-Server (Installation laeuft)...'],
+            [25, 'Warte auf VNC-Server (Installation läuft)...'],
             [50, 'VNC wird installiert, bitte warten...'],
             [75, 'Fast fertig, VNC-Dienst startet...'],
         ];
@@ -351,7 +351,7 @@
             });
 
             rfb.addEventListener('credentialsrequired', () => {
-                const pwd = prompt(`VNC-Passwort fuer ${hostname}:`);
+                const pwd = prompt(`VNC-Passwort für ${hostname}:`);
                 rfb.sendCredentials({ password: pwd || '' });
             });
 

@@ -227,7 +227,7 @@ router.get('/insights', (req, res) => {
         if (m.status === 'offline') {
             insights.push({
                 severity: 'warning',
-                category: 'Verfuegbarkeit',
+                category: 'Verfügbarkeit',
                 title: `${name} ist offline`,
                 detail: m.last_seen ? `Letzter Kontakt: ${m.last_seen}` : 'Kein Kontakt registriert',
                 machine_id: m.machine_id,
@@ -287,7 +287,7 @@ router.get('/insights', (req, res) => {
                     severity: 'critical',
                     category: 'Sicherheit',
                     title: `Windows Defender Echtzeitschutz deaktiviert auf ${name}`,
-                    detail: 'Der Echtzeitschutz ist nicht aktiv. Das System ist anfaellig fuer Malware.',
+                    detail: 'Der Echtzeitschutz ist nicht aktiv. Das System ist anfällig für Malware.',
                     machine_id: m.machine_id,
                     machine_db_id: m.id,
                     machine_name: name
